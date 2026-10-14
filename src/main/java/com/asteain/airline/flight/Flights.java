@@ -213,6 +213,16 @@ public final class Flights {
         return Fuel.minutes(aircraft);
     }
 
+    /** Everything the aircraft has to burn (ticks of one engine): its fuel store and what was taken out of it. */
+    public static long fuelTicks(AircraftBlockEntity aircraft) {
+        return Fuel.total(aircraft);
+    }
+
+    /** For the checks: the tank emptied at once (store and all). */
+    public static void emptyTank(AircraftBlockEntity aircraft) {
+        Fuel.empty(aircraft);
+    }
+
     /** What a flight of so many ticks needs in the tank of that aircraft before it is begun (ticks of one engine). */
     public static long fuelNeed(AircraftBlockEntity aircraft, long flightTicks) {
         return Fuel.need(AircraftType.of(aircraft.type), flightTicks);

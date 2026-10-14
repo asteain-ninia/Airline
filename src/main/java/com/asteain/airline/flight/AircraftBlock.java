@@ -49,6 +49,25 @@ public final class AircraftBlock extends BaseEntityBlock {
     // (Building an aircraft is the airfield's business alone: it is asked for in the airfield's window, which sets this block
     // down on the pad. The block itself begins nothing and chooses nothing; the user's ruling of 2026-10-14.)
 
+    /**
+     * Broken by a player: what the fuel store holds drops where the block stood. (Only then: when the blocks of a finished
+     * aircraft are made a ship, this block moves into the ship with its store, and nothing must drop.)
+     */
+    @Override
+    public BlockState playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
+        if (!level.isClientSide && level.getBlockEntity(pos) instanceof AircraftBlockEntity aircraft) net.minecraft.world.Containers.dropContents(level, pos, aircraft.store);
+        return super.playerWillDestroy(level, pos, state, player);
+    }
+
+    /** Used with an empty hand: the aircraft's fuel store opens (fuel only; the user's ruling of 2026-10-14). */
+    @Override
+    protected net.minecraft.world.InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
+        if (!(level.getBlockEntity(pos) instanceof AircraftBlockEntity aircraft)) return net.minecraft.world.InteractionResult.PASS;
+        if (!level.isClientSide) player.openMenu(new net.minecraft.world.SimpleMenuProvider((id, inventory, who) -> new FuelMenu(id, inventory, aircraft.store),
+                net.minecraft.network.chat.Component.translatable("container." + Airline.MOD_ID + ".fuel_store")));
+        return net.minecraft.world.InteractionResult.sidedSuccess(level.isClientSide);
+    }
+
     /** Used with fuel in the hand: it goes into the aircraft's tank (as much as there is room for). Not while the aircraft is still being built. */
     @Override
     protected net.minecraft.world.ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, net.minecraft.world.InteractionHand hand, BlockHitResult hit) {

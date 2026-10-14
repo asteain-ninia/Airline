@@ -94,6 +94,11 @@ public final class Airline {
     private static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MOD_ID);
     private static final DeferredRegister<BuildingEntry> BUILDINGS = DeferredRegister.create(CommonMinecoloniesAPIImpl.BUILDINGS, MOD_ID);
     private static final DeferredRegister<JobEntry> JOBS = DeferredRegister.create(CommonMinecoloniesAPIImpl.JOBS, MOD_ID);
+    private static final DeferredRegister<net.minecraft.world.inventory.MenuType<?>> MENUS = DeferredRegister.create(Registries.MENU, MOD_ID);
+
+    /** The window of an aircraft's fuel store. */
+    public static final DeferredHolder<net.minecraft.world.inventory.MenuType<?>, net.minecraft.world.inventory.MenuType<com.asteain.airline.flight.FuelMenu>> FUEL_MENU =
+            MENUS.register("fuel_store", () -> new net.minecraft.world.inventory.MenuType<>(com.asteain.airline.flight.FuelMenu::new, net.minecraft.world.flag.FeatureFlags.VANILLA_SET));
 
     public static final DeferredBlock<BlockHutAirfield> AIRFIELD_HUT = BLOCKS.register(HUT_NAME, BlockHutAirfield::new);
     public static final DeferredItem<ItemBlockHut> AIRFIELD_HUT_ITEM =
@@ -179,6 +184,8 @@ public final class Airline {
         BLOCK_ENTITIES.register(modBus);
         BUILDINGS.register(modBus);
         JOBS.register(modBus);
+        MENUS.register(modBus);
+        if (net.neoforged.fml.loading.FMLEnvironment.dist == net.neoforged.api.distmarker.Dist.CLIENT) modBus.addListener(com.asteain.airline.client.FuelScreen::register);
         modBus.addListener(Airline::registerCapabilities);
         modBus.addListener(Airline::commonSetup);
         modBus.addListener(Airline::creativeTab);

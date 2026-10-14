@@ -351,14 +351,14 @@ final class FlightSuite {
             s.soft("yard / the pad is the new aircraft's home, and its line to the other pad is clear", a.pad.equals(a.aircraft.home) && routes.edge(a.pad, padB) != null && routes.edge(a.pad, padB).state() == State.CLEAR,
                     "home " + a.aircraft.home + ", line " + (routes.edge(a.pad, padB) == null ? null : routes.edge(a.pad, padB).state()));
             Flights.Answer dry = Flights.send(level, a.pad, padB, true, a.pilot);
-            s.soft("yard / an aircraft that was built starts with an empty tank, and no flight is begun without fuel", a.aircraft.fuel == 0 && !dry.ok(), "tank " + a.aircraft.fuel + "; a flight: " + dry.text().getString());
+            s.soft("yard / an aircraft that was built starts with an empty tank, and no flight is begun without fuel", Flights.fuelTicks(a.aircraft) == 0 && !dry.ok(), "tank " + Flights.fuelTicks(a.aircraft) + "; a flight: " + dry.text().getString());
             a.airfield.setCorners(a.hut.offset(-3, 0, -3), a.hut.offset(3, 2, 3));
             rack[0] = Fixture.rack(level, a.airfield, a.hut.offset(-2, 0, 0));
             Fixture.stock(rack[0], Items.CHARCOAL, 64);
         });
         s.until("yard: the pilot fuels the aircraft", () -> {}, () -> Fixture.count(a.airfield, Items.CHARCOAL) == 0 && a.aircraft.carryCount == 0, 2400);
         s.step("yard: fuelled; a round trip", () -> {
-            s.soft("yard / the pilot carries the fuel from the airfield's racks to the aircraft", a.aircraft.fuel == 64L * 1600, "tank " + a.aircraft.fuel);
+            s.soft("yard / the pilot carries the fuel from the airfield's racks to the aircraft", Flights.fuelTicks(a.aircraft) == 64L * 1600, "tank " + Flights.fuelTicks(a.aircraft));
             watch(s, a, "yard");
             Flights.Answer sent = Flights.send(level, a.pad, padB, true, a.pilot);
             s.soft("yard / a round trip is ordered for the aircraft that was built", sent.ok(), sent.text().getString());
@@ -463,7 +463,7 @@ final class FlightSuite {
             s.soft("fuel / an aircraft made by command comes with a full tank (160 minutes of one engine: 80 minutes of flight with two), and standing on its pad its engines burn nothing",
                     Flights.fuelMinutes(a.aircraft) == 160 / engines[0] && java.util.Arrays.stream(burning).allMatch(b -> b == 0),
                     Flights.fuelMinutes(a.aircraft) + " minutes; engines " + java.util.Arrays.toString(burning));
-            a.aircraft.fuel = 0;
+            Flights.emptyTank(a.aircraft);
             a.airfield.onColonyTick(a.colony);
             int requests = a.airfield.getOpenRequestsOfType(-1, asked).size();
             a.airfield.onColonyTick(a.colony);
@@ -479,13 +479,15 @@ final class FlightSuite {
         });
         s.until("fuel: the pilot fills the tank", () -> {}, () -> Fixture.count(a.airfield, Items.CHARCOAL) == 0 && a.aircraft.carryCount == 0, 2400);
         s.step("fuel: filled; a flight", () -> {
+            s.soft("fuel / the fuel lies in the aircraft's fuel store as items: 64 pieces of charcoal", a.aircraft.store.countItem(Items.CHARCOAL) == 64,
+                    "charcoal in the store " + a.aircraft.store.countItem(Items.CHARCOAL));
             s.soft("fuel / at home the pilot carries the fuel from the racks to the aircraft: 64 pieces of charcoal are in the tank (1600 ticks of one engine each: 42 minutes of flight with two engines, 85 with one); what is not fuel stays on the racks",
-                    a.aircraft.fuel == 64L * 1600 && Flights.fuelMinutes(a.aircraft) == 64L * 1600 / engines[0] / 1200 && Fixture.count(a.airfield, Items.OAK_PLANKS) == 8,
-                    "tank " + a.aircraft.fuel + " (" + Flights.fuelMinutes(a.aircraft) + " minutes), planks on the racks " + Fixture.count(a.airfield, Items.OAK_PLANKS));
+                    Flights.fuelTicks(a.aircraft) == 64L * 1600 && Flights.fuelMinutes(a.aircraft) == 64L * 1600 / engines[0] / 1200 && Fixture.count(a.airfield, Items.OAK_PLANKS) == 8,
+                    "tank " + Flights.fuelTicks(a.aircraft) + " (" + Flights.fuelMinutes(a.aircraft) + " minutes), planks on the racks " + Fixture.count(a.airfield, Items.OAK_PLANKS));
             int taken = Flights.refuel(level, a.aircraft, new ItemStack(Items.COAL, 10), null);
             int notFuel = Flights.refuel(level, a.aircraft, new ItemStack(Items.OAK_PLANKS, 4), null);
-            s.soft("fuel / fuel put in by hand goes into the tank too; what airfields do not take as fuel does not", taken == 10 && notFuel == 0 && a.aircraft.fuel == 74L * 1600, "taken " + taken + " / " + notFuel + ", tank " + a.aircraft.fuel);
-            tank[0] = a.aircraft.fuel;
+            s.soft("fuel / fuel put in by hand goes into the tank too; what airfields do not take as fuel does not", taken == 10 && notFuel == 0 && Flights.fuelTicks(a.aircraft) == 74L * 1600, "taken " + taken + " / " + notFuel + ", tank " + Flights.fuelTicks(a.aircraft));
+            tank[0] = Flights.fuelTicks(a.aircraft);
             watch(s, a, "fuel");
             Flights.Answer sent = Flights.send(level, a.pad, padB, false, a.pilot);
             s.soft("fuel / with fuel in the tank the flight is ordered", sent.ok(), sent.text().getString());
@@ -493,11 +495,11 @@ final class FlightSuite {
         s.until("fuel: landed at pad B", () -> {}, () -> a.aircraft.phase == Phase.PARKED && a.clock > 100, 9000);
         s.settle("fuel: on the pad", 40);
         s.step("fuel: after the flight; back, and the tank is emptied on the way", () -> {
-            long used = tank[0] - a.aircraft.fuel;
+            long used = tank[0] - Flights.fuelTicks(a.aircraft);
             int[] burning = Flights.engineBurn(a.aircraft);
             s.soft("fuel / the flight burnt fuel for its engines while the aircraft was in the air (not more than one tick of fuel for every engine and tick of the flight), and on the pad the engines stand still again",
                     padB.equals(a.aircraft.at) && used > 1000L * engines[0] && used <= (long) engines[0] * a.clock && java.util.Arrays.stream(burning).allMatch(b -> b == 0),
-                    "used " + used + " in " + a.clock + " ticks from the order to the end; engines " + java.util.Arrays.toString(burning) + "; tank " + a.aircraft.fuel);
+                    "used " + used + " in " + a.clock + " ticks from the order to the end; engines " + java.util.Arrays.toString(burning) + "; tank " + Flights.fuelTicks(a.aircraft));
             s.note("OBS fuel: a flight over 80 blocks used " + used + " ticks of fuel (" + (used / 1600.0) + " pieces of charcoal)");
             a.log.clear();
             a.clock = 0;
@@ -507,7 +509,7 @@ final class FlightSuite {
         });
         s.until("fuel: on its way", () -> {}, () -> a.aircraft.phase == Phase.CRUISE, 4000);
         s.settle("fuel: a little way along the line", 160);
-        s.step("fuel: the tank is emptied in the air", () -> a.aircraft.fuel = 0);
+        s.step("fuel: the tank is emptied in the air", () -> Flights.emptyTank(a.aircraft));
         s.until("fuel: distress", () -> {}, () -> a.aircraft.phase == Phase.DISTRESS, 800);
         s.settle("fuel: it stays where it is", 200);
         s.step("fuel: in distress; a little fuel", () -> {
@@ -521,7 +523,7 @@ final class FlightSuite {
         });
         s.settle("fuel: one piece of coal", 60);
         s.step("fuel: more fuel is brought", () -> {
-            s.soft("fuel / a little fuel is not enough for the rest of the way: the aircraft still waits", a.aircraft.phase == Phase.DISTRESS && a.aircraft.fuel == 1600, a.aircraft.phase + ", tank " + a.aircraft.fuel);
+            s.soft("fuel / a little fuel is not enough for the rest of the way: the aircraft still waits", a.aircraft.phase == Phase.DISTRESS && Flights.fuelTicks(a.aircraft) == 1600, a.aircraft.phase + ", tank " + Flights.fuelTicks(a.aircraft));
             Flights.refuel(level, a.aircraft, new ItemStack(Items.COAL, 32), null);
         });
         s.until("fuel: home", () -> {}, () -> a.aircraft.phase == Phase.PARKED && a.pad.equals(a.aircraft.at) && a.clock > 100, 9000);
@@ -1041,7 +1043,7 @@ final class FlightSuite {
                     }
                 }
             });
-            fuel[0] = a.aircraft.fuel;
+            fuel[0] = Flights.fuelTicks(a.aircraft);
             Flights.Answer sent = Flights.send(level, a.pad, padC, false, a.pilot);
             s.soft("direct / the flight is ordered (the tank holds enough for it)", sent.ok(), sent.text().getString() + " | tank: " + Flights.fuelMinutes(a.aircraft) + " minutes");
         });
@@ -1056,7 +1058,7 @@ final class FlightSuite {
                     seatedAllTheWay[0] && farthest[0] > 1700 && a.pilot.isAlive() && Boarding.state(a.pilot) == Boarding.State.NONE,
                     String.format("farthest from the hut while flying %.0f, state %s, alive %s", farthest[0], Boarding.state(a.pilot), a.pilot.isAlive()));
             s.soft("direct / the line, flown from end to end, counts as clear now", line != null && line.state() == State.CLEAR, line == null ? "no line" : line.state().name());
-            long used = fuel[0] - a.aircraft.fuel;
+            long used = fuel[0] - Flights.fuelTicks(a.aircraft);
             s.note(String.format("OBS direct: %d ticks from the order to parked on the far pad (%.0f seconds), top speed %.2f, fuel used %d ticks of one engine (%.1f pieces of charcoal), tank now %d minutes",
                     a.clock, a.clock / 20.0, a.speedMax, used, used / 1600.0, Flights.fuelMinutes(a.aircraft)));
             for (String l : a.log) if (l.contains("->")) s.note("OBS direct: " + l);

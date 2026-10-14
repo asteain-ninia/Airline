@@ -335,7 +335,7 @@ final class FlightController {
         final Craft c = rt.craft;
         // Fuel somebody put straight into an engine counts as well: it is taken into the tank.
         Fuel.drain(c, be);
-        if (be.fuel < fuelToGo(be, rt, net)) return;
+        if (Fuel.total(be) < fuelToGo(be, rt, net)) return;
         c.lock(false);
         // Back to the point behind it, and on from there (the way is looked for anew).
         be.phase = Phase.RETREAT;
@@ -1277,10 +1277,10 @@ final class FlightController {
         final List<BlockPos> way = net.route(be.at, be.destination);
         // Out and back, with what the tank holds now (the racks had their chance above).
         final long fuelNeeded = Fuel.need(rt.craft.type, flightTicks(net, way, rt.craft.type) * 2);
-        if (be.fuel < fuelNeeded) {
+        if (Fuel.total(be) < fuelNeeded) {
             // (More than the tank holds: no fuel on the racks will help. It is said as what it is.)
             if (!rt.toldNoFuel) tellColony(level, be, fuelNeeded > Fuel.capacity() ? "flight.note.too_far" : "flight.note.waiting_for_fuel",
-                    Fuel.minutes(rt.craft.type, fuelNeeded > Fuel.capacity() ? Fuel.capacity() : be.fuel), Fuel.minutes(rt.craft.type, fuelNeeded));
+                    Fuel.minutes(rt.craft.type, fuelNeeded > Fuel.capacity() ? Fuel.capacity() : Fuel.total(be)), Fuel.minutes(rt.craft.type, fuelNeeded));
             rt.toldNoFuel = true;
             return;
         }
@@ -1628,7 +1628,9 @@ final class FlightController {
         final Craft craft = new Craft(level, ship, type, base);
         craft.dial();
         // An aircraft made by command comes with a full tank; one that was built is fuelled from its airfield's racks.
-        be.fuel = fuelled ? Fuel.capacity() : 0;
+        // Made by command: a full store. Built: the store as it was (a player may have put fuel in while it was a site);
+        // otherwise it is fuelled from its airfield's racks.
+        if (fuelled) Fuel.fill(be, Fuel.capacity());
         be.type = type.name;
         be.yard = null;
         be.workOrder = 0;
@@ -1663,7 +1665,7 @@ final class FlightController {
         final List<BlockPos> way = net.route(from, landing.pad());
         final long fuelNeeded = Fuel.need(rt.craft.type, flightTicks(net, way, rt.craft.type) * (round ? 2 : 1));
         if (fuelNeeded > Fuel.capacity()) return new Answer(false, "flight.too_far", Fuel.minutes(rt.craft.type, Fuel.capacity()), Fuel.minutes(rt.craft.type, fuelNeeded));
-        if (be.fuel < fuelNeeded) return new Answer(false, "flight.no_fuel", Fuel.minutes(rt.craft.type, be.fuel), Fuel.minutes(rt.craft.type, fuelNeeded));
+        if (Fuel.total(be) < fuelNeeded) return new Answer(false, "flight.no_fuel", Fuel.minutes(rt.craft.type, Fuel.total(be)), Fuel.minutes(rt.craft.type, fuelNeeded));
         if (be.cargo) uncover(level, be);
         be.homeward = false;
         be.route = new ArrayList<>(way);

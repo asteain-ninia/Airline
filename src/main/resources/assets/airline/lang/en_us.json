@@ -1,7 +1,7 @@
 {
-  "block.airline.blockhutairfield": "Airfield",
-  "block.minecolonies.blockhutairfield": "Airfield",
-  "com.airline.building.airfield": "Airfield",
+  "block.airline.blockhutairfield": "Small Airfield",
+  "block.minecolonies.blockhutairfield": "Small Airfield",
+  "com.airline.building.airfield": "Small Airfield",
   "com.airline.building.airfield.desc": "A landing pad for vertical take-off and a hangar in one building. Surplus that other colonies want is collected from the warehouse onto its export racks; the pilot carries it to the aircraft and flies it out on scheduled flights. What arrives goes into the stash, and couriers bring it to the warehouse.",
   "com.airline.job.pilot": "Pilot",
   "com.airline.gui.airfield.export": "Export table: stacks to keep in the warehouse",
@@ -173,5 +173,6 @@
   "message.airline.depart.going": "Leaving now.",
   "message.airline.depart.nothing": "There is nowhere to carry goods to right now (no colony can be reached over the air network, or nothing another colony wants lies on the export racks).",
   "message.airline.depart.soon": "Berth cut short. The aircraft leaves as soon as loading and unloading are done.",
-  "message.airline.depart.none": "No aircraft that could leave stands on this airfield's pads."
+  "message.airline.depart.none": "No aircraft that could leave stands on this airfield's pads.",
+  "container.airline.fuel_store": "Fuel store"
 }

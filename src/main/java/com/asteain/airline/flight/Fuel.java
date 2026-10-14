@@ -8,8 +8,10 @@ import java.util.List;
 
 /**
  * Fuel. The engines of an aircraft burn furnace fuel, tick for tick, as long as they have any (the burner needs
- * none); an engine cannot be switched off. So the fuel is not kept in the engines: the aircraft has a tank (a number
- * on its own block: how many ticks one engine can still burn), and
+ * none); an engine cannot be switched off. So the fuel is not kept in the engines: it lies in the aircraft's fuel store
+ * (the inventory of its own block, {@link FuelStore}; the user's ruling of 2026-10-14), is taken out of it one item at a
+ * time as the engines need it, and what is taken out and not burnt yet is kept as a number on the block. "The tank" is
+ * the two together ({@link #total}), and
  *
  * <ul>
  * <li>while the aircraft flies, the tank feeds every engine a few seconds at a time;</li>
@@ -39,9 +41,57 @@ final class Fuel {
         return Cargo.fuelCapacity();
     }
 
+    /** Everything the aircraft has to burn (ticks of one engine): what was taken out of the store already, and what the store holds. */
+    static long total(AircraftBlockEntity be) {
+        long sum = be.fuel;
+        for (int slot = 0; slot < be.store.getContainerSize(); slot++) {
+            final ItemStack stack = be.store.getItem(slot);
+            if (!stack.isEmpty()) sum += (long) burn(stack.getItem()) * stack.getCount();
+        }
+        return sum;
+    }
+
+    /** One item more out of the store, for the engines; false when the store holds nothing to burn. */
+    private static boolean takeOne(AircraftBlockEntity be) {
+        for (int slot = 0; slot < be.store.getContainerSize(); slot++) {
+            final ItemStack stack = be.store.getItem(slot);
+            final int each = stack.isEmpty() ? 0 : burn(stack.getItem());
+            if (each <= 0) continue;
+            be.store.removeItem(slot, 1);
+            be.fuel += each;
+            return true;
+        }
+        return false;
+    }
+
+    /** Fills the store with so much burn time (an aircraft made by command comes with a full tank), in the first kind of fuel airfields take. */
+    static void fill(AircraftBlockEntity be, long ticks) {
+        for (final Item item : Cargo.fuelItems()) {
+            final int each = burn(item);
+            if (each <= 0) continue;
+            long left = (ticks + each - 1) / each;
+            while (left > 0) {
+                final ItemStack stack = new ItemStack(item, (int) Math.min(left, item.getDefaultMaxStackSize()));
+                final int fits = Math.min(stack.getCount(), be.store.room(stack));
+                if (fits <= 0) break;
+                be.store.addItem(stack.copyWithCount(fits));
+                left -= fits;
+            }
+            return;
+        }
+        be.fuel += ticks;      // (no fuel item is known: kept as a number, as it was before there was a store)
+    }
+
+    /** Takes everything out of the tank: the store and what was taken out of it. */
+    static void empty(AircraftBlockEntity be) {
+        be.store.clearContent();
+        be.fuel = 0;
+        be.setChanged();
+    }
+
     /** At home the tank is filled up again when it holds less than this. */
     static boolean low(AircraftBlockEntity be) {
-        return be.fuel < capacity() * 3 / 4;
+        return total(be) < capacity() * 3 / 4;
     }
 
     /** What a flight of so many ticks needs in the tank before it is begun: every engine all the way, half as much again, and two minutes. */
@@ -56,7 +106,7 @@ final class Fuel {
 
     /** Minutes of flight the tank holds. */
     static long minutes(AircraftBlockEntity be) {
-        return minutes(AircraftType.of(be.type), be.fuel);
+        return minutes(AircraftType.of(be.type), total(be));
     }
 
     // ---- in the air, and after landing --------------------------------------------------------------------------
@@ -65,7 +115,9 @@ final class Fuel {
     static void feed(Craft c, AircraftBlockEntity be) {
         for (int side = 0; side < c.engines(); side++) {
             final int burning = c.engineBurn(side);
-            if (burning < 0 || burning >= FEED || be.fuel <= 0) continue;
+            if (burning < 0 || burning >= FEED) continue;
+            if (be.fuel < FEED - burning) takeOne(be);
+            if (be.fuel <= 0) continue;
             final int more = (int) Math.min(FEED - burning, be.fuel);
             c.engineBurn(side, burning + more);
             be.fuel -= more;
@@ -74,7 +126,7 @@ final class Fuel {
 
     /** Whether nothing burns any more and nothing is left to burn: the engines stand, the tank is empty. */
     static boolean dry(Craft c, AircraftBlockEntity be) {
-        if (be.fuel > 0) return false;
+        if (total(be) > 0) return false;
         for (int side = 0; side < c.engines(); side++) if (c.engineBurn(side) != 0 || !c.engineStack(side).isEmpty()) return false;
         return true;
     }
@@ -101,8 +153,8 @@ final class Fuel {
     // ---- putting fuel in ----------------------------------------------------------------------------------------
 
     /**
-     * The tank as a place items can be put into (and nothing taken from): it takes what the airfields take as fuel, as
-     * many as there is room for, and counts their burn time.
+     * The tank as a place items can be put into (and nothing taken from): it takes what the airfields take as fuel into
+     * the store, as many as there is room for (in the store, and up to a full tank).
      */
     static IItemHandler tank(AircraftBlockEntity be) {
         return new IItemHandler() {
@@ -120,12 +172,9 @@ final class Fuel {
             public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
                 final int each = stack.isEmpty() ? 0 : burn(stack.getItem());
                 if (each <= 0) return stack;
-                final int taken = (int) Math.min(stack.getCount(), Math.max(0, capacity() - be.fuel + each - 1) / each);
+                final int taken = (int) Math.min(Math.min(stack.getCount(), be.store.room(stack)), Math.max(0, capacity() - total(be) + each - 1) / each);
                 if (taken <= 0) return stack;
-                if (!simulate) {
-                    be.fuel += (long) taken * each;
-                    be.setChanged();
-                }
+                if (!simulate) be.store.addItem(stack.copyWithCount(taken));
                 return stack.copyWithCount(stack.getCount() - taken);
             }
 
@@ -149,7 +198,7 @@ final class Fuel {
     /** What the pilot takes next from the racks for the tank: an item that is fuel and how many of it, or null. */
     @org.jetbrains.annotations.Nullable
     static java.util.Map.Entry<Item, Integer> next(AircraftBlockEntity be, @org.jetbrains.annotations.Nullable IItemHandler racks, int stacks) {
-        final long room = capacity() - be.fuel;
+        final long room = capacity() - total(be);
         for (final java.util.Map.Entry<Item, Integer> stock : Cargo.contents(racks).entrySet()) {
             final int each = burn(stock.getKey());
             if (each <= 0) continue;

@@ -311,6 +311,8 @@ final class Shipyard {
         }
         cancel(airfield, site);
         site.yard = null;
+        // What a player put into its fuel store meanwhile is not lost.
+        net.minecraft.world.Containers.dropContents(level, at, site.store);
         level.removeBlock(at, false);
         say(player, "stopped");
         return "stopped";
