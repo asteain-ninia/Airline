@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "lit=false": {
+      "model": "airline:block/buoy_1"
+    },
+    "lit=true": {
+      "model": "airline:block/buoy_1_lit"
+    }
+  }
+}

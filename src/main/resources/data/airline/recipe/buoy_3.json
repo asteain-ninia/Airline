@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " L ",
+    "PCP",
+    " P "
+  ],
+  "key": {
+    "L": {
+      "item": "minecraft:lantern"
+    },
+    "P": {
+      "tag": "minecraft:planks"
+    },
+    "C": {
+      "item": "minecraft:diamond"
+    }
+  },
+  "result": {
+    "id": "airline:buoy_3",
+    "count": 1
+  }
+}

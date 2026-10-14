@@ -1,0 +1,7 @@
+{
+    "pack": {
+        "description": "Create Aeronautics: Airline for MineColonies resources",
+        "pack_format": 34,
+        "supported_formats": [34, 48]
+    }
+}

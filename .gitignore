@@ -1,0 +1,24 @@
+# Gradle / 生成物
+.gradle/
+build/
+run/
+run-*/
+
+# コンパイル用に置いている他 MOD の jar(配布物ではない)
+libs/*.jar
+
+# IDE
+.idea/
+.vscode/
+*.iml
+bin/
+
+# Python
+__pycache__/
+*.pyc
+
+# 実行ログ
+*.log
+
+# 試験用に本番の mods から写した jar(配布物ではない)
+test-jars/*.jar

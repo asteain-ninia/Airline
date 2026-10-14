@@ -1,0 +1,9 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "top": "airline:block/aircraft_top",
+    "side": "airline:block/aircraft_side",
+    "bottom": "airline:block/aircraft_bottom",
+    "particle": "airline:block/aircraft_side"
+  }
+}

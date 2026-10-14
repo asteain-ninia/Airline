@@ -1,0 +1,826 @@
+package com.asteain.airline.route;
+
+import com.asteain.airline.Airline;
+import com.asteain.airline.colony.AirLinks;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.event.level.BlockEvent;
+import net.neoforged.neoforge.event.tick.LevelTickEvent;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.PriorityQueue;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.UUID;
+
+/**
+ * The air network of one dimension: points (buoys and airfields) and the lines between points whose reaches overlap.
+ * Every line has a state: not verified yet, clear, or blocked (with the block that blocks it). Saved with the dimension.
+ * Server thread only.
+ *
+ * <p>Which points connect and where a line runs is decided in {@link RouteRules}; which blocks lie on a line in
+ * {@link Tube}. Verification never loads a chunk: what is not loaded stays "not verified".</p>
+ */
+public final class RouteNetwork extends SavedData {
+    private static final String FILE = Airline.MOD_ID + "_network";
+
+    public enum Kind { BUOY, AIRFIELD }
+
+    public enum State { UNVERIFIED, CLEAR, BLOCKED }
+
+    /**
+     * A point. {@code pos} is the buoy block, or the block in the middle of an airfield's landing pad floor; the line
+     * passes above it ({@link RouteRules#waypoint}; higher over a landing pad than over a buoy). {@code heading} is only used by airfields: the direction (degrees,
+     * a multiple of 90) an aircraft has to face when it rests on the pad. {@code tier} is the grade of a buoy (1 to 3), or
+     * the building level of the airfield a landing pad belongs to (1 to 5); either decides how far the point reaches.
+     * {@code home} is where the airfield of a landing pad stands (its hut block): the place that says which large map the
+     * airfield is on. For a buoy it is the buoy itself.
+     */
+    public record Node(BlockPos pos, Kind kind, int tier, int heading, BlockPos home) {
+        /** A point that stands where it is: a buoy, or a landing pad whose airfield is not told (older saves; tests). */
+        public Node(BlockPos pos, Kind kind, int tier, int heading) {
+            this(pos, kind, tier, heading, pos);
+        }
+
+        public Vec3 waypoint() {
+            return RouteRules.waypoint(pos, kind);
+        }
+
+        /** How far this point reaches: two points connect when they are closer than the sum of their reaches. */
+        public int reach() {
+            return RouteRules.reach(kind, tier);
+        }
+    }
+
+    /** A line between two points. {@code a} sorts before {@code b}. */
+    public static final class Edge {
+        public final BlockPos a, b;
+        private State state = State.UNVERIFIED;
+        @Nullable private BlockPos blockedAt;
+        private Tube tube;
+        /** All that has to be free of solid blocks for this line: its tube, and the shaft over each end that is a landing pad. */
+        private List<Tube> spaces = List.of();
+        /** Goes up whenever a scan that is under way has become worthless. */
+        private int version;
+        private boolean queued;
+        /** The last scan could not see all of the line (chunks that were not loaded). */
+        private boolean gaps;
+        /**
+         * The landing pad (not one of the line's own ends) this line passes too low over ({@link RouteRules#grazes}).
+         * Such a line counts as blocked by that pad whatever a scan finds. Not saved: worked out from the points.
+         */
+        @Nullable private BlockPos barred;
+
+        private Edge(BlockPos a, BlockPos b, Kind kindA, Kind kindB) {
+            this.a = a;
+            this.b = b;
+            rebuild(kindA, kindB);
+        }
+
+        private void rebuild(Kind kindA, Kind kindB) {
+            tube = new Tube(RouteRules.waypoint(a, kindA), RouteRules.waypoint(b, kindB), RouteRules.tubeRadius(), RouteRules.tubeHalfHeight());
+            final List<Tube> all = new ArrayList<>();
+            all.add(tube);
+            if (kindA == Kind.AIRFIELD) all.add(RouteRules.shaft(a));
+            if (kindB == Kind.AIRFIELD) all.add(RouteRules.shaft(b));
+            spaces = all;
+        }
+
+        /** Whether a block position lies in the space this line needs. */
+        public boolean needs(int x, int y, int z) {
+            for (final Tube space : spaces) if (space.contains(x, y, z)) return true;
+            return false;
+        }
+
+        public State state() { return state; }
+        @Nullable public BlockPos blockedAt() { return blockedAt; }
+        public boolean hasUnseenParts() { return gaps; }
+        @Nullable public BlockPos barredBy() { return barred; }
+        public Tube tube() { return tube; }
+        public double length() { return tube.length(); }
+        public BlockPos other(BlockPos end) { return end.equals(a) ? b : a; }
+    }
+
+    private record Pair(BlockPos a, BlockPos b) implements Comparable<Pair> {
+        static Pair of(BlockPos x, BlockPos y) {
+            return x.compareTo(y) <= 0 ? new Pair(x, y) : new Pair(y, x);
+        }
+
+        @Override
+        public int compareTo(Pair other) {
+            final int first = a.compareTo(other.a);
+            return first != 0 ? first : b.compareTo(other.b);
+        }
+    }
+
+    /**
+     * One verification under way: walks the columns of the line's spaces (tube, then shafts), a few per tick, chunk by
+     * chunk along the line. A chunk that is not loaded is passed over at the price of one look.
+     */
+    private static final class Scan {
+        final Edge edge;
+        final int version;
+        final List<Tube> spaces;
+        Tube tube;
+        long[] chunks;
+        /** Which space, which of its chunks, and which of that chunk's 256 columns comes next. */
+        int part, chunk, column;
+        boolean gaps, done;
+        @Nullable BlockPos found;
+
+        Scan(Edge edge) {
+            this.edge = edge;
+            this.version = edge.version;
+            this.spaces = edge.spaces;
+            this.tube = spaces.get(0);
+            this.chunks = tube.chunks();
+        }
+
+        /** On to the next space; false when there is none. */
+        boolean next() {
+            if (++part >= spaces.size()) return false;
+            tube = spaces.get(part);
+            chunks = tube.chunks();
+            chunk = 0;
+            column = 0;
+            return true;
+        }
+    }
+
+    private final Map<BlockPos, Node> nodes = new TreeMap<>();
+    private final Map<Pair, Edge> edges = new TreeMap<>();
+    private final Map<BlockPos, List<Edge>> around = new HashMap<>();
+    /** Chunk (as a long) to the lines whose tube comes near that chunk; for the re-check after a block change. */
+    private final Map<Long, List<Edge>> byChunk = new HashMap<>();
+    private final ArrayDeque<Scan> queue = new ArrayDeque<>();
+    private int age;
+    private boolean sweepDue = true;
+    /**
+     * What "clear" means has changed over the versions (2: the shaft over a landing pad belongs to its lines, and the
+     * lines of a pad start higher). A network saved by older rules is looked at again from scratch once it is loaded.
+     */
+    private static final int RULES = 2;
+    private boolean recheckDue;
+    /** Who set down a buoy and is told what its lines came to once they have been looked at. Not saved. */
+    private final Map<BlockPos, UUID> watchers = new HashMap<>();
+    /** The pairs of landing pads between which there is a way, as last told to their colonies. Saved. */
+    private final TreeSet<Pair> linked = new TreeSet<>();
+    private boolean linksDue = true;
+    /** Buoys whose lamp may have to change (a line of theirs came, went or changed its state). Not saved. */
+    private final java.util.Set<BlockPos> lampsDue = new java.util.HashSet<>();
+
+    // ---- access -------------------------------------------------------------------------------------------
+
+    public static RouteNetwork get(ServerLevel level) {
+        return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(RouteNetwork::new, RouteNetwork::load), FILE);
+    }
+
+    /** The network of this dimension if there is one already (nothing is created). */
+    @Nullable
+    public static RouteNetwork find(ServerLevel level) {
+        return level.getDataStorage().get(new SavedData.Factory<>(RouteNetwork::new, RouteNetwork::load), FILE);
+    }
+
+    public Collection<Node> nodes() {
+        return Collections.unmodifiableCollection(nodes.values());
+    }
+
+    public Collection<Edge> edges() {
+        return Collections.unmodifiableCollection(edges.values());
+    }
+
+    @Nullable
+    public Node node(BlockPos pos) {
+        return nodes.get(pos);
+    }
+
+    @Nullable
+    public Edge edge(BlockPos a, BlockPos b) {
+        return edges.get(Pair.of(a, b));
+    }
+
+    /** Where the line passes over a point of the network (for a place that is no point: as over a buoy). */
+    public Vec3 waypoint(BlockPos pos) {
+        final Node node = nodes.get(pos);
+        return RouteRules.waypoint(pos, node == null ? Kind.BUOY : node.kind());
+    }
+
+    public List<Edge> edgesAt(BlockPos pos) {
+        return Collections.unmodifiableList(around.getOrDefault(pos, List.of()));
+    }
+
+    /** How many verifications are waiting or under way. */
+    public int pending() {
+        return queue.size();
+    }
+
+    // ---- points -------------------------------------------------------------------------------------------
+
+    public void addBuoy(BlockPos pos, int tier) {
+        put(new Node(pos.immutable(), Kind.BUOY, tier, 0));
+    }
+
+    /**
+     * An airfield's landing pad: {@code pad} is the middle block of its floor, {@code heading} a multiple of 90 degrees,
+     * {@code level} the building level of the airfield (it decides the reach).
+     */
+    public void setAirfield(BlockPos pad, int heading, int level) {
+        setAirfield(pad, heading, level, pad);
+    }
+
+    /** ... and {@code hut} the hut block of the airfield: where the airfield stands, for the large maps. */
+    public void setAirfield(BlockPos pad, int heading, int level, BlockPos hut) {
+        put(new Node(pad.immutable(), Kind.AIRFIELD, Math.max(1, Math.min(RouteRules.AIRFIELD_LEVELS, level)), Math.floorMod(heading, 360), hut.immutable()));
+    }
+
+    private void put(Node node) {
+        final Node before = nodes.get(node.pos());
+        if (node.equals(before)) return;
+        if (before != null && before.kind() == node.kind() && before.heading() == node.heading()) {
+            // Only the reach is different (an airfield was built up or taken down a level): the lines that still connect
+            // stay as they are, with what is known about them; lines that do not reach any more go, new ones come.
+            nodes.put(node.pos(), node);
+            linksDue = true;
+            for (final Edge edge : new ArrayList<>(around.getOrDefault(node.pos(), List.of()))) {
+                final Node other = nodes.get(edge.other(node.pos()));
+                if (other == null || !RouteRules.connects(node, other)) unlink(edge);
+            }
+            for (final Node other : new ArrayList<>(nodes.values())) {
+                if (RouteRules.connects(node, other)) link(node.pos(), other.pos());
+            }
+            setDirty();
+            return;
+        }
+        if (before != null) remove(node.pos());
+        linksDue = true;
+        nodes.put(node.pos(), node);
+        for (final Node other : nodes.values()) {
+            if (RouteRules.connects(node, other)) link(node.pos(), other.pos());
+        }
+        if (node.kind() == Kind.AIRFIELD) rebar();
+        setDirty();
+    }
+
+    public boolean remove(BlockPos pos) {
+        final Node gone = nodes.remove(pos);
+        if (gone == null) return false;
+        linksDue = true;
+        watchers.remove(pos);
+        for (final Edge edge : new ArrayList<>(around.getOrDefault(pos, List.of()))) unlink(edge);
+        around.remove(pos);
+        if (gone.kind() == Kind.AIRFIELD) rebar();
+        setDirty();
+        return true;
+    }
+
+    /** The landing pad (not one of the line's own ends) that a line passes too low over, if there is one. */
+    @Nullable
+    private BlockPos bar(Edge edge) {
+        for (final Node node : nodes.values()) {
+            if (node.kind() != Kind.AIRFIELD || node.pos().equals(edge.a) || node.pos().equals(edge.b)) continue;
+            if (RouteRules.grazes(edge.tube, node.pos())) return node.pos();
+        }
+        return null;
+    }
+
+    /** Landing pads came or went: which lines pass too low over a pad is worked out again. */
+    private void rebar() {
+        for (final Edge edge : edges.values()) {
+            final BlockPos now = bar(edge);
+            if (java.util.Objects.equals(now, edge.barred)) continue;
+            edge.barred = now;
+            edge.version++;
+            if (now != null) {
+                set(edge, State.BLOCKED, now);
+            } else {
+                set(edge, State.UNVERIFIED, null);
+                enqueue(edge);
+            }
+        }
+    }
+
+    private Edge link(BlockPos x, BlockPos y) {
+        final Pair pair = Pair.of(x, y);
+        Edge edge = edges.get(pair);
+        if (edge != null) return edge;
+        edge = new Edge(pair.a(), pair.b(), nodes.get(pair.a()).kind(), nodes.get(pair.b()).kind());
+        edges.put(pair, edge);
+        around.computeIfAbsent(edge.a, p -> new ArrayList<>()).add(edge);
+        around.computeIfAbsent(edge.b, p -> new ArrayList<>()).add(edge);
+        lampsDue.add(edge.a);
+        lampsDue.add(edge.b);
+        index(edge, true);
+        edge.barred = bar(edge);
+        if (edge.barred != null) {
+            edge.state = State.BLOCKED;
+            edge.blockedAt = edge.barred;
+        }
+        enqueue(edge);
+        return edge;
+    }
+
+    private void unlink(Edge edge) {
+        edges.remove(Pair.of(edge.a, edge.b));
+        final List<Edge> atA = around.get(edge.a), atB = around.get(edge.b);
+        if (atA != null) atA.remove(edge);
+        if (atB != null) atB.remove(edge);
+        lampsDue.add(edge.a);
+        lampsDue.add(edge.b);
+        index(edge, false);
+        edge.version++;
+    }
+
+    private void index(Edge edge, boolean add) {
+        // Every chunk that holds a column of one of the line's spaces (the tube; the shafts over its ends).
+        final java.util.Set<Long> keys = new java.util.HashSet<>();
+        for (final Tube space : edge.spaces) for (final long key : space.chunks()) keys.add(key);
+        for (final long key : keys) {
+            if (add) {
+                byChunk.computeIfAbsent(key, k -> new ArrayList<>()).add(edge);
+            } else {
+                final List<Edge> list = byChunk.get(key);
+                if (list != null && list.remove(edge) && list.isEmpty()) byChunk.remove(key);
+            }
+        }
+    }
+
+    // ---- states -------------------------------------------------------------------------------------------
+
+    private void set(Edge edge, State wanted, @Nullable BlockPos wantedAt) {
+        // A line that passes too low over a landing pad is blocked by that pad, whatever else is known about it.
+        final State state = edge.barred != null ? State.BLOCKED : wanted;
+        final BlockPos blockedAt = edge.barred != null ? edge.barred : wantedAt;
+        if (edge.state == state && java.util.Objects.equals(edge.blockedAt, blockedAt)) return;
+        if (edge.state != state) {
+            linksDue = true;
+            lampsDue.add(edge.a);
+            lampsDue.add(edge.b);
+        }
+        edge.state = state;
+        edge.blockedAt = blockedAt;
+        setDirty();
+    }
+
+    private void enqueue(Edge edge) {
+        if (edge.queued || edge.barred != null) return;      // nothing to look for on a line that is never flown
+        edge.queued = true;
+        queue.add(new Scan(edge));
+    }
+
+    /** A line was flown from end to end without meeting anything: it is clear, even if it could not be scanned before. */
+    public void confirmClear(Edge edge) {
+        if (edge.state != State.UNVERIFIED) return;
+        edge.version++;
+        edge.gaps = false;
+        set(edge, State.CLEAR, null);
+    }
+
+    /** Something solid was met on a line (seen from an aircraft, or reported by a block change). */
+    public void reportBlocked(Edge edge, BlockPos at) {
+        edge.version++;
+        set(edge, State.BLOCKED, at.immutable());
+    }
+
+    /** The lines of one point go back to "not verified" and are looked at again. */
+    public void recheck(BlockPos point) {
+        for (final Edge edge : around.getOrDefault(point, List.of())) {
+            edge.version++;
+            set(edge, State.UNVERIFIED, null);
+            enqueue(edge);
+        }
+    }
+
+    /**
+     * Looks at everything again: the rules may have changed (config), so lines are made and dropped by the current rules,
+     * every tube is rebuilt and every line goes back to "not verified".
+     */
+    public int recheckAll() {
+        for (final Edge edge : new ArrayList<>(edges.values())) {
+            final Node a = nodes.get(edge.a), b = nodes.get(edge.b);
+            if (a == null || b == null || !RouteRules.connects(a, b)) {
+                unlink(edge);
+                continue;
+            }
+            index(edge, false);
+            edge.rebuild(a.kind(), b.kind());
+            index(edge, true);
+            edge.version++;
+            edge.gaps = false;
+            edge.barred = bar(edge);
+            set(edge, State.UNVERIFIED, null);
+        }
+        relink();
+        // Scans that were waiting are worthless now; fresh ones are queued for everything.
+        for (final Scan scan : queue) scan.edge.queued = false;
+        queue.clear();
+        for (final Edge edge : edges.values()) enqueue(edge);
+        setDirty();
+        return edges.size();
+    }
+
+    private void relink() {
+        final List<Node> all = new ArrayList<>(nodes.values());
+        for (int i = 0; i < all.size(); i++) {
+            for (int j = i + 1; j < all.size(); j++) {
+                final Node a = all.get(i), b = all.get(j);
+                if (RouteRules.connects(a, b)) link(a.pos(), b.pos());
+            }
+        }
+    }
+
+    // ---- verification -------------------------------------------------------------------------------------
+
+    /** What counts as solid for an aircraft: anything with a collision shape, except buoys. */
+    public static boolean solid(ServerLevel level, BlockPos pos, BlockState state) {
+        return !state.isAir() && !(state.getBlock() instanceof BuoyBlock) && !state.getCollisionShape(level, pos).isEmpty();
+    }
+
+    public static void onLevelTick(LevelTickEvent.Post event) {
+        if (!(event.getLevel() instanceof ServerLevel level)) return;
+        final RouteNetwork network = find(level);
+        if (network != null) network.tick(level);
+    }
+
+    private void tick(ServerLevel level) {
+        if (recheckDue) {
+            recheckDue = false;
+            recheckAll();
+        }
+        if (sweepDue || ++age % RouteRules.retryTicks() == 0) {
+            sweepDue = false;
+            sweep(level);
+        }
+        int budget = RouteRules.verifyBlocksPerTick();
+        while (budget > 0 && !queue.isEmpty()) {
+            final Scan scan = queue.peek();
+            final Edge edge = scan.edge;
+            if (edges.get(Pair.of(edge.a, edge.b)) != edge) {
+                queue.poll();
+                continue;
+            }
+            if (scan.version != edge.version) {
+                // The line changed while it was being looked at: start over, unless a block change already settled it.
+                queue.poll();
+                edge.queued = false;
+                if (edge.state == State.UNVERIFIED) enqueue(edge);
+                continue;
+            }
+            budget = step(level, scan, budget);
+            if (!scan.done) break;
+            queue.poll();
+            edge.queued = false;
+            edge.gaps = scan.gaps;
+            if (scan.found != null) set(edge, State.BLOCKED, scan.found);
+            else if (scan.gaps) set(edge, State.UNVERIFIED, null);
+            else set(edge, State.CLEAR, null);
+        }
+        if (!lampsDue.isEmpty()) lamps(level);
+        if (!watchers.isEmpty() && age % 10 == 0) report(level);
+        if (linksDue && queue.isEmpty()) {
+            linksDue = false;
+            tellLinks(level);
+        }
+    }
+
+    // ---- telling people -----------------------------------------------------------------------------------
+
+    /** Lights or puts out the lamps of buoys whose lines changed: it burns while at least one line can be flown. */
+    private void lamps(ServerLevel level) {
+        for (final BlockPos pos : lampsDue) {
+            final Node node = nodes.get(pos);
+            if (node == null || node.kind() != Kind.BUOY) continue;
+            final LevelChunk chunk = level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+            if (chunk == null) continue;      // looked at again with the next sweep
+            final BlockState state = chunk.getBlockState(pos);
+            if (!(state.getBlock() instanceof BuoyBlock)) continue;
+            boolean open = false;
+            for (final Edge edge : around.getOrDefault(pos, List.of())) open |= edge.state != State.BLOCKED;
+            // Without telling the neighbours: nothing else needs to know, and this must not look like a block change on a line.
+            if (state.getValue(BuoyBlock.LIT) != open) level.setBlock(pos, state.setValue(BuoyBlock.LIT, open), 2);
+        }
+        lampsDue.clear();
+    }
+
+    private static final String MESSAGE = "message." + Airline.MOD_ID + ".buoy.";
+
+    /** A player set down a buoy: told what its lines came to when they have been looked at (as a colony sign tells its colony). */
+    public void watch(BlockPos buoy, UUID player) {
+        watchers.put(buoy.immutable(), player);
+    }
+
+    private void report(ServerLevel level) {
+        for (final Map.Entry<BlockPos, UUID> watcher : new ArrayList<>(watchers.entrySet())) {
+            final List<Edge> lines = around.getOrDefault(watcher.getKey(), List.of());
+            boolean busy = false;
+            for (final Edge edge : lines) busy |= edge.queued;
+            if (busy) continue;
+            watchers.remove(watcher.getKey());
+            if (level.getServer().getPlayerList().getPlayer(watcher.getValue()) instanceof ServerPlayer player) {
+                for (final Component line : describe(level, watcher.getKey(), true)) player.sendSystemMessage(line);
+            }
+        }
+    }
+
+    /**
+     * What a point is and how its lines stand, for a player who asks (uses the buoy) or has just set it down:
+     * a line of summary, the blocked lines with the block that is in the way, and the airfields it leads to.
+     */
+    public List<Component> describe(ServerLevel level, BlockPos point, boolean fresh) {
+        final List<Component> lines = new ArrayList<>();
+        final Node node = nodes.get(point);
+        if (node == null) return lines;
+        int clear = 0, blocked = 0, open = 0;
+        for (final Edge edge : around.getOrDefault(point, List.of())) {
+            if (edge.state == State.CLEAR) clear++;
+            else if (edge.state == State.BLOCKED) blocked++;
+            else open++;
+        }
+        lines.add(Component.translatable(MESSAGE + (fresh ? "placed" : "info"), node.tier(), node.reach(), clear, blocked, open));
+        for (final Edge edge : around.getOrDefault(point, List.of())) {
+            if (edge.state != State.BLOCKED || edge.blockedAt == null) continue;
+            final BlockPos other = edge.other(point), at = edge.blockedAt;
+            lines.add(Component.translatable(MESSAGE + (edge.barred != null ? "barred" : "blocked"), other.getX(), other.getY(), other.getZ(), at.getX(), at.getY(), at.getZ()));
+        }
+        // The airfields this point leads to, over lines that are not blocked.
+        final StringBuilder fields = new StringBuilder();
+        for (final Node other : nodes.values()) {
+            if (other.kind() != Kind.AIRFIELD || other.pos().equals(point)) continue;
+            final List<BlockPos> way = route(point, other.pos());
+            if (way.size() < 2) continue;
+            fields.append(fields.isEmpty() ? "" : ", ").append(AirLinks.name(level, other.pos())).append(" (").append(Math.round(length(way))).append(")");
+        }
+        lines.add(fields.isEmpty() ? Component.translatable(MESSAGE + "leads_nowhere") : Component.translatable(MESSAGE + "leads_to", fields.toString()));
+        return lines;
+    }
+
+    /** Whether the colonies of these two landing pads were last told that there is a way between them. */
+    public boolean linked(BlockPos a, BlockPos b) {
+        return linked.contains(Pair.of(a, b));
+    }
+
+    /** Looks which landing pads have a way between them now, and tells the colonies what changed since the last look. */
+    private void tellLinks(ServerLevel level) {
+        final List<Node> fields = new ArrayList<>();
+        for (final Node node : nodes.values()) if (node.kind() == Kind.AIRFIELD) fields.add(node);
+        final TreeSet<Pair> now = new TreeSet<>();
+        final Map<Pair, Double> lengths = new HashMap<>();
+        for (int i = 0; i < fields.size(); i++) {
+            for (int j = i + 1; j < fields.size(); j++) {
+                final List<BlockPos> way = route(fields.get(i).pos(), fields.get(j).pos());
+                if (way.size() < 2) continue;
+                final Pair pair = Pair.of(fields.get(i).pos(), fields.get(j).pos());
+                now.add(pair);
+                lengths.put(pair, length(way));
+            }
+        }
+        if (now.equals(linked)) return;
+        for (final Pair pair : now) if (!linked.contains(pair)) AirLinks.changed(level, pair.a(), pair.b(), true, lengths.get(pair));
+        for (final Pair pair : linked) if (!now.contains(pair)) AirLinks.changed(level, pair.a(), pair.b(), false, 0);
+        linked.clear();
+        linked.addAll(now);
+        setDirty();
+    }
+
+    /** Looks at as many columns as the budget allows. Only chunks that are loaded right now are read. */
+    private static int step(ServerLevel level, Scan scan, int budget) {
+        final int minY = level.getMinBuildHeight(), maxY = level.getMaxBuildHeight() - 1;
+        final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        while (budget > 0) {
+            if (scan.chunk >= scan.chunks.length) {
+                if (scan.next()) continue;
+                scan.done = true;
+                break;
+            }
+            final long key = scan.chunks[scan.chunk];
+            final int chunkX = ChunkPos.getX(key), chunkZ = ChunkPos.getZ(key);
+            final LevelChunk chunk = level.getChunkSource().getChunkNow(chunkX, chunkZ);
+            if (chunk == null) {
+                // Every chunk in the list holds a column of the space, so this part of the line was not seen.
+                budget--;
+                scan.gaps = true;
+                scan.chunk++;
+                scan.column = 0;
+                continue;
+            }
+            final Tube tube = scan.tube;
+            while (budget > 0 && scan.column < 256) {
+                final int x = (chunkX << 4) + (scan.column >> 4), z = (chunkZ << 4) + (scan.column & 15);
+                scan.column++;
+                budget--;
+                if (!tube.touchesColumn(x, z)) continue;
+                final double low = tube.low(x, z), high = tube.high(x, z);
+                final int from = Math.max(minY, (int) Math.ceil(low - 0.5)), to = Math.min(maxY, (int) Math.floor(high - 0.5));
+                for (int y = from; y <= to; y++) {
+                    budget--;
+                    final BlockState state = chunk.getBlockState(pos.set(x, y, z));
+                    if (solid(level, pos, state)) {
+                        scan.found = pos.immutable();
+                        scan.done = true;
+                        return budget;
+                    }
+                }
+            }
+            if (scan.column >= 256) {
+                scan.chunk++;
+                scan.column = 0;
+            }
+        }
+        return budget;
+    }
+
+    /** Now and then: lines that could not be seen completely are tried again, and buoys whose block is gone are dropped. */
+    private void sweep(ServerLevel level) {
+        for (final Node node : new ArrayList<>(nodes.values())) {
+            if (node.kind() != Kind.BUOY) continue;
+            final LevelChunk chunk = level.getChunkSource().getChunkNow(node.pos().getX() >> 4, node.pos().getZ() >> 4);
+            if (chunk == null) continue;
+            if (!(chunk.getBlockState(node.pos()).getBlock() instanceof BuoyBlock buoy) || buoy.tier() != node.tier()) remove(node.pos());
+            else lampsDue.add(node.pos());
+        }
+        for (final Edge edge : edges.values()) {
+            if (edge.state == State.UNVERIFIED) enqueue(edge);
+        }
+    }
+
+    // ---- re-check after a block change --------------------------------------------------------------------
+
+    /** Fires for every block change that tells its neighbours (placing, breaking, pistons, explosions, most mods). */
+    public static void onNeighborNotify(BlockEvent.NeighborNotifyEvent event) {
+        if (!(event.getLevel() instanceof ServerLevel level)) return;
+        final RouteNetwork network = find(level);
+        if (network != null && !network.byChunk.isEmpty()) network.blockChanged(level, event.getPos(), event.getState());
+    }
+
+    /**
+     * A block changed. A solid block inside a line's tube blocks that line at once. A block that went away inside the
+     * tube of a blocked line sends the line back to "not verified": there may be more than one block in the way.
+     */
+    public void blockChanged(ServerLevel level, BlockPos pos, BlockState now) {
+        final List<Edge> near = byChunk.get(ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4));
+        if (near == null) return;
+        final boolean solid = solid(level, pos, now);
+        for (final Edge edge : near) {
+            if (!edge.needs(pos.getX(), pos.getY(), pos.getZ())) continue;
+            if (solid) {
+                if (edge.state != State.BLOCKED) reportBlocked(edge, pos);
+            } else if (edge.state == State.BLOCKED) {
+                edge.version++;
+                set(edge, State.UNVERIFIED, null);
+                enqueue(edge);
+            }
+        }
+    }
+
+    // ---- routes -------------------------------------------------------------------------------------------
+
+    /**
+     * The shortest way from one point to another over lines that are clear or not verified yet. The list starts with
+     * {@code from} and ends with {@code to}; it is empty when there is no way. A way never leads through a landing pad:
+     * the space over a pad belongs to the aircraft that go up and down there (proposal of the assistant).
+     */
+    public List<BlockPos> route(BlockPos from, BlockPos to) {
+        return route(from, to, List.of());
+    }
+
+    /** The same, leaving out some lines (those an aircraft found another ship on: they are not blocked for anybody else). */
+    public List<BlockPos> route(BlockPos from, BlockPos to, Collection<Edge> without) {
+        if (!nodes.containsKey(from) || !nodes.containsKey(to)) return List.of();
+        final Map<BlockPos, Double> best = new HashMap<>();
+        final Map<BlockPos, BlockPos> cameFrom = new HashMap<>();
+        record Reached(BlockPos pos, double distance) {}
+        final PriorityQueue<Reached> open = new PriorityQueue<>((x, y) -> Double.compare(x.distance(), y.distance()));
+        best.put(from, 0.0);
+        open.add(new Reached(from, 0.0));
+        while (!open.isEmpty()) {
+            final Reached here = open.poll();
+            if (here.distance() > best.getOrDefault(here.pos(), Double.MAX_VALUE)) continue;
+            if (here.pos().equals(to)) break;
+            if (!here.pos().equals(from) && nodes.get(here.pos()).kind() == Kind.AIRFIELD) continue;
+            for (final Edge edge : around.getOrDefault(here.pos(), List.of())) {
+                if (edge.state == State.BLOCKED || without.contains(edge)) continue;
+                final BlockPos next = edge.other(here.pos());
+                final double distance = here.distance() + edge.length();
+                if (distance < best.getOrDefault(next, Double.MAX_VALUE)) {
+                    best.put(next, distance);
+                    cameFrom.put(next, here.pos());
+                    open.add(new Reached(next, distance));
+                }
+            }
+        }
+        if (!best.containsKey(to)) return List.of();
+        final List<BlockPos> way = new ArrayList<>();
+        for (BlockPos at = to; at != null; at = cameFrom.get(at)) way.add(at);
+        Collections.reverse(way);
+        return way;
+    }
+
+    /** Length of a route as returned by {@link #route}, in blocks. */
+    public double length(List<BlockPos> way) {
+        double sum = 0.0;
+        for (int i = 1; i < way.size(); i++) {
+            final Edge edge = edge(way.get(i - 1), way.get(i));
+            if (edge != null) sum += edge.length();
+        }
+        return sum;
+    }
+
+    // ---- saving -------------------------------------------------------------------------------------------
+
+    @Override
+    public @NotNull CompoundTag save(@NotNull CompoundTag tag, HolderLookup.@NotNull Provider registries) {
+        final ListTag points = new ListTag();
+        for (final Node node : nodes.values()) {
+            final CompoundTag point = new CompoundTag();
+            point.putLong("pos", node.pos().asLong());
+            point.putString("kind", node.kind().name());
+            point.putInt("tier", node.tier());
+            point.putInt("heading", node.heading());
+            if (!node.home().equals(node.pos())) point.putLong("home", node.home().asLong());
+            points.add(point);
+        }
+        tag.put("points", points);
+        final ListTag lines = new ListTag();
+        for (final Edge edge : edges.values()) {
+            final CompoundTag line = new CompoundTag();
+            line.putLong("a", edge.a.asLong());
+            line.putLong("b", edge.b.asLong());
+            line.putString("state", edge.state.name());
+            if (edge.blockedAt != null) line.putLong("blockedAt", edge.blockedAt.asLong());
+            lines.add(line);
+        }
+        tag.put("lines", lines);
+        final ListTag links = new ListTag();
+        for (final Pair pair : linked) {
+            final CompoundTag link = new CompoundTag();
+            link.putLong("a", pair.a().asLong());
+            link.putLong("b", pair.b().asLong());
+            links.add(link);
+        }
+        tag.put("links", links);
+        tag.putInt("rules", RULES);
+        return tag;
+    }
+
+    public static RouteNetwork load(CompoundTag tag, HolderLookup.Provider registries) {
+        final RouteNetwork network = new RouteNetwork();
+        final ListTag points = tag.getList("points", Tag.TAG_COMPOUND);
+        for (int i = 0; i < points.size(); i++) {
+            final CompoundTag point = points.getCompound(i);
+            try {
+                final BlockPos pos = BlockPos.of(point.getLong("pos"));
+                // (A save of before 0.11.1 does not say where the airfield stands: the pad itself, until the airfield puts its pads on again.)
+                final BlockPos home = point.contains("home") ? BlockPos.of(point.getLong("home")) : pos;
+                network.nodes.put(pos, new Node(pos, Kind.valueOf(point.getString("kind")), point.getInt("tier"), point.getInt("heading"), home));
+            } catch (IllegalArgumentException unknownKind) {
+                // A kind this version does not know: the point is left out.
+            }
+        }
+        // Lines are made by the rules of today (the config may have changed); what was known about a line is kept.
+        network.relink();
+        final ListTag lines = tag.getList("lines", Tag.TAG_COMPOUND);
+        for (int i = 0; i < lines.size(); i++) {
+            final CompoundTag line = lines.getCompound(i);
+            final Edge edge = network.edges.get(Pair.of(BlockPos.of(line.getLong("a")), BlockPos.of(line.getLong("b"))));
+            if (edge == null) continue;
+            try {
+                edge.state = State.valueOf(line.getString("state"));
+            } catch (IllegalArgumentException unknownState) {
+                edge.state = State.UNVERIFIED;
+            }
+            edge.blockedAt = edge.state == State.BLOCKED && line.contains("blockedAt") ? BlockPos.of(line.getLong("blockedAt")) : null;
+        }
+        // (Which lines pass too low over a landing pad was worked out by relink(); what was saved does not change that.)
+        for (final Edge edge : network.edges.values()) {
+            if (edge.barred == null) continue;
+            edge.state = State.BLOCKED;
+            edge.blockedAt = edge.barred;
+        }
+        network.recheckDue = tag.getInt("rules") < RULES;
+        final ListTag links = tag.getList("links", Tag.TAG_COMPOUND);
+        for (int i = 0; i < links.size(); i++) network.linked.add(Pair.of(BlockPos.of(links.getCompound(i).getLong("a")), BlockPos.of(links.getCompound(i).getLong("b"))));
+        // The scans queued by relink() are dropped; the first tick queues what is still not verified.
+        for (final Scan scan : network.queue) scan.edge.queued = false;
+        network.queue.clear();
+        network.sweepDue = true;
+        return network;
+    }
+}

@@ -1,0 +1,316 @@
+plugins {
+    id 'java-library'
+    id 'eclipse'
+    id 'idea'
+    id 'net.neoforged.moddev' version '2.0.141'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+repositories {
+    mavenCentral()
+}
+
+// Development-only integration checks (airlinetest); never included in the distributable jar.
+sourceSets {
+    testmod {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+// MineColonies and its hard dependencies: the exact jars of the play instance, shared with ColonyPatchServer (not copied).
+def sharedLibs = '../ColonyPatchServer/libs'
+def sharedTestJars = '../ColonyPatchServer/test-jars'
+
+dependencies {
+    compileOnly fileTree(dir: sharedLibs, include: ['*.jar'])
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// The flying part (stage 4) needs Sable and ColonyPatchServer at run time; both are optional, and neither goes into the jar.
+// Sable: the jar of the play instance, shared with ColonyPatchServer, plus the companion library nested inside it.
+def sableJarFile = file("${sharedTestJars}/sable-neoforge-1.21.1-2.0.5.jar")
+def colonyPatchServerJar = file('../ColonyPatchServer/build/libs/colonypatch_server-1.2.1.jar')
+def sableCompileDir = layout.buildDirectory.dir('sable-compile')
+
+def extractSableCompileJars = tasks.register('extractSableCompileJars', Copy) {
+    doFirst {
+        if (!sableJarFile.isFile()) throw new GradleException("Sable jar not found: ${sableJarFile}")
+    }
+    from({ zipTree(sableJarFile) }) {
+        include 'META-INF/jarjar/sable-companion-*.jar'
+        eachFile { it.path = it.name }
+        includeEmptyDirs = false
+    }
+    into sableCompileDir
+}
+
+def flightCompileJars = files(sableJarFile, colonyPatchServerJar, fileTree(dir: sableCompileDir, include: '*.jar')).builtBy(extractSableCompileJars)
+
+dependencies {
+    compileOnly flightCompileJars
+}
+
+neoForge {
+    version = project.neo_version
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+        airlinetest {
+            sourceSet sourceSets.testmod
+        }
+    }
+
+    runs {
+        airfield {
+            server()
+            programArgument '--nogui'
+            gameDirectory = project.file('run-airfield')
+            sourceSet = sourceSets.testmod
+            loadedMods = [neoForge.mods.named(mod_id).get(), neoForge.mods.named('airlinetest').get()]
+            systemProperty 'airlinetest.suite', 'airfield'
+            systemProperty 'airlinetest.courier', providers.gradleProperty('courier').getOrElse('true')
+            systemProperty 'airlinetest.watchdogTicks', providers.gradleProperty('watchdogTicks').getOrElse('12000')
+            systemProperty 'airlinetest.timeoutSeconds', providers.gradleProperty('timeoutSeconds').getOrElse('900')
+            jvmArgument '-Xmx3G'
+        }
+        // Second start on the world the airfield run left behind: checks what survived the save.
+        airfieldReload {
+            server()
+            programArgument '--nogui'
+            gameDirectory = project.file('run-airfield')
+            sourceSet = sourceSets.testmod
+            loadedMods = [neoForge.mods.named(mod_id).get(), neoForge.mods.named('airlinetest').get()]
+            systemProperty 'airlinetest.suite', 'reload'
+            jvmArgument '-Xmx3G'
+        }
+        // Third start on the same world WITHOUT the mod (only the checks are loaded): does the world open, is the colony usable?
+        airfieldRemoved {
+            server()
+            programArgument '--nogui'
+            gameDirectory = project.file('run-airfield')
+            sourceSet = sourceSets.testmod
+            loadedMods = [neoForge.mods.named('airlinetest').get()]
+            systemProperty 'airlinetest.suite', 'removed'
+            jvmArgument '-Xmx3G'
+        }
+        // Stage 4, second half: aircraft fly. Sable, Create, Create Aeronautics and ColonyPatchServer are added to the server.
+        // -Pscene=<name> picks what is run: trip (default), far, faults, crash, cargo, ground, lost, hindered,
+        // reopen1 -> reopen2 -> reopen3, reopenc1 -> reopenc2 -> reopenc3 -> reopenc4 (reopenprobe: a look at a reopen world by hand).
+        flight {
+            server()
+            programArgument '--nogui'
+            gameDirectory = project.file(providers.gradleProperty('scene').getOrElse('trip').startsWith('reopen') ? 'run-reopen' : 'run-flight')
+            sourceSet = sourceSets.testmod
+            loadedMods = [neoForge.mods.named(mod_id).get(), neoForge.mods.named('airlinetest').get()]
+            systemProperty 'airlinetest.suite', 'flight'
+            systemProperty 'airlinetest.scene', providers.gradleProperty('scene').getOrElse('trip')
+            systemProperty 'airlinetest.aircraft', providers.gradleProperty('aircraft').getOrElse('')
+            // -Pdesign=<file, seen from this project's folder>: a design that is not in the mod yet (it is offered under the file's
+            // name; fly it with -Paircraft=<that name>).
+            systemProperty 'airline.design', providers.gradleProperty('design').map { project.file(it).absolutePath }.getOrElse('')
+            systemProperty 'airlinetest.watchdogTicks', providers.gradleProperty('watchdogTicks').getOrElse('30000')
+            systemProperty 'airlinetest.timeoutSeconds', providers.gradleProperty('timeoutSeconds').getOrElse('1700')
+            jvmArgument '-Xmx3G'
+        }
+        // The test bench for aircraft designs: -Pdesign=<file> (or -Paircraft=<name of a design of the mod>), -PbenchOut=<file for the
+        // report>, -PbenchMode=all|raw|static. One aircraft is made and worked through its own levers; what is measured is written down.
+        // Both files are named as seen from this project's folder (no blanks: the command line of gradlew.bat does not survive them).
+        bench {
+            server()
+            programArgument '--nogui'
+            gameDirectory = project.file('run-bench')
+            sourceSet = sourceSets.testmod
+            loadedMods = [neoForge.mods.named(mod_id).get(), neoForge.mods.named('airlinetest').get()]
+            systemProperty 'airlinetest.suite', 'bench'
+            systemProperty 'airlinetest.aircraft', providers.gradleProperty('aircraft').getOrElse('small')
+            systemProperty 'airline.design', providers.gradleProperty('design').map { project.file(it).absolutePath }.getOrElse('')
+            systemProperty 'airlinetest.benchOut', project.file(providers.gradleProperty('benchOut').getOrElse('run-bench/bench-report.json')).absolutePath
+            systemProperty 'airlinetest.benchMode', providers.gradleProperty('benchMode').getOrElse('all')
+            systemProperty 'airlinetest.benchFast', providers.gradleProperty('benchFast').getOrElse('false')
+            systemProperty 'airlinetest.benchLeg', providers.gradleProperty('benchLeg').getOrElse('80')
+            systemProperty 'airlinetest.benchOffset', providers.gradleProperty('benchOffset').getOrElse('0')
+            // -PbenchOutline=5x7x4x12: a design larger than the outline may be measured (it cannot be put into the mod as it is).
+            systemProperty 'airline.trialOutline', providers.gradleProperty('benchOutline').getOrElse('')
+            systemProperty 'airlinetest.watchdogTicks', providers.gradleProperty('watchdogTicks').getOrElse('30000')
+            systemProperty 'airlinetest.timeoutSeconds', providers.gradleProperty('timeoutSeconds').getOrElse('1700')
+            jvmArgument '-Xmx3G'
+        }
+        // Stage 4, first half: buoys, the network, verification, routes, commands. Nothing flies; MineColonies only.
+        network {
+            server()
+            programArgument '--nogui'
+            gameDirectory = project.file('run-network')
+            sourceSet = sourceSets.testmod
+            loadedMods = [neoForge.mods.named(mod_id).get(), neoForge.mods.named('airlinetest').get()]
+            systemProperty 'airlinetest.suite', 'network'
+            systemProperty 'airlinetest.timeoutSeconds', providers.gradleProperty('timeoutSeconds').getOrElse('600')
+            jvmArgument '-Xmx3G'
+        }
+    }
+}
+
+neoForge.addModdingDependenciesTo(sourceSets.testmod)
+
+dependencies {
+    testmodCompileOnly fileTree(dir: sharedLibs, include: ['*.jar'])
+    testmodCompileOnly flightCompileJars
+}
+
+// ---- isolated test runs ----------------------------------------------------------------------------------
+def mineColoniesJars = ['blockui-1.0.209-1.21.1.jar', 'domum-ornamentum-1.0.231-main.jar', 'minecolonies-1.1.1368-1.21.1.jar',
+                        'multipiston-1.2.58-1.21.1.jar', 'structurize-1.0.832-1.21.1.jar']
+
+// Only the allowed jars may sit in mods/; jars come from the shared test-jars folder and are checked against its MANIFEST.sha256.
+def prepareRun = { String dirName, List<String> allowed, int port, String motd, List<File> extra = [] ->
+    def dir = file(dirName)
+    def mods = new File(dir, 'mods')
+    mods.mkdirs()
+    def unexpected = mods.listFiles()?.findAll { it.isFile() && it.name.endsWith('.jar') && !(it.name in allowed) }
+    if (unexpected) throw new GradleException("Unexpected test mods; keep this run isolated: ${unexpected}")
+    def manifest = [:]
+    file("${sharedTestJars}/MANIFEST.sha256").eachLine { line ->
+        def m = (line =~ /^([0-9a-f]{64}) \*?(.+)$/)
+        if (m) manifest[m[0][2]] = m[0][1]
+    }
+    // Jars that are not in the shared folder (a neighbouring project's own build): copied as they are.
+    extra.each { File jar -> java.nio.file.Files.copy(jar.toPath(), new File(mods, jar.name).toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+    (allowed - extra.collect { it.name }).each { name ->
+        def src = file("${sharedTestJars}/${name}")
+        if (!src.isFile()) throw new GradleException("Missing test jar ${src}")
+        def sum = java.security.MessageDigest.getInstance('SHA-256').digest(src.bytes).encodeHex().toString()
+        if (manifest[name] != sum) throw new GradleException("SHA-256 mismatch for ${name}")
+        java.nio.file.Files.copy(src.toPath(), new File(mods, name).toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+    }
+    new File(dir, 'eula.txt').text = 'eula=true' + System.lineSeparator()
+    def props = new File(dir, 'server.properties')
+    if (!props.exists()) {
+        // Void flat world: no natural terrain, so the test platforms are the only land.
+        props.text = ['online-mode=false', 'server-port=' + port, 'query.port=' + port, 'motd=' + motd, 'max-tick-time=60000',
+                      'level-type=minecraft' + ':flat',
+                      'generator-settings={"layers":[{"block":"minecraft:air","height":1}],"biome":"minecraft:the_void","features":false,"lakes":false,"structure_overrides":[]}',
+                      'spawn-monsters=false', 'spawn-animals=false', 'generate-structures=false', 'view-distance=4', 'simulation-distance=4',
+                      'enable-status=false'].join(System.lineSeparator()) + System.lineSeparator()
+    }
+}
+
+// Result file contract: "PASS n ...", "FAIL ...". Log scan is record-only.
+def verifyResult = { String dirName, String label ->
+    def report = file("${dirName}/airline-result.txt")
+    if (!report.exists()) throw new GradleException("${label} produced no result")
+    if (!report.text.startsWith('PASS ')) throw new GradleException(report.text)
+    def log = file("${dirName}/logs/latest.log")
+    if (log.exists()) {
+        def errors = log.readLines('UTF-8').count { it.contains('/ERROR]') }
+        logger.lifecycle("${label}: ${errors} ERROR line(s) in logs/latest.log (recorded only)")
+    }
+    def crashes = file("${dirName}/crash-reports").listFiles()?.length ?: 0
+    logger.lifecycle("${label}: ${crashes} crash report file(s)")
+    logger.lifecycle(report.text)
+}
+
+tasks.named('runAirfield').configure {
+    doFirst {
+        delete file('run-airfield/airline-result.txt')
+        prepareRun('run-airfield', mineColoniesJars, 25630, 'Airline airfield')
+    }
+    doLast { verifyResult('run-airfield', 'airfield') }
+}
+tasks.named('runAirfieldReload').configure {
+    doFirst {
+        delete file('run-airfield/airline-result.txt')
+        prepareRun('run-airfield', mineColoniesJars, 25630, 'Airline airfield')
+    }
+    doLast { verifyResult('run-airfield', 'airfieldReload') }
+}
+
+tasks.named('runAirfieldRemoved').configure {
+    doFirst {
+        delete file('run-airfield/airline-result.txt')
+        prepareRun('run-airfield', mineColoniesJars, 25630, 'Airline airfield')
+    }
+    doLast { verifyResult('run-airfield', 'airfieldRemoved') }
+}
+
+def physicsJars = ['sable-neoforge-1.21.1-2.0.5.jar', 'create-1.21.1-6.0.10.jar', 'create-aeronautics-bundled-1.21.1-1.3.2.jar']
+
+tasks.named('runFlight').configure {
+    def scene = providers.gradleProperty('scene').getOrElse('trip')
+    def dirName = scene.startsWith('reopen') ? 'run-reopen' : 'run-flight'
+    doFirst {
+        delete file("${dirName}/airline-result.txt")
+        // A fresh world, except for the later starts of the two reopen chains (reopen1-3: a plain flight; reopenc1-4: a cargo
+        // flight stopped while loading, flying and unloading), which continue on the world of the start before.
+        if (!(scene in ['reopen2', 'reopen3', 'reopenc2', 'reopenc3', 'reopenc4', 'reopenprobe'])) delete file("${dirName}/world")
+        def patch = file('../ColonyPatchServer/build/libs/colonypatch_server-1.2.1.jar')
+        if (!patch.isFile()) throw new GradleException("Missing ${patch}: build ColonyPatchServer 1.2.1 first")
+        prepareRun(dirName, mineColoniesJars + physicsJars + [patch.name], 25632, 'Airline flight', [patch])
+    }
+    doLast { verifyResult(dirName, 'flight ' + scene) }
+}
+
+tasks.named('runBench').configure {
+    doFirst {
+        delete file('run-bench/airline-result.txt')
+        delete file('run-bench/world')
+        def patch = file('../ColonyPatchServer/build/libs/colonypatch_server-1.2.1.jar')
+        if (!patch.isFile()) throw new GradleException("Missing ${patch}: build ColonyPatchServer 1.2.1 first")
+        prepareRun('run-bench', mineColoniesJars + physicsJars + [patch.name], 25633, 'Airline bench', [patch])
+    }
+    doLast { verifyResult('run-bench', 'bench') }
+}
+
+tasks.named('runNetwork').configure {
+    doFirst {
+        delete file('run-network/airline-result.txt')
+        // A fresh void world every time: the checks count the points and lines of the whole dimension.
+        delete file('run-network/world')
+        prepareRun('run-network', mineColoniesJars, 25631, 'Airline network')
+    }
+    doLast { verifyResult('run-network', 'network') }
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+}
+
+// Expand mod metadata template (src/main/templates) into generated resources.
+var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
+    var replaceProperties = [
+            minecraft_version      : minecraft_version,
+            minecraft_version_range: minecraft_version_range,
+            neo_version            : neo_version,
+            neo_version_range      : neo_version_range,
+            loader_version_range   : loader_version_range,
+            mod_id                 : mod_id,
+            mod_name               : mod_name,
+            mod_license            : mod_license,
+            mod_version            : mod_version,
+            mod_authors            : mod_authors,
+            mod_description        : mod_description,
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from "src/main/templates"
+    into "build/generated/sources/modMetadata"
+}
+
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

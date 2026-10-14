@@ -1,0 +1,11 @@
+<window xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/ldtteam/BlockUI/version/main/src/main/resources/assets/blockui/gui/block_ui.xsd"
+    size="190 244">
+    <image source="minecolonies:textures/gui/builderhut/builder_paper.png" size="190 244"/>
+    <text id="desc" size="130 11" pos="30 14" textalign="MIDDLE" color="black"/>
+    <text size="160 11" pos="16 40" color="black" label="$(com.airline.gui.timetable.departure)"/>
+    <text id="departure" size="160 48" pos="16 54" color="black" wrap="true"/>
+    <text size="160 11" pos="16 116" color="black" label="$(com.airline.gui.timetable.arrival)"/>
+    <text id="arrival" size="160 48" pos="16 130" color="black" wrap="true"/>
+    <text size="160 11" pos="16 186" color="black" label="$(com.airline.gui.timetable.aircraft)"/>
+    <text id="aircraft" size="160 36" pos="16 200" color="black" wrap="true"/>
+</window>
