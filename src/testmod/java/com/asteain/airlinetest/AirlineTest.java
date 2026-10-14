@@ -37,6 +37,9 @@ public final class AirlineTest {
             String suite = System.getProperty("airlinetest.suite", "");
             // (The suite "removed" runs without the mod: there is nothing to set.)
             if (!suite.equals("removed")) Fixture.reachAsLaidOut();
+            // The world of the airfield checks is opened again: its "other colony" (no airfield) stands for one that can be
+            // flown to, as it did there after the first export check (else the export request it left open is withdrawn).
+            if (suite.equals("reload")) com.asteain.airline.colony.ExportStockModule.reachAllForChecks(true);
             script = switch (suite) {
                 case "airfield" -> AirfieldSuite.build(server);
                 case "reload" -> ReloadSuite.build(server);

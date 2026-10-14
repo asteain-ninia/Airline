@@ -93,6 +93,9 @@ public class ExportStockModule extends MinimumStockModule implements IBuildingEv
         for (IRequest<?> open : openRequests(requests))
             if (rowFor(stackOf(open)) == null || !heldByWarehouse(requests, open.getId())) cancel(requests, open.getId());
 
+        // Only for colonies this airfield can fly to: what is wanted where no line leads would only lie on the racks.
+        java.util.Set<WantLedger.Key> reachable = reachable(colony, ledger, self);
+
         for (Map.Entry<ItemStorage, Integer> row : new ArrayList<>(minimumStock.entrySet())) {
             ItemStack item = row.getKey().getItemStack();
             if (item.isEmpty()) continue;
@@ -101,7 +104,7 @@ public class ExportStockModule extends MinimumStockModule implements IBuildingEv
             IRequest<?> open = null;
             for (IRequest<?> candidate : openRequests(requests)) if (same.test(stackOf(candidate))) { open = candidate; break; }
 
-            int wanted = ledger.wantedByOthers(self, item.getItem());
+            int wanted = ledger.wantedByOthers(self, item.getItem(), reachable::contains);
             // Nobody else wants it, or this colony itself is short of it (never export what the colony is still asking for).
             if (wanted <= 0 || colonyIsShortOf(requests, item)) {
                 if (open != null) cancel(requests, open.getId());
@@ -122,6 +125,39 @@ public class ExportStockModule extends MinimumStockModule implements IBuildingEv
             IToken<?> token = building.createRequest(request, true);
             if (!heldByWarehouse(requests, token)) cancel(requests, token);
         }
+    }
+
+    /** For the checks: every colony in the ledger counts as one this airfield can fly to (they stand in for colonies with no airfield). */
+    private static boolean reachAllForChecks;
+
+    public static void reachAllForChecks(boolean all) {
+        reachAllForChecks = all;
+    }
+
+    /**
+     * The colonies (as the ledger knows them) whose airfield this airfield has a way to over the air network: the same
+     * test a flight makes before it goes (a route from this airfield's pad to a pad of theirs). Worked out once per look.
+     */
+    private java.util.Set<WantLedger.Key> reachable(IColony colony, WantLedger ledger, WantLedger.Key self) {
+        java.util.Set<WantLedger.Key> out = new java.util.HashSet<>();
+        if (!(colony.getWorld() instanceof net.minecraft.server.level.ServerLevel level) || !(building instanceof BuildingAirfield home)) return out;
+        com.asteain.airline.route.RouteNetwork net = com.asteain.airline.route.RouteNetwork.get(level);
+        for (WantLedger.Key key : ledger.keys()) {
+            if (key.equals(self) || !key.dimension().equals(self.dimension())) continue;
+            if (reachAllForChecks) {
+                out.add(key);
+                continue;
+            }
+            BuildingAirfield there = com.asteain.airline.flight.Cargo.airfieldOf(level, key.colony());
+            if (there == null || there.getBuildingLevel() < 1) continue;
+            for (net.minecraft.core.BlockPos pad : there.pads()) {
+                if (net.route(home.pad(), pad).size() >= 2) {
+                    out.add(key);
+                    break;
+                }
+            }
+        }
+        return out;
     }
 
     /**

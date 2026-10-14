@@ -29,8 +29,10 @@ import java.util.Map;
  * mod's pack, so the builders ask for its materials and put it up the way they do any decoration), and when every block
  * of the design stands there, put up by a builder or by hand, the whole becomes a ship, parked on its pad.
  *
- * <p>The aircraft is built with its nose to the east whatever way the pad faces, and turned to the pad's heading when it
- * becomes a ship (the designs, and what the autopilot knows of them, are all written nose to +x).</p>
+ * <p>The aircraft is built in the heading of its pad, the way it will stand there (the user's ruling of 2026-10-14: it
+ * must not swing round when it is finished). The designs, and what the autopilot knows of them, are all written nose to
+ * +x; so the builders' blueprint and the look at what stands are turned to the pad's heading, and when the aircraft is
+ * finished it is laid down nose to +x again for a moment within the same tick, made a ship, and turned back.</p>
  */
 final class Shipyard {
     private Shipyard() {}
@@ -97,9 +99,47 @@ final class Shipyard {
         return parts;
     }
 
-    /** How many blocks of the design do not stand yet around an aircraft block at {@code base}; -1 for a design that cannot be read. */
-    static int missing(ServerLevel level, BlockPos base, AircraftType type) {
-        final Map<BlockPos, Part> parts = parts(level, type);
+    /** The turn that brings a design (nose to +x) to a pad's heading (degrees, a multiple of 90; 90 is toward +z). */
+    static net.minecraft.world.level.block.Rotation turn(int heading) {
+        return switch (Math.floorMod(heading, 360)) {
+            case 90 -> net.minecraft.world.level.block.Rotation.CLOCKWISE_90;
+            case 180 -> net.minecraft.world.level.block.Rotation.CLOCKWISE_180;
+            case 270 -> net.minecraft.world.level.block.Rotation.COUNTERCLOCKWISE_90;
+            default -> net.minecraft.world.level.block.Rotation.NONE;
+        };
+    }
+
+    /** The turn of the site on this pad (the heading of the airfield's pad); none where no airfield is known. */
+    static net.minecraft.world.level.block.Rotation turnAt(ServerLevel level, @Nullable BlockPos pad) {
+        final BuildingAirfield airfield = pad == null ? null : Cargo.airfieldAt(level, pad);
+        return airfield == null ? net.minecraft.world.level.block.Rotation.NONE : turn(airfield.padHeading());
+    }
+
+    /** The blocks of a design turned to a pad's heading: where each stands seen from the aircraft's own block, and how it is turned. */
+    @Nullable
+    static Map<BlockPos, Part> parts(ServerLevel level, AircraftType type, net.minecraft.world.level.block.Rotation turn) {
+        if (turn == net.minecraft.world.level.block.Rotation.NONE) return parts(level, type);
+        final String key = type.name + "/" + turn.name();
+        if (PARTS.containsKey(key)) return PARTS.get(key);
+        final Map<BlockPos, Part> design = parts(level, type);
+        Map<BlockPos, Part> turned = null;
+        if (design != null) {
+            turned = new HashMap<>();
+            for (final Map.Entry<BlockPos, Part> part : design.entrySet()) {
+                final BlockState state = part.getValue().state().rotate(turn);
+                final Map<String, String> named = new HashMap<>();
+                for (final Property<?> property : state.getProperties())
+                    if (part.getValue().named().containsKey(property.getName())) named.put(property.getName(), Part.name(state, property));
+                turned.put(part.getKey().rotate(turn), new Part(state, named));
+            }
+        }
+        PARTS.put(key, turned);
+        return turned;
+    }
+
+    /** How many blocks of the design do not stand yet around an aircraft block at {@code base}, built turned by {@code turn}; -1 for a design that cannot be read. */
+    static int missing(ServerLevel level, BlockPos base, AircraftType type, net.minecraft.world.level.block.Rotation turn) {
+        final Map<BlockPos, Part> parts = parts(level, type, turn);
         if (parts == null) return -1;
         int missing = 0;
         for (final Map.Entry<BlockPos, Part> part : parts.entrySet()) if (!part.getValue().is(level.getBlockState(base.offset(part.getKey())))) missing++;
@@ -122,6 +162,14 @@ final class Shipyard {
         final Map<BlockPos, Part> parts = parts(level, c.type);
         final BuildingAirfield airfield = be.home == null || !be.home.equals(be.at) ? null : Cargo.airfieldAt(level, be.home);
         if (parts == null || airfield == null) return new int[2];
+        if (!selfRepair(airfield)) {
+            // Self-repair switched off at the airfield: the aircraft is left as it stands, and flies whatever it lacks.
+            if (!be.lacks.isEmpty()) {
+                be.lacks.clear();
+                be.setChanged();
+            }
+            return new int[2];
+        }
         final net.neoforged.neoforge.items.IItemHandler racks = Cargo.racks(airfield), store = Cargo.importStore(level, airfield);
         final Map<String, Integer> lacks = new java.util.LinkedHashMap<>();
         int restored = 0, removed = 0;
@@ -162,7 +210,7 @@ final class Shipyard {
             be.lacks.putAll(lacks);
             if (!lacks.isEmpty()) {
                 final String list = list(lacks);
-                MessageUtils.format(KEY + "lacks", airfield.getColony().getName(), list).sendTo(airfield.getColony()).forManagers();
+                MessageUtils.format(KEY + "lacks", partNames(lacks)).sendTo(airfield.getColony()).forManagers();
                 FlightController.note(be, "waiting for parts: " + list);
             } else {
                 FlightController.note(be, "all parts are in place again");
@@ -171,7 +219,26 @@ final class Shipyard {
         return new int[] {restored, removed};
     }
 
-    /** "3 x minecraft:oak_planks, 1 x create:cogwheel". */
+    /** Whether the airfield puts its aircraft back the way the design has it (its aircraft tab; on unless switched off). */
+    static boolean selfRepair(BuildingAirfield airfield) {
+        final com.asteain.airline.colony.AircraftModule tab = airfield.getFirstModuleOccurance(com.asteain.airline.colony.AircraftModule.class);
+        return tab == null || tab.selfRepair();
+    }
+
+    /** The parts as players read them: "Oak Planks x3, Cogwheel x1" (the names of the blocks, not their ids). */
+    static net.minecraft.network.chat.MutableComponent partNames(Map<String, Integer> items) {
+        final net.minecraft.network.chat.MutableComponent out = Component.empty();
+        boolean first = true;
+        for (final Map.Entry<String, Integer> item : items.entrySet()) {
+            if (!first) out.append(Component.translatable("message." + Airline.MOD_ID + ".parts.separator"));
+            first = false;
+            final net.minecraft.world.level.block.Block block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(net.minecraft.resources.ResourceLocation.parse(item.getKey()));
+            out.append(Component.translatable("message." + Airline.MOD_ID + ".parts.item", block.getName(), item.getValue()));
+        }
+        return out;
+    }
+
+    /** "3 x minecraft:oak_planks, 1 x create:cogwheel" (for the log). */
     static String list(Map<String, Integer> items) {
         final StringBuilder text = new StringBuilder();
         for (final Map.Entry<String, Integer> item : items.entrySet()) text.append(text.isEmpty() ? "" : ", ").append(item.getValue()).append(" x ").append(item.getKey());
@@ -208,7 +275,7 @@ final class Shipyard {
         final BlockPos pad = airfield.pad(), at = pad.above();
         if (level.getBlockEntity(at) instanceof AircraftBlockEntity site && pad.equals(site.yard)) {
             if (type.name.equals(site.type)) {
-                say(player, "design", Component.translatable(type.title()), missing(level, at, type));
+                say(player, "design", Component.translatable(type.title()), missing(level, at, type, turn(airfield.padHeading())));
                 return "same";
             }
             return switchTo(level, airfield, site, type, player);
@@ -255,7 +322,8 @@ final class Shipyard {
         be.type = type.name;
         order(airfield, be);
         be.setChanged();
-        say(player, "started", Component.translatable(type.title()), missing(level, be.getBlockPos(), type));
+        standsFor(level, be.getBlockPos(), be.yard);
+        say(player, "started", Component.translatable(type.title()), missing(level, be.getBlockPos(), type, turn(airfield.padHeading())));
         return "started";
     }
 
@@ -265,7 +333,7 @@ final class Shipyard {
         be.type = type.name;
         order(airfield, be);
         be.setChanged();
-        say(player, "design", Component.translatable(type.title()), missing(level, be.getBlockPos(), type));
+        say(player, "design", Component.translatable(type.title()), missing(level, be.getBlockPos(), type, turn(airfield.padHeading())));
         return "design";
     }
 
@@ -278,7 +346,8 @@ final class Shipyard {
 
     private static void order(BuildingAirfield airfield, AircraftBlockEntity be) {
         final AircraftType type = AircraftType.of(be.type);
-        final WorkOrderDecoration order = WorkOrderDecoration.create(WorkOrderType.BUILD, Airline.PACK_NAME, blueprint(type), type.title(), be.getBlockPos(), RotationMirror.NONE, 0);
+        final WorkOrderDecoration order = WorkOrderDecoration.create(WorkOrderType.BUILD, Airline.PACK_NAME, blueprint(type), type.title(), be.getBlockPos(),
+                RotationMirror.of(turn(airfield.padHeading()), net.minecraft.world.level.block.Mirror.NONE), 0);
         airfield.getColony().getWorkManager().addWorkOrder(order, false);
         // (Outside the colony's land MineColonies does not take the order and gives it no number: the site is then built by hand.)
         be.workOrder = order.getID();
@@ -287,6 +356,34 @@ final class Shipyard {
     private static void cancel(BuildingAirfield airfield, AircraftBlockEntity be) {
         if (be.workOrder != 0 && airfield.getColony().getWorkManager().getWorkOrder(be.workOrder) != null) airfield.getColony().getWorkManager().removeWorkOrder(be.workOrder);
         be.workOrder = 0;
+    }
+
+    /**
+     * A finished aircraft stands turned to its pad's heading: its blocks are taken away and set down again nose to +x, the
+     * way its design is written (all within one tick, so nothing is seen of it), to be made a ship and turned back.
+     */
+    static void layNoseEast(ServerLevel level, BlockPos deck, AircraftType type, net.minecraft.world.level.block.Rotation turn) {
+        final Map<BlockPos, Part> parts = parts(level, type);
+        if (parts == null || turn == net.minecraft.world.level.block.Rotation.NONE) return;
+        final int quiet = net.minecraft.world.level.block.Block.UPDATE_CLIENTS | net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE | net.minecraft.world.level.block.Block.UPDATE_SUPPRESS_DROPS;
+        for (final BlockPos part : parts.keySet()) level.setBlock(deck.offset(part.rotate(turn)), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), quiet);
+        // From the bottom up, and whole blocks before the rest of their layer: what hangs or stands on something finds it there.
+        final List<Map.Entry<BlockPos, Part>> order = new ArrayList<>(parts.entrySet());
+        order.sort(java.util.Comparator.<Map.Entry<BlockPos, Part>>comparingInt(part -> part.getKey().getY())
+                .thenComparingInt(part -> part.getValue().state().isCollisionShapeFullBlock(level, deck.offset(part.getKey())) ? 0 : 1)
+                .thenComparingInt(part -> part.getKey().getX()).thenComparingInt(part -> part.getKey().getZ()));
+        for (final Map.Entry<BlockPos, Part> part : order) level.setBlock(deck.offset(part.getKey()), part.getValue().state(), net.minecraft.world.level.block.Block.UPDATE_ALL);
+    }
+
+    /**
+     * Tells the air network that the outline over this pad holds an aircraft being built (for some seconds more; renewed
+     * with every look at the site): its blocks are not in the way of the pad's lines.
+     */
+    private static void standsFor(ServerLevel level, BlockPos own, BlockPos pad) {
+        final net.minecraft.world.level.levelgen.structure.BoundingBox box = new net.minecraft.world.level.levelgen.structure.BoundingBox(
+                own.getX() - AircraftType.HALF_LENGTH, own.getY(), own.getZ() - AircraftType.HALF_WIDTH,
+                own.getX() + AircraftType.HALF_LENGTH, own.getY() + AircraftType.HEIGHT - 1, own.getZ() + AircraftType.HALF_WIDTH);
+        com.asteain.airline.route.RouteNetwork.get(level).building(pad, box, level.getGameTime() + 2L * LOOK_EVERY + 20);
     }
 
     /** Every tick, for an aircraft block that stands in the world (not in a ship). */
@@ -301,9 +398,10 @@ final class Shipyard {
             be.setChanged();
             return;
         }
+        standsFor(level, pos, pad);
         final AircraftType type = AircraftType.of(be.type);
         final IServerWorkOrder order = be.workOrder == 0 ? null : airfield.getColony().getWorkManager().getWorkOrder(be.workOrder);
-        if (missing(level, pos, type) != 0) return;
+        if (missing(level, pos, type, turn(airfield.padHeading())) != 0) return;
         // A builder who is at it finishes its own work first (it would put the blocks up again if they went away under its hands).
         if (order != null && order.isClaimed()) return;
         cancel(airfield, be);

@@ -17,14 +17,18 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
- * From the airfield's window to the server (the aircraft tab): build an aircraft of this design on the airfield's own pad
- * (or build this design instead on the site there), or, with no design, call the building off. Only a player who may
- * manage the colony's huts is heard; the design is looked up by name, never taken on trust.
+ * From the airfield's window to the server: in the aircraft tab, build an aircraft of a design on the airfield's own pad
+ * (or build that design instead on the site there), call the building off, switch self-repair on or off; in the
+ * timetable tab, let the aircraft standing there leave now. Only a player who may manage the colony's huts is heard;
+ * the design is looked up by name, never taken on trust.
  */
-public record AircraftOrderPayload(BlockPos hut, String design) implements CustomPacketPayload {
+public record AircraftOrderPayload(BlockPos hut, String action, String design) implements CustomPacketPayload {
+    public static final String BUILD = "build", STOP = "stop", REPAIR_ON = "repair_on", REPAIR_OFF = "repair_off", DEPART = "depart";
+
     public static final Type<AircraftOrderPayload> TYPE = new Type<>(Airline.id("aircraft_order"));
     public static final StreamCodec<ByteBuf, AircraftOrderPayload> STREAM_CODEC = StreamCodec.composite(
             BlockPos.STREAM_CODEC, AircraftOrderPayload::hut,
+            ByteBufCodecs.stringUtf8(16), AircraftOrderPayload::action,
             ByteBufCodecs.stringUtf8(64), AircraftOrderPayload::design,
             AircraftOrderPayload::new);
 
@@ -42,8 +46,16 @@ public record AircraftOrderPayload(BlockPos hut, String design) implements Custo
                 player.sendSystemMessage(Component.translatable("message." + Airline.MOD_ID + ".yard.not_allowed"));
                 return;
             }
-            if (order.design().isEmpty()) Flights.stopAircraft(level, airfield, player);
-            else Flights.requestAircraft(level, airfield, order.design(), player);
+            switch (order.action()) {
+                case BUILD -> Flights.requestAircraft(level, airfield, order.design(), player);
+                case STOP -> Flights.stopAircraft(level, airfield, player);
+                case REPAIR_ON, REPAIR_OFF -> {
+                    Flights.selfRepair(level, airfield, order.action().equals(REPAIR_ON));
+                    player.sendSystemMessage(Component.translatable("message." + Airline.MOD_ID + ".yard." + order.action()));
+                }
+                case DEPART -> Flights.departNow(level, airfield, player);
+                default -> { }
+            }
             airfield.markDirty();
         });
     }

@@ -126,6 +126,11 @@ public final class Flights {
         return available() ? FlightController.spawn(level, pad, AircraftType.of(design)) : OFF;
     }
 
+    /** The turn that brings a design (written nose to +x) to a pad of this heading: aircraft are built in their pad's heading. */
+    public static net.minecraft.world.level.block.Rotation buildTurn(int heading) {
+        return Shipyard.turn(heading);
+    }
+
     /** For the checks: the key of what the last request from the airfield's window ({@link #requestAircraft}, {@link #stopAircraft}) said. */
     public static String lastBuilding = "";
 
@@ -140,7 +145,7 @@ public final class Flights {
 
     /** How many blocks of its design an aircraft that is being built still lacks (-1: the design cannot be read). */
     public static int buildingLacks(ServerLevel level, AircraftBlockEntity aircraft) {
-        return available() ? Shipyard.missing(level, aircraft.getBlockPos(), AircraftType.of(aircraft.type)) : -1;
+        return available() ? Shipyard.missing(level, aircraft.getBlockPos(), AircraftType.of(aircraft.type), Shipyard.turnAt(level, aircraft.yard)) : -1;
     }
 
     /** Whether an airfield should ask its colony for fuel now: its own aircraft stands at home, not well filled, and the racks hold little. */
@@ -189,7 +194,7 @@ public final class Flights {
         }
         if (level.isLoaded(pad) && level.getBlockEntity(pad.above()) instanceof AircraftBlockEntity site && site.yard != null) {
             design[0] = AircraftType.of(site.type).title();
-            return new int[] {1, Math.max(0, Shipyard.missing(level, site.getBlockPos(), AircraftType.of(site.type))), 0, 0};
+            return new int[] {1, Math.max(0, Shipyard.missing(level, site.getBlockPos(), AircraftType.of(site.type), Shipyard.turnAt(level, site.yard))), 0, 0};
         }
         // Not loaded now, but the timetable knows an aircraft whose home this pad is.
         for (final Timetable.Entry entry : Timetable.get(level.getServer()).entries()) {
@@ -255,6 +260,27 @@ public final class Flights {
     public static String requestAircraft(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield, String design, @Nullable net.minecraft.server.level.ServerPlayer player) {
         if (!available() || !AircraftType.ALL.containsKey(design)) return "";
         return lastBuilding = Shipyard.request(level, airfield, AircraftType.ALL.get(design), player);
+    }
+
+    /** Asked for in the airfield's timetable tab: the aircraft standing there leaves now ({@link FlightController#departNow}). */
+    public static String departNow(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield, @Nullable net.minecraft.server.level.ServerPlayer player) {
+        if (!available()) return "";
+        return FlightController.departNow(level, airfield, player);
+    }
+
+    /**
+     * Switched in the airfield's aircraft tab: whether the airfield puts its aircraft back the way the design has it.
+     * Switched off, what its aircraft lacks is forgotten at once (it flies as it stands).
+     */
+    public static void selfRepair(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield, boolean on) {
+        final com.asteain.airline.colony.AircraftModule tab = airfield.getFirstModuleOccurance(com.asteain.airline.colony.AircraftModule.class);
+        if (tab != null) tab.selfRepair(on);
+        if (on || !available()) return;
+        for (final AircraftBlockEntity aircraft : FlightController.loaded(level)) {
+            if (!airfield.pad().equals(aircraft.home) || aircraft.lacks.isEmpty()) continue;
+            aircraft.lacks.clear();
+            aircraft.setChanged();
+        }
     }
 
     /** Asked for from the airfield's window ({@link Shipyard#stop}): the building on the airfield's own pad is called off. */

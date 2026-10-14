@@ -3,7 +3,9 @@
     <image source="minecolonies:textures/gui/builderhut/builder_paper.png" size="190 244"/>
     <text id="desc" size="130 11" pos="30 14" textalign="MIDDLE" color="black"/>
     <text size="160 11" pos="16 40" color="black" label="$(com.airline.gui.timetable.departure)"/>
-    <text id="departure" size="160 48" pos="16 54" color="black" wrap="true"/>
+    <text id="departure" size="160 40" pos="16 54" color="black" wrap="true"/>
+    <button id="depart" size="76 17" pos="100 96" color="black" label="$(com.airline.gui.timetable.depart)"
+            source="minecolonies:textures/gui/builderhut/builder_button_medium.png"/>
     <text size="160 11" pos="16 116" color="black" label="$(com.airline.gui.timetable.arrival)"/>
     <text id="arrival" size="160 48" pos="16 130" color="black" wrap="true"/>
     <text size="160 11" pos="16 186" color="black" label="$(com.airline.gui.timetable.aircraft)"/>

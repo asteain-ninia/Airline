@@ -20,7 +20,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 public class AircraftWindow extends AbstractModuleWindow<AircraftModuleView> {
     private static final String KEY = "com." + Airline.MOD_ID + ".gui.aircraft.";
     private final Text status;
-    private final Button stopButton;
+    private final Button stopButton, repairButton;
     private final ScrollingList list;
     private int shown = -1;
 
@@ -28,9 +28,11 @@ public class AircraftWindow extends AbstractModuleWindow<AircraftModuleView> {
         super(view, ResourceLocation.fromNamespaceAndPath(Airline.MOD_ID, "gui/layouthuts/layoutaircraft.xml"));
         status = window.findPaneOfTypeByID("status", Text.class);
         stopButton = window.findPaneOfTypeByID("stop", Button.class);
+        repairButton = window.findPaneOfTypeByID("repair", Button.class);
         list = window.findPaneOfTypeByID("designs", ScrollingList.class);
         registerButton("build", this::build);
         registerButton("stop", this::stop);
+        registerButton("repair", this::repair);
     }
 
     @Override
@@ -66,6 +68,8 @@ public class AircraftWindow extends AbstractModuleWindow<AircraftModuleView> {
         else if (v.own == 2) status.setText(Component.translatable(KEY + "exists", design));
         else status.setText(Component.translatable(KEY + "none"));
         stopButton.setVisible(v.available && v.own == 1);
+        repairButton.setText(Component.translatable(KEY + (v.selfRepair ? "repair.on" : "repair.off")));
+        repairButton.setVisible(v.available);
         list.refreshElementPanes();
     }
 
@@ -83,10 +87,14 @@ public class AircraftWindow extends AbstractModuleWindow<AircraftModuleView> {
     private void build(Button button) {
         final int index = list.getListElementIndexByPane(button);
         if (index < 0 || index >= moduleView.designs.size()) return;
-        PacketDistributor.sendToServer(new AircraftOrderPayload(buildingView.getID(), moduleView.designs.get(index).name()));
+        PacketDistributor.sendToServer(new AircraftOrderPayload(buildingView.getID(), AircraftOrderPayload.BUILD, moduleView.designs.get(index).name()));
     }
 
     private void stop() {
-        PacketDistributor.sendToServer(new AircraftOrderPayload(buildingView.getID(), ""));
+        PacketDistributor.sendToServer(new AircraftOrderPayload(buildingView.getID(), AircraftOrderPayload.STOP, ""));
+    }
+
+    private void repair() {
+        PacketDistributor.sendToServer(new AircraftOrderPayload(buildingView.getID(), moduleView.selfRepair ? AircraftOrderPayload.REPAIR_OFF : AircraftOrderPayload.REPAIR_ON, ""));
     }
 }

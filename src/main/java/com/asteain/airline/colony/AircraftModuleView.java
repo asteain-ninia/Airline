@@ -19,8 +19,8 @@ import java.util.List;
 public class AircraftModuleView extends AbstractBuildingModuleView {
     public static final String TAB_KEY = "com." + Airline.MOD_ID + ".gui.airfield.aircraft";
 
-    /** Whether aircraft can be built at all (the mods the flying part needs are there). */
-    public boolean available;
+    /** Whether aircraft can be built at all (the mods the flying part needs are there); whether the airfield repairs its aircraft by itself. */
+    public boolean available, selfRepair = true;
     /** The airfield's own aircraft: 0 none, 1 being built, 2 there is one; the translation key of its design's name; the blocks still to go while it is built. */
     public int own, ownNumber;
     public String ownDesign = "";
@@ -32,6 +32,7 @@ public class AircraftModuleView extends AbstractBuildingModuleView {
     @Override
     public void deserialize(@NotNull RegistryFriendlyByteBuf buf) {
         available = buf.readBoolean();
+        selfRepair = buf.readBoolean();
         own = buf.readByte();
         ownDesign = buf.readUtf();
         ownNumber = buf.readInt();

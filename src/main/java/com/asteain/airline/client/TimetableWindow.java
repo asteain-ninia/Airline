@@ -25,6 +25,8 @@ public class TimetableWindow extends AbstractModuleWindow<TimetableModuleView> {
         departure = window.findPaneOfTypeByID("departure", Text.class);
         arrival = window.findPaneOfTypeByID("arrival", Text.class);
         aircraft = window.findPaneOfTypeByID("aircraft", Text.class);
+        registerButton("depart", () -> net.neoforged.neoforge.network.PacketDistributor.sendToServer(
+                new com.asteain.airline.network.AircraftOrderPayload(buildingView.getID(), com.asteain.airline.network.AircraftOrderPayload.DEPART, "")));
     }
 
     @Override

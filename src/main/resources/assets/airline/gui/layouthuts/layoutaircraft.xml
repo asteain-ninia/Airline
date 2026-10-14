@@ -3,7 +3,9 @@
     <image source="minecolonies:textures/gui/builderhut/builder_paper.png" size="190 244"/>
     <text id="desc" size="130 11" pos="30 14" textalign="MIDDLE" color="black"/>
     <text id="status" size="160 34" pos="16 30" color="black" wrap="true"/>
-    <button id="stop" size="86 17" pos="52 66" color="black" label="$(com.airline.gui.aircraft.stop)"
+    <button id="repair" size="84 17" pos="14 66" color="black"
+            source="minecolonies:textures/gui/builderhut/builder_button_medium.png"/>
+    <button id="stop" size="76 17" pos="100 66" color="black" label="$(com.airline.gui.aircraft.stop)"
             source="minecolonies:textures/gui/builderhut/builder_button_medium.png"/>
     <list id="designs" size="164 146" pos="13 88">
         <box size="100% 46" linewidth="1">

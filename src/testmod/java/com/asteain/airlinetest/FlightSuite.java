@@ -277,16 +277,37 @@ final class FlightSuite {
             s.soft("yard / asked for another design while one is being built, the site builds that one instead: still one work order, now with the other blueprint",
                     "design".equals(said) && first.equals(site.type) && now.size() == 1 && Flights.blueprintOf(first).equals(now.get(0).getStructurePath()) && site.workOrder == now.get(0).getID(),
                     "said " + said + ", design " + site.type + ", orders " + now.size() + (now.isEmpty() ? "" : " " + now.get(0).getStructurePath()));
-            // Called off from the window: no order, no block on the middle of the pad.
-            said = Flights.stopAircraft(level, a.airfield, null);
+            // A block of the aircraft being built, in the shaft over the pad (inside the aircraft's outline).
+            level.setBlockAndUpdate(middle.offset(2, 4, 0), net.minecraft.world.level.block.Blocks.OAK_PLANKS.defaultBlockState());
+        });
+        s.settle("yard: the site stands with a block of it in the shaft over the pad", 60);
+        s.step("yard: the site's block does not block the pad's lines; the site is called off", () -> {
+            final BlockPos middle = a.pad.above();
+            final var line = routes.edge(a.pad, padB);
+            s.soft("yard / a block of the aircraft being built, in the shaft over the pad, does not block the pad's lines",
+                    line != null && line.state() != State.BLOCKED, "line " + (line == null ? null : line.state() + " at " + line.blockedAt()));
+            // Called off from the window: no order, no block on the middle of the pad (the plank stays where it was put).
+            final String said = Flights.stopAircraft(level, a.airfield, null);
             s.soft("yard / stopped from the window, the builders are not asked any more and the aircraft's own block is taken away",
-                    "stopped".equals(said) && orders.get().isEmpty() && level.getBlockState(middle).isAir() && Flights.padFree(level, a.pad), "said " + said + ", orders " + orders.get().size() + ", middle " + level.getBlockState(middle));
+                    "stopped".equals(said) && a.colony.getWorkManager().getWorkOrdersOfType(com.minecolonies.core.colony.workorders.WorkOrderDecoration.class).isEmpty()
+                            && level.getBlockState(middle).isAir() && Flights.padFree(level, a.pad), "said " + said + ", middle " + level.getBlockState(middle));
             s.soft("yard / with nothing being built, stopping says so", "no_site".equals(Flights.stopAircraft(level, a.airfield, null)), Flights.lastBuilding);
+        });
+        s.settle("yard: the site is gone for good", 160);
+        s.until("yard: the pad's lines are looked at again after the site", () -> {}, () -> routes.pending() == 0, 600);
+        s.step("yard: what the site left blocks the lines; a block set down by hand", () -> {
+            final BlockPos middle = a.pad.above(), plank = middle.offset(2, 4, 0);
+            final var line = routes.edge(a.pad, padB);
+            s.soft("yard / called off with blocks left standing, those blocks block the pad's lines again (they are no aircraft any more)",
+                    line != null && line.state() == State.BLOCKED && plank.equals(line.blockedAt()), "line " + (line == null ? null : line.state() + " at " + line.blockedAt()));
+            level.removeBlock(plank, false);
+            final java.util.function.Supplier<List<com.minecolonies.core.colony.workorders.WorkOrderDecoration>> orders =
+                    () -> a.colony.getWorkManager().getWorkOrdersOfType(com.minecolonies.core.colony.workorders.WorkOrderDecoration.class);
             // An aircraft's own block set down by hand on the middle of the pad begins nothing by itself; asked for in the window, it becomes the site.
             level.setBlockAndUpdate(middle, Airline.AIRCRAFT.get().defaultBlockState());
             final boolean idle = level.getBlockEntity(middle) instanceof AircraftBlockEntity loose && loose.yard == null && orders.get().isEmpty();
-            said = Flights.requestAircraft(level, a.airfield, design(), null);
-            site = level.getBlockEntity(middle) instanceof AircraftBlockEntity be ? be : null;
+            final String said = Flights.requestAircraft(level, a.airfield, design(), null);
+            final AircraftBlockEntity site = level.getBlockEntity(middle) instanceof AircraftBlockEntity be ? be : null;
             s.soft("yard / the aircraft's own block on the middle of the pad begins nothing by itself; asked for in the window, that block becomes the site",
                     idle && "started".equals(said) && site != null && a.pad.equals(site.yard) && design().equals(site.type) && orders.get().size() == 1,
                     "idle " + idle + ", said " + said + ", orders " + orders.get().size());
@@ -304,9 +325,12 @@ final class FlightSuite {
         s.step("yard: the blueprint of the work order is put up", () -> {
             com.ldtteam.structurize.blueprints.v1.Blueprint bp = blueprint[0].get();
             s.check(bp != null, "the blueprint of the design is in the mod's pack");
-            bp.setRotationMirror(com.ldtteam.structurize.api.RotationMirror.NONE, level);
+            // Turned to the pad's heading, as the builders' work order has it: the aircraft is built the way it will stand.
+            final com.ldtteam.structurize.api.RotationMirror turned = com.ldtteam.structurize.api.RotationMirror.of(Flights.buildTurn(a.airfield.padHeading()), net.minecraft.world.level.block.Mirror.NONE);
+            s.note("OBS yard: the pad faces " + a.airfield.padHeading() + " degrees; the blueprint is placed turned " + turned);
+            bp.setRotationMirror(turned, level);
             com.ldtteam.structurize.management.Manager.addToQueue(new com.ldtteam.structurize.operations.PlaceStructureOperation(new com.ldtteam.structurize.placement.StructurePlacer(
-                    new com.ldtteam.structurize.placement.structure.CreativeStructureHandler(level, a.pad.above(), bp, com.ldtteam.structurize.api.RotationMirror.NONE, true)),
+                    new com.ldtteam.structurize.placement.structure.CreativeStructureHandler(level, a.pad.above(), bp, turned, true)),
                     (net.minecraft.server.level.ServerPlayer) Fixture.owner(level)));
         });
         s.until("yard: the aircraft is a ship", () -> {}, () -> {
@@ -383,13 +407,27 @@ final class FlightSuite {
             level.removeBlock(Flights.partOf(a.aircraft, plank), false);
             done = Flights.maintain(level, a.aircraft);
             Flights.Answer refused = Flights.send(level, a.pad, padB, false, a.pilot);
-            s.soft("yard / a part the racks do not have is remembered, and the aircraft does not fly until it is put in again",
-                    done[0] == 0 && Integer.valueOf(1).equals(a.aircraft.lacks.get("minecraft:oak_planks")) && !refused.ok() && refused.text().getString().contains("oak_planks"),
+            s.soft("yard / a part the racks do not have is remembered, and the aircraft does not fly until it is put in again; the refusal names the part as players read it",
+                    done[0] == 0 && Integer.valueOf(1).equals(a.aircraft.lacks.get("minecraft:oak_planks")) && !refused.ok() && refused.text().getString().contains(Blocks.OAK_PLANKS.getName().getString())
+                            && !refused.text().getString().contains("minecraft:"),
                     "lacks " + a.aircraft.lacks + "; a flight: " + refused.text().getString());
             Fixture.stock(rack[0], Items.OAK_PLANKS, 1);
             done = Flights.maintain(level, a.aircraft);
             s.soft("yard / with the part on the racks it is put in at the next look, and nothing is lacking any more", done[0] == 1 && a.aircraft.lacks.isEmpty() && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(Blocks.OAK_PLANKS),
                     "put right " + done[0] + ", lacks " + a.aircraft.lacks);
+            // Self-repair switched off at the airfield: what is changed by hand stays, and a missing part keeps nothing on the ground.
+            Flights.selfRepair(level, a.airfield, false);
+            level.removeBlock(Flights.partOf(a.aircraft, plank), false);
+            level.setBlock(Flights.partOf(a.aircraft, added), Blocks.DIRT.defaultBlockState(), 3);
+            done = Flights.maintain(level, a.aircraft);
+            s.soft("yard / with self-repair switched off, nothing is put back: the missing plank stays missing, the added block stays, and nothing is counted as lacking (it may fly)",
+                    done[0] == 0 && done[1] == 0 && level.getBlockState(Flights.partOf(a.aircraft, plank)).isAir() && level.getBlockState(Flights.partOf(a.aircraft, added)).is(Blocks.DIRT) && a.aircraft.lacks.isEmpty(),
+                    "put right " + done[0] + ", taken out " + done[1] + ", lacks " + a.aircraft.lacks);
+            Flights.selfRepair(level, a.airfield, true);
+            Fixture.stock(rack[0], Items.OAK_PLANKS, 1);
+            done = Flights.maintain(level, a.aircraft);
+            s.soft("yard / switched on again, the aircraft is put back the way its design has it", done[0] == 1 && done[1] == 1 && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(Blocks.OAK_PLANKS)
+                    && level.getBlockState(Flights.partOf(a.aircraft, added)).isAir() && a.aircraft.lacks.isEmpty(), "put right " + done[0] + ", taken out " + done[1] + ", lacks " + a.aircraft.lacks);
             double[] weight = Flights.weight(level, a.aircraft);
             s.note(String.format("OBS yard: after the work the aircraft has mass %.2f", weight[0]));
         });
@@ -397,6 +435,9 @@ final class FlightSuite {
         s.step("yard: still parked and fixed", () -> {
             double[] r = Flights.readings(a.aircraft);
             s.soft("yard / after the work the aircraft still stands fixed on its pad", r != null && r[4] > 0 && a.aircraft.phase == Phase.PARKED && Math.hypot(r[0] - (a.pad.getX() + 0.5), r[2] - (a.pad.getZ() + 0.5)) < 0.5, at(r));
+            // "Leave now" from the timetable tab, with no goods anywhere to carry: it says so, and the aircraft stays.
+            final String said = Flights.departNow(level, a.airfield, null);
+            s.soft("yard / asked to leave now with nothing to carry, the aircraft says there is nowhere to go and stays parked", "nothing".equals(said) && a.aircraft.phase == Phase.PARKED, "said " + said + ", " + a.aircraft.phase);
         });
     }
 

@@ -187,6 +187,14 @@ public final class RouteNetwork extends SavedData {
     private boolean linksDue = true;
     /** Buoys whose lamp may have to change (a line of theirs came, went or changed its state). Not saved. */
     private final java.util.Set<BlockPos> lampsDue = new java.util.HashSet<>();
+    /**
+     * The aircraft being built on landing pads (pad to the space of its outline, and the game time until which that is
+     * known; the building site renews it every few seconds while it stands). What stands there is the aircraft itself,
+     * not something in the way of the pad's lines. Not saved: a site renews it within seconds of being loaded.
+     */
+    private final Map<BlockPos, Site> sites = new HashMap<>();
+
+    private record Site(net.minecraft.world.level.levelgen.structure.BoundingBox box, long until) {}
 
     // ---- access -------------------------------------------------------------------------------------------
 
@@ -454,6 +462,35 @@ public final class RouteNetwork extends SavedData {
         return !state.isAir() && !(state.getBlock() instanceof BuoyBlock) && !state.getCollisionShape(level, pos).isEmpty();
     }
 
+    /** In the way of a line: solid, and not part of an aircraft that is being built on a landing pad. */
+    private boolean inTheWay(ServerLevel level, BlockPos pos, BlockState state) {
+        if (!solid(level, pos, state)) return false;
+        if (sites.isEmpty()) return true;
+        for (final Site site : sites.values()) if (site.box().isInside(pos)) return false;
+        return true;
+    }
+
+    /**
+     * An aircraft is being built on this pad, in the space {@code box}, for some seconds more (the site renews this while
+     * it stands). The blocks put up there do not block the pad's lines (they did, and the colonies were told of lines
+     * lost and found again with every block the builders set or took away). When a site comes, the lines it blocked are
+     * looked at again; when it goes (finished, or called off with blocks left standing), all the pad's lines are.
+     */
+    public void building(BlockPos pad, net.minecraft.world.level.levelgen.structure.BoundingBox box, long until) {
+        if (sites.put(pad.immutable(), new Site(box, until)) == null) lookAgain(pad, false);
+    }
+
+    private void lookAgain(BlockPos pad, boolean all) {
+        for (final Edge edge : new ArrayList<>(around.getOrDefault(pad, List.of()))) {
+            if (!all && edge.state != State.BLOCKED) continue;
+            if (edge.state != State.UNVERIFIED) {
+                edge.version++;
+                set(edge, State.UNVERIFIED, null);
+            }
+            enqueue(edge);
+        }
+    }
+
     public static void onLevelTick(LevelTickEvent.Post event) {
         if (!(event.getLevel() instanceof ServerLevel level)) return;
         final RouteNetwork network = find(level);
@@ -461,6 +498,15 @@ public final class RouteNetwork extends SavedData {
     }
 
     private void tick(ServerLevel level) {
+        if (!sites.isEmpty() && level.getGameTime() % 20 == 0) {
+            final long now = level.getGameTime();
+            for (final java.util.Iterator<Map.Entry<BlockPos, Site>> it = sites.entrySet().iterator(); it.hasNext(); ) {
+                final Map.Entry<BlockPos, Site> site = it.next();
+                if (site.getValue().until() >= now) continue;
+                it.remove();
+                lookAgain(site.getKey(), true);
+            }
+        }
         if (recheckDue) {
             recheckDue = false;
             recheckAll();
@@ -601,7 +647,7 @@ public final class RouteNetwork extends SavedData {
     }
 
     /** Looks at as many columns as the budget allows. Only chunks that are loaded right now are read. */
-    private static int step(ServerLevel level, Scan scan, int budget) {
+    private int step(ServerLevel level, Scan scan, int budget) {
         final int minY = level.getMinBuildHeight(), maxY = level.getMaxBuildHeight() - 1;
         final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         while (budget > 0) {
@@ -632,7 +678,7 @@ public final class RouteNetwork extends SavedData {
                 for (int y = from; y <= to; y++) {
                     budget--;
                     final BlockState state = chunk.getBlockState(pos.set(x, y, z));
-                    if (solid(level, pos, state)) {
+                    if (inTheWay(level, pos, state)) {
                         scan.found = pos.immutable();
                         scan.done = true;
                         return budget;
@@ -677,7 +723,7 @@ public final class RouteNetwork extends SavedData {
     public void blockChanged(ServerLevel level, BlockPos pos, BlockState now) {
         final List<Edge> near = byChunk.get(ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4));
         if (near == null) return;
-        final boolean solid = solid(level, pos, now);
+        final boolean solid = inTheWay(level, pos, now);
         for (final Edge edge : near) {
             if (!edge.needs(pos.getX(), pos.getY(), pos.getZ())) continue;
             if (solid) {

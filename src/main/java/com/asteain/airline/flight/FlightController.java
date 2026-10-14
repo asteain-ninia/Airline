@@ -1168,6 +1168,36 @@ final class FlightController {
      * At home with nothing to do: is there cargo for somebody? (Looked at every five seconds.) Flights are scheduled: the
      * loading begins as soon as there is something to load, the aircraft leaves when its berth is over.
      */
+    /**
+     * Asked for in the airfield's timetable tab: the aircraft that stands on this airfield's pads leaves now, without
+     * waiting out its berth. At home it looks at once for goods to carry (and says so when there are none); away, its
+     * berth is over and it sets out as soon as loading and unloading allow. Returns the key of what was said.
+     */
+    static String departNow(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield, @Nullable net.minecraft.server.level.ServerPlayer player) {
+        final RouteNetwork net = RouteNetwork.get(level);
+        final long now = level.getGameTime();
+        for (final AircraftBlockEntity be : loaded(level)) {
+            if (be.at == null || !airfield.hasPad(be.at) || be.flying()) continue;
+            final Runtime rt = runtime(be);
+            if (rt == null) continue;
+            be.landed = Math.min(be.landed, now - Cargo.berthTicks());
+            be.quietUntil = 0;
+            be.setChanged();
+            if (be.phase == Phase.PARKED && be.at.equals(be.home)) {
+                if (!be.lacks.isEmpty()) return said(player, "message." + Airline.MOD_ID + ".yard.lacks", Shipyard.partNames(be.lacks));
+                if (be.carryCount == 0) dispatch(level, be, rt, net);
+                return said(player, be.phase == Phase.PARKED ? "message." + Airline.MOD_ID + ".depart.nothing" : "message." + Airline.MOD_ID + ".depart.going");
+            }
+            return said(player, "message." + Airline.MOD_ID + ".depart.soon");
+        }
+        return said(player, "message." + Airline.MOD_ID + ".depart.none");
+    }
+
+    private static String said(@Nullable net.minecraft.server.level.ServerPlayer player, String key, Object... args) {
+        if (player != null) player.sendSystemMessage(Component.translatable(key, args));
+        return key.substring(key.lastIndexOf('.') + 1);
+    }
+
     private static void dispatch(ServerLevel level, AircraftBlockEntity be, Runtime rt, RouteNetwork net) {
         final long now = level.getGameTime();
         if (be.home == null || !be.home.equals(be.at)) return;
@@ -1551,16 +1581,19 @@ final class FlightController {
     }
 
     /**
-     * An aircraft that was built block by block on its pad, nose to +x (by a builder from the design's blueprint, or by
-     * hand), becomes a ship: every block of the design stands around the aircraft's own block on the middle of the pad.
+     * An aircraft that was built block by block on its pad, in the pad's heading (by a builder from the design's blueprint,
+     * or by hand), becomes a ship: every block of the design stands around the aircraft's own block on the middle of the pad.
      */
     static Answer commission(ServerLevel level, BlockPos pad, AircraftType type) {
         final RouteNetwork net = RouteNetwork.get(level);
         final RouteNetwork.Node node = net.node(pad);
         if (node == null || node.kind() != RouteNetwork.Kind.AIRFIELD) return new Answer(false, "flight.no_pad");
         final Map<BlockPos, Shipyard.Part> parts = Shipyard.parts(level, type);
-        if (parts == null || Shipyard.missing(level, pad.above(), type) != 0) return new Answer(false, "flight.bad_design");
+        final net.minecraft.world.level.block.Rotation turn = Shipyard.turn(node.heading());
+        if (parts == null || Shipyard.missing(level, pad.above(), type, turn) != 0) return new Answer(false, "flight.bad_design");
         final BlockPos deck = pad.above();
+        // Built in the pad's heading: laid down nose to +x for this moment, made a ship, and turned back (below).
+        Shipyard.layNoseEast(level, deck, type, turn);
         final List<BlockPos> blocks = new ArrayList<>();
         blocks.add(deck);
         for (final BlockPos part : parts.keySet()) blocks.add(deck.offset(part));
@@ -1622,7 +1655,7 @@ final class FlightController {
         final Runtime rt = be == null ? null : runtime(be);
         if (be == null || rt == null) return new Answer(false, "flight.no_aircraft");
         if (be.phase != Phase.PARKED) return new Answer(false, "flight.busy");
-        if (!be.lacks.isEmpty()) return new Answer(false, "flight.unfit", Shipyard.list(be.lacks));
+        if (!be.lacks.isEmpty()) return new Answer(false, "flight.unfit", Shipyard.partNames(be.lacks));
         if (pilot == null) return new Answer(false, "flight.no_pilot");
         // The pad it lands on: the one asked for, or another pad of that airfield (its own home is never exchanged).
         final Landing landing = landing(level, net, from, to, rt.craft.id(), to.equals(be.home));

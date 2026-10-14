@@ -192,6 +192,13 @@ public final class WantLedger extends SavedData {
     }
 
     /** The sum of what all colonies other than self want of the item. */
+    /** ... counting only the colonies {@code counts} lets through (the export table: those this airfield can fly to). */
+    public int wantedByOthers(Key self, Item item, java.util.function.Predicate<Key> counts) {
+        long sum = 0;
+        for (Key key : keys()) if (!key.equals(self) && counts.test(key)) sum += net(key, item);
+        return (int) Math.min(Integer.MAX_VALUE, sum);
+    }
+
     public int wantedByOthers(Key self, Item item) {
         long sum = 0;
         for (Key key : keys()) if (!key.equals(self)) sum += net(key, item);

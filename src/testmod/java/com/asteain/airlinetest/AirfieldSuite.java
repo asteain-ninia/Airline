@@ -220,6 +220,14 @@ final class AirfieldSuite {
             table[0].onColonyTick(colony[0]);
             s.check(exportRequests(airfield[0], colony[0]).isEmpty(), "nobody wants iron: no request although the warehouse has surplus");
         });
+        s.step("a want where no line leads = no request", () -> {
+            // The "other colony" of these checks has no airfield, so no line leads to it.
+            WantLedger.get(server).set(other, Items.IRON_INGOT, 100);
+            table[0].onColonyTick(colony[0]);
+            s.check(exportRequests(airfield[0], colony[0]).isEmpty(), "another colony wants 100 iron, but this airfield has no way to it: nothing is collected for it");
+            // From here on that colony stands for one that can be flown to.
+            com.asteain.airline.colony.ExportStockModule.reachAllForChecks(true);
+        });
         s.step("want + surplus = one request held by the warehouse", () -> {
             WantLedger.get(server).set(other, Items.IRON_INGOT, 100);
             s.check(WantLedger.get(server).wantedByOthers(WantLedger.Key.of(colony[0]), Items.IRON_INGOT) == 100, "ledger: another colony wants 100 iron ingots");
