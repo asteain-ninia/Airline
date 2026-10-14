@@ -572,8 +572,16 @@ final class FlightSuite {
             final var line = routes.edge(a.pad, padB);
             s.soft("yard / a block of the aircraft being built, in the shaft over the pad, does not block the pad's lines",
                     line != null && line.state() != State.BLOCKED, "line " + (line == null ? null : line.state() + " at " + line.blockedAt()));
+            // Fuel put into the site's fuel store (by a player) is dropped where the site stood when it is called off.
+            final AircraftBlockEntity standing = level.getBlockEntity(middle) instanceof AircraftBlockEntity be ? be : null;
+            if (standing != null) standing.store.addItem(new ItemStack(Items.COAL, 5));
+            final int coalBefore = lying(level, Items.COAL);
             // Called off from the window: no order, no block on the middle of the pad (the plank stays where it was put).
             final String said = Flights.stopAircraft(level, a.airfield, null);
+            s.soft("yard / fuel put into the site's fuel store is dropped where the site stood when the site is called off (not lost)",
+                    standing != null && lying(level, Items.COAL) - coalBefore == 5, "coal lying there " + (lying(level, Items.COAL) - coalBefore));
+            for (Entity entity : level.getAllEntities())
+                if (entity instanceof net.minecraft.world.entity.item.ItemEntity drop && drop.getItem().is(Items.COAL)) drop.discard();
             s.soft("yard / stopped from the window, the builders are not asked any more and the aircraft's own block is taken away",
                     "stopped".equals(said) && a.colony.getWorkManager().getWorkOrdersOfType(com.minecolonies.core.colony.workorders.WorkOrderDecoration.class).isEmpty()
                             && level.getBlockState(middle).isAir() && Flights.padFree(level, a.pad), "said " + said + ", middle " + level.getBlockState(middle));
@@ -598,6 +606,8 @@ final class FlightSuite {
                     idle && "started".equals(said) && site != null && a.pad.equals(site.yard) && design().equals(site.type) && orders.get().size() == 1,
                     "idle " + idle + ", said " + said + ", orders " + orders.get().size());
             s.check(site != null && design().equals(site.type), "the site is on the design of this scene (" + design() + ")");
+            // A player puts fuel into the site's fuel store while it is being built: it stays with the aircraft.
+            site.store.addItem(new ItemStack(Items.CHARCOAL, 3));
         });
         s.settle("yard: the site is looked at; nothing is built yet", 100);
         s.step("yard: still a site; load the blueprint", () -> {
@@ -636,6 +646,11 @@ final class FlightSuite {
             s.note(String.format("OBS yard: the built aircraft has mass %.2f, centre of mass %.2f toward the nose, %.2f up, %.2f to the right", weight[0], weight[1], weight[2], weight[3]));
             s.soft("yard / the pad is the new aircraft's home, and its line to the other pad is clear", a.pad.equals(a.aircraft.home) && routes.edge(a.pad, padB) != null && routes.edge(a.pad, padB).state() == State.CLEAR,
                     "home " + a.aircraft.home + ", line " + (routes.edge(a.pad, padB) == null ? null : routes.edge(a.pad, padB).state()));
+            final long kept = Flights.fuelTicks(a.aircraft);
+            s.soft("yard / fuel put into the fuel store while the aircraft was a site is still there when it has become a ship (3 charcoal, less what the parked aircraft may have burnt)",
+                    kept > 2 * 1600 && kept <= 3 * 1600, "fuel " + kept + " ticks of one engine, charcoal in the store " + a.aircraft.store.countItem(Items.CHARCOAL));
+            // The checks below begin with an empty tank, as they were written.
+            Flights.emptyTank(a.aircraft);
             Flights.Answer dry = Flights.send(level, a.pad, padB, true, a.pilot);
             s.soft("yard / an aircraft that was built starts with an empty tank, and no flight is begun without fuel", Flights.fuelTicks(a.aircraft) == 0 && !dry.ok(), "tank " + Flights.fuelTicks(a.aircraft) + "; a flight: " + dry.text().getString());
             a.airfield.setCorners(a.hut.offset(-3, 0, -3), a.hut.offset(3, 2, 3));
