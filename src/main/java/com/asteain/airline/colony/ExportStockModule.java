@@ -138,22 +138,38 @@ public class ExportStockModule extends MinimumStockModule implements IBuildingEv
      * The colonies (as the ledger knows them) whose airfield this airfield has a way to over the air network: the same
      * test a flight makes before it goes (a route from this airfield's pad to a pad of theirs). Worked out once per look.
      */
+    /** For the checks: the colonies of the ledger this place counts as ones it can send goods to, now. */
+    public java.util.Set<WantLedger.Key> reachableForChecks() {
+        final IColony colony = building.getColony();
+        if (!(colony.getWorld() instanceof net.minecraft.server.level.ServerLevel level)) return java.util.Set.of();
+        return reachable(colony, WantLedger.get(level.getServer()), WantLedger.Key.of(colony));
+    }
+
     private java.util.Set<WantLedger.Key> reachable(IColony colony, WantLedger ledger, WantLedger.Key self) {
         java.util.Set<WantLedger.Key> out = new java.util.HashSet<>();
         if (!(colony.getWorld() instanceof net.minecraft.server.level.ServerLevel level) || !(building instanceof BuildingAirfield home)) return out;
         com.asteain.airline.route.RouteNetwork net = com.asteain.airline.route.RouteNetwork.get(level);
+        // For the class of the airfield's own aircraft (the largest it builds while it has none yet). An anchorage has no
+        // aircraft of its own: what lies there is taken away by the aircraft that call, of every class it takes.
+        java.util.List<com.asteain.airline.route.ShipClass> classes = new java.util.ArrayList<>();
+        if (home.facility().airfield()) classes.add(com.asteain.airline.flight.Flights.ownClass(level, home));
+        else for (com.asteain.airline.route.ShipClass each : com.asteain.airline.route.ShipClass.values()) if (home.facility().berths(each)) classes.add(each);
         for (WantLedger.Key key : ledger.keys()) {
             if (key.equals(self) || !key.dimension().equals(self.dimension())) continue;
             if (reachAllForChecks) {
                 out.add(key);
                 continue;
             }
-            BuildingAirfield there = com.asteain.airline.flight.Cargo.airfieldOf(level, key.colony());
-            if (there == null || there.getBuildingLevel() < 1) continue;
-            for (net.minecraft.core.BlockPos pad : there.pads()) {
-                if (net.route(home.pad(), pad).size() >= 2) {
-                    out.add(key);
-                    break;
+            facilities:
+            for (BuildingAirfield there : com.asteain.airline.flight.Cargo.facilitiesOf(level, key.colony())) {
+                for (net.minecraft.core.BlockPos pad : there.pads()) {
+                    com.asteain.airline.route.RouteNetwork.Node node = net.node(pad);
+                    for (com.asteain.airline.route.ShipClass ship : classes) {
+                        if (node != null && node.berths(ship) && net.route(home.pad(), pad, ship).size() >= 2) {
+                            out.add(key);
+                            break facilities;
+                        }
+                    }
                 }
             }
         }

@@ -157,13 +157,44 @@ public final class Cargo {
     }
 
     @Nullable
-    public static BuildingAirfield airfieldOf(ServerLevel level, int colonyId) {
+    public static List<BuildingAirfield> facilitiesOf(ServerLevel level, int colonyId) {
         final IColony colony = IColonyManager.getInstance().getColonyByDimension(colonyId, level.dimension());
-        if (colony == null) return null;
+        if (colony == null) return List.of();
+        final List<BuildingAirfield> all = new java.util.ArrayList<>();
         for (final IBuilding building : colony.getServerBuildingManager().getBuildings().values())
-            if (building instanceof BuildingAirfield airfield) return airfield;
-        return null;
+            if (building instanceof BuildingAirfield facility && facility.getBuildingLevel() >= 1) all.add(facility);
+        // Airfields before anchorages, larger before smaller: the first that takes the class is tried first.
+        all.sort(java.util.Comparator.comparingInt((BuildingAirfield f) -> f.facility().airfield() ? 0 : 1).thenComparingInt(f -> -f.facility().ordinal()));
+        return all;
     }
+
+    /**
+     * Where an aircraft of class {@code ship} at {@code from} may land in the colony {@code colonyId}: the first of the
+     * colony's places (airfields and anchorages) that takes the class and has a free pad with a way to it. When there is
+     * none, the answer says why, the most telling first: there is a place for it but no free pad, or no floor; there is a
+     * place but no way to it; no place in that colony takes the class at all ("flight.no_berth").
+     */
+    static Landing landingIn(ServerLevel level, RouteNetwork net, BlockPos from, int colonyId, @Nullable UUID self, com.asteain.airline.route.ShipClass ship) {
+        String why = "flight.no_berth";
+        for (final BuildingAirfield there : facilitiesOf(level, colonyId)) {
+            final FlightController.Landing landing = FlightController.landing(level, net, from, there.pad(), self, false, ship);
+            if (landing.pad() != null) return new Landing(there, landing);
+            if (rank(landing.why()) > rank(why)) why = landing.why();
+        }
+        return new Landing(null, new FlightController.Landing(null, why));
+    }
+
+    private static int rank(String why) {
+        return switch (why) {
+            case "flight.no_free_pad" -> 3;
+            case "flight.no_floor_there" -> 2;
+            case "flight.no_route" -> 1;
+            default -> 0;
+        };
+    }
+
+    /** A place to land in another colony: the facility and the pad there (null when there is none, with why). */
+    record Landing(@Nullable BuildingAirfield there, FlightController.Landing landing) {}
 
     /** The export racks of an airfield (its hut chest and racks). */
     public static IItemHandler racks(BuildingAirfield airfield) {
@@ -298,21 +329,24 @@ public final class Cargo {
         final WantLedger.Key self = WantLedger.Key.of(home.getColony());
         final Map<Item, Integer> onRacks = contents(racks(home));
         Order best = null;
+        final com.asteain.airline.route.ShipClass cls = FlightController.shipClass(be);
         for (final WantLedger.Key other : ledger.keys()) {
             if (other.equals(self) || !other.dimension().equals(self.dimension())) continue;
             int ready = 0;
             for (final Map.Entry<Item, Integer> stock : onRacks.entrySet()) ready += Math.min(stock.getValue(), ledger.net(other, stock.getKey()));
             if (ready <= 0 || (best != null && ready <= best.ready())) continue;
-            final BuildingAirfield there = airfieldOf(level, other.colony());
-            if (there == null || there.getBuildingLevel() < 1) continue;
-            final FlightController.Landing landing = FlightController.landing(level, net, be.home, there.pad(), ship, false);
-            if (landing.pad() == null) {
-                // No way there is the usual case and nothing to tell; a way without a pad to land on is.
-                if (!landing.why().equals("flight.no_route"))
-                    barred.add("colony " + other.colony() + (landing.why().equals("flight.no_free_pad") ? ": no landing pad is free there" : ": the landing pad there has no floor"));
+            if (facilitiesOf(level, other.colony()).isEmpty()) continue;
+            final Landing place = landingIn(level, net, be.home, other.colony(), ship, cls);
+            if (place.there() == null) {
+                // No way there is the usual case and nothing to tell; a way without a pad to land on is, and so is a colony
+                // with no place that takes aircraft of this class at all.
+                final String why = place.landing().why();
+                if (!why.equals("flight.no_route"))
+                    barred.add("colony " + other.colony() + (why.equals("flight.no_free_pad") ? ": no landing pad is free there"
+                            : why.equals("flight.no_berth") ? ": no place there takes " + cls.key() + " aircraft" : ": the landing pad there has no floor"));
                 continue;
             }
-            best = new Order(home, there, ready, pilot, landing.pad(), false);
+            best = new Order(home, place.there(), ready, pilot, place.landing().pad(), false);
         }
         if (best != null || !fetching()) return best;
         // Nothing to bring anybody. But what home wants may lie on another airfield's racks (collected there because home
@@ -321,14 +355,15 @@ public final class Cargo {
         // at while its airfield is loaded.
         for (final IColony colony : IColonyManager.getInstance().getColonies(level)) {
             if (colony == home.getColony()) continue;
-            final BuildingAirfield there = airfieldOf(level, colony.getID());
-            if (there == null || there.getBuildingLevel() < 1 || !level.isLoaded(there.getPosition())) continue;
-            int ready = 0;
-            for (final Map.Entry<Item, Integer> stock : contents(racks(there)).entrySet()) ready += Math.min(stock.getValue(), ledger.net(self, stock.getKey()));
-            if (ready <= 0 || (best != null && ready <= best.ready())) continue;
-            final FlightController.Landing landing = FlightController.landing(level, net, be.home, there.pad(), ship, false);
-            if (landing.pad() == null) continue;
-            best = new Order(home, there, ready, pilot, landing.pad(), true);
+            for (final BuildingAirfield there : facilitiesOf(level, colony.getID())) {
+                if (!level.isLoaded(there.getPosition())) continue;
+                int ready = 0;
+                for (final Map.Entry<Item, Integer> stock : contents(racks(there)).entrySet()) ready += Math.min(stock.getValue(), ledger.net(self, stock.getKey()));
+                if (ready <= 0 || (best != null && ready <= best.ready())) continue;
+                final FlightController.Landing landing = FlightController.landing(level, net, be.home, there.pad(), ship, false, cls);
+                if (landing.pad() == null) continue;
+                best = new Order(home, there, ready, pilot, landing.pad(), true);
+            }
         }
         return best;
     }

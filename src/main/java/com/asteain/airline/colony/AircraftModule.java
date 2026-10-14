@@ -54,10 +54,13 @@ public class AircraftModule extends AbstractBuildingModule implements ITickingMo
 
     @Override
     public void serializeToView(@NotNull RegistryFriendlyByteBuf buf) {
-        final List<Flights.Design> designs = Flights.designCards();
+        List<Flights.Design> designs = List.of();
         final String[] design = {""};
         int[] own = {0, 0, 0, 0};
-        if (building instanceof BuildingAirfield airfield && building.getColony().getWorld() instanceof ServerLevel level) own = Flights.ownAircraft(level, airfield.pad(), design);
+        if (building instanceof BuildingAirfield airfield) {
+            designs = Flights.designCards(airfield);
+            if (building.getColony().getWorld() instanceof ServerLevel level) own = Flights.ownAircraft(level, airfield.pad(), design);
+        }
         buf.writeBoolean(Flights.available());
         buf.writeBoolean(selfRepair);
         // The airfield's own aircraft: 0 none, 1 being built (blocks still to go), 2 there is one; and its design's title.

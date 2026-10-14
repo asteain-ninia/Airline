@@ -327,7 +327,7 @@ final class FlightController {
         final BlockPos behind = be.route.get(Math.max(0, Math.min(be.leg, be.route.size() - 1)));
         final Vec3 at = rt.craft.pos(), point = net.waypoint(behind);
         final long back = Math.round(Math.hypot(point.x - at.x, point.z - at.z) / rt.craft.type.topSpeed * 20.0);
-        return Fuel.need(rt.craft.type, back + flightTicks(net, net.route(behind, be.destination), rt.craft.type));
+        return Fuel.need(rt.craft.type, back + flightTicks(net, net.route(behind, be.destination, shipClass(be)), rt.craft.type));
     }
 
     /** In distress, once a second: with enough in the tank (or in the engines) for the rest of the way the flight goes on. */
@@ -541,22 +541,37 @@ final class FlightController {
     /** Where a flight may land: the pad, or why there is none (the key of a command's answer). */
     record Landing(@Nullable BlockPos pad, String why) {}
 
+    /** The size class of the aircraft (from its design). */
+    static com.asteain.airline.route.ShipClass shipClass(AircraftBlockEntity be) {
+        return AircraftType.of(be.type).shipClass;
+    }
+
+    /** Whether an aircraft of this class may berth at the pad {@code pad} (the kind of place it belongs to; see {@link com.asteain.airline.route.Facility}). */
+    static boolean berthsAt(RouteNetwork net, @Nullable BlockPos pad, com.asteain.airline.route.ShipClass ship) {
+        final RouteNetwork.Node node = pad == null ? null : net.node(pad);
+        return node != null && node.berths(ship);
+    }
+
     /**
-     * Chooses the pad for a flight from the pad {@code from} to the airfield of the pad {@code wanted}: that pad when it
-     * is free, else another pad of the same airfield (not when {@code exact}). Only a pad that has a floor and a way to it.
+     * Chooses the pad for a flight of an aircraft of class {@code ship} from the pad {@code from} to the airfield of the pad
+     * {@code wanted}: that pad when it is free, else another pad of the same airfield (not when {@code exact}). Only a pad
+     * where that class may berth, with a floor and a way to it for that class. Why there is none: the key of an answer
+     * ("flight.no_berth": no pad there takes this class; then no way, no floor, no free pad).
      */
-    static Landing landing(ServerLevel level, RouteNetwork net, BlockPos from, BlockPos wanted, @Nullable UUID self, boolean exact) {
+    static Landing landing(ServerLevel level, RouteNetwork net, BlockPos from, BlockPos wanted, @Nullable UUID self, boolean exact, com.asteain.airline.route.ShipClass ship) {
         final List<BlockPos> pads = new ArrayList<>(List.of(wanted));
         if (!exact) for (final BlockPos pad : padsWith(level, wanted)) if (!pads.contains(pad)) pads.add(pad);
-        boolean way = false, floor = false;
+        boolean berth = false, way = false, floor = false;
         for (final BlockPos pad : pads) {
-            if (net.route(from, pad).size() < 2) continue;
+            if (!berthsAt(net, pad, ship)) continue;
+            berth = true;
+            if (net.route(from, pad, ship).size() < 2) continue;
             way = true;
             if (floorMissing(level, pad)) continue;
             floor = true;
             if (free(level, pad, self)) return new Landing(pad, "");
         }
-        return new Landing(null, !way ? "flight.no_route" : !floor ? "flight.no_floor_there" : "flight.no_free_pad");
+        return new Landing(null, !berth ? "flight.no_berth" : !way ? "flight.no_route" : !floor ? "flight.no_floor_there" : "flight.no_free_pad");
     }
 
     // ---- plans (see Airspace) -----------------------------------------------------------------------------
@@ -653,7 +668,7 @@ final class FlightController {
             // On a pad: away from home the next flight is the way home; at home it is known once the loading has begun.
             if (!be.at.equals(be.home)) to = be.home;
             else if (be.phase != Phase.PARKED && be.destination != null && !be.destination.equals(be.at)) to = be.destination;
-            if (to != null) arrives = Math.max(now, leaves) + flightTicks(net, net.route(be.at, to), c.type);
+            if (to != null) arrives = Math.max(now, leaves) + flightTicks(net, net.route(be.at, to, shipClass(be)), c.type);
         }
         // Whole seconds: the line is only written again when something changed that somebody could read.
         table.put(new Timetable.Entry(c.id(), level.dimension().location().toString(), be.home, be.flying() ? null : be.at, to, leaves, arrives / 20 * 20, be.phase.name()));
@@ -723,7 +738,7 @@ final class FlightController {
         if (rt.age % HOME_LOOK != 0) return;
         final Mob pilot = pilot(level, be);
         // (Its home is kept for it; somebody can only stand there who was made there by command.)
-        final List<BlockPos> back = be.home == null || !free(level, be.home, rt.craft.id()) ? List.of() : net.route(be.at, be.home);
+        final List<BlockPos> back = be.home == null || !free(level, be.home, rt.craft.id()) ? List.of() : net.route(be.at, be.home, shipClass(be));
         if (pilot == null || back.size() < 2 || floorMissing(level, be.home)) {
             if (++rt.homeTries == HOME_TRIES) {
                 // Not for ever: the surroundings are let go. It goes on trying whenever somebody is near.
@@ -814,7 +829,7 @@ final class FlightController {
         final BlockPos back = be.origin;
         be.origin = be.at;
         be.destination = back;
-        be.route = be.origin == null || back == null || !free(level, back, rt.craft.id()) ? List.of() : new ArrayList<>(net.route(be.origin, back));
+        be.route = be.origin == null || back == null || !free(level, back, rt.craft.id()) ? List.of() : new ArrayList<>(net.route(be.origin, back, shipClass(be)));
         if (be.route.size() < 2 || pilot == null) {
             be.phase = Phase.PARKED;
             rt.craft.ticket(false);
@@ -911,7 +926,7 @@ final class FlightController {
                         rt.shipHolds++;
                         final java.util.Set<Edge> without = new java.util.HashSet<>(rt.avoid);
                         if (edge != null) without.add(edge);
-                        final boolean wayRound = edge != null && be.destination != null && net.route(be.route.get(be.leg), be.destination, without).size() >= 2;
+                        final boolean wayRound = edge != null && be.destination != null && net.route(be.route.get(be.leg), be.destination, shipClass(be), without).size() >= 2;
                         if (rt.shipHolds >= patience && wayRound) {
                             rt.shipHolds = 0;
                             rt.avoid.add(edge);
@@ -1047,13 +1062,13 @@ final class FlightController {
     private static void reroute(AircraftBlockEntity be, Runtime rt, RouteNetwork net) {
         final BlockPos here = be.route.get(be.leg);
         // (Without the lines it goes round because of another ship; when the way round is gone meanwhile, the same way again.)
-        List<BlockPos> way = be.destination == null ? List.of() : net.route(here, be.destination, rt.avoid);
+        List<BlockPos> way = be.destination == null ? List.of() : net.route(here, be.destination, shipClass(be), rt.avoid);
         if (way.size() < 2 && !rt.avoid.isEmpty() && be.destination != null) {
             rt.avoid.clear();
-            way = net.route(here, be.destination);
+            way = net.route(here, be.destination, shipClass(be));
         }
         if (way.size() < 2 && be.origin != null && !be.cancelled) {
-            way = net.route(here, be.origin);
+            way = net.route(here, be.origin, shipClass(be));
             if (!way.isEmpty()) {
                 be.cancelled = true;
                 be.destination = be.origin;
@@ -1071,7 +1086,10 @@ final class FlightController {
 
     private static void beginAlign(AircraftBlockEntity be, Runtime rt, RouteNetwork net) {
         final ServerLevel level = rt.craft.level;
-        final boolean noFloor = be.destination != null && floorMissing(level, be.destination);
+        // A pad that does not take this class (any more: the airfield was built anew as another kind while the aircraft
+        // was on its way) is never gone down onto, as one without a floor.
+        final boolean noBerth = be.destination != null && !berthsAt(net, be.destination, shipClass(be));
+        final boolean noFloor = noBerth || (be.destination != null && floorMissing(level, be.destination));
         if (noFloor || (be.destination != null && stoodOn(level, be.destination, rt.craft.id()))) {
             // An airfield that is not built (or lost its pad), or a pad somebody stands on after all (an aircraft was made
             // there by command): never go down there.
@@ -1083,25 +1101,38 @@ final class FlightController {
             }
             // Another pad of the same airfield, when it has one that is free.
             for (final BlockPos other : padsWith(level, here)) {
-                if (other.equals(here) || floorMissing(level, other) || !free(level, other, rt.craft.id()) || net.route(here, other).size() < 2) continue;
+                if (other.equals(here) || !berthsAt(net, other, shipClass(be)) || floorMissing(level, other) || !free(level, other, rt.craft.id()) || net.route(here, other, shipClass(be)).size() < 2) continue;
                 be.destination = other;
-                be.route = new ArrayList<>(net.route(here, other));
+                be.route = new ArrayList<>(net.route(here, other, shipClass(be)));
                 be.leg = 0;
                 tell(be, "flight.note.other_pad", here.getX(), here.getY(), here.getZ());
                 startLeg(be, rt, net);
                 return;
             }
             // Else back to where it started, cancelled.
-            final List<BlockPos> back = be.cancelled || be.origin == null || be.origin.equals(here) ? List.of() : net.route(here, be.origin);
+            final boolean gone = net.node(here) == null;
+            List<BlockPos> back = be.cancelled || be.origin == null || be.origin.equals(here) ? List.of() : net.route(here, be.origin, shipClass(be));
+            if (back.size() < 2 && gone && !be.cancelled && be.origin != null && !be.origin.equals(here) && be.route.size() >= 2 && here.equals(be.route.get(be.route.size() - 1))) {
+                // The pad left the network while the aircraft was on its way (its airfield was taken away, or an anchorage's
+                // colony lost its last airfield): no line leads from it any more. Back over the point it came from.
+                final BlockPos before = be.route.get(be.route.size() - 2);
+                final List<BlockPos> rest = before.equals(be.origin) ? List.of(before) : net.route(before, be.origin, shipClass(be));
+                if (!rest.isEmpty()) {
+                    back = new ArrayList<>();
+                    back.add(here);
+                    back.addAll(rest);
+                }
+            }
             if (back.size() >= 2) {
                 be.cancelled = true;
+                be.cancelNote = "flight.note.cancelled_pad";
                 be.destination = be.origin;
                 be.route = new ArrayList<>(back);
                 be.leg = 0;
-                tell(be, noFloor ? "flight.note.no_floor" : "flight.note.pad_taken", here.getX(), here.getY(), here.getZ());
+                tell(be, gone ? "flight.note.pad_gone" : noBerth ? "flight.note.no_berth" : noFloor ? "flight.note.no_floor" : "flight.note.pad_taken", here.getX(), here.getY(), here.getZ());
                 startLeg(be, rt, net);
             } else if (noFloor) {
-                strand(be, rt, "flight.note.no_floor_stranded", here.getX(), here.getY(), here.getZ());
+                strand(be, rt, gone ? "flight.note.pad_gone_stranded" : noBerth ? "flight.note.no_berth_stranded" : "flight.note.no_floor_stranded", here.getX(), here.getY(), here.getZ());
             } else {
                 // Somebody stands where it must land and there is nowhere else to go: it waits above until the pad is free.
                 hold(be, rt, Phase.CRUISE);
@@ -1231,7 +1262,7 @@ final class FlightController {
         be.cancelled = false;
         be.origin = be.home;
         be.destination = order.pad();
-        be.route = new ArrayList<>(net.route(be.origin, be.destination));
+        be.route = new ArrayList<>(net.route(be.origin, be.destination, shipClass(be)));
         be.leg = 0;
         be.freightColony = order.to().getColony().getID();
         be.homeColony = order.from().getColony().getID();
@@ -1267,14 +1298,14 @@ final class FlightController {
         }
         // The way and the pad were found when the loading began; that can be a day ago.
         final RouteNetwork net = RouteNetwork.get(level);
-        final Landing landing = be.destination == null ? new Landing(null, "flight.no_route") : landing(level, net, be.at, be.destination, rt.craft.id(), false);
+        final Landing landing = be.destination == null ? new Landing(null, "flight.no_route") : landing(level, net, be.at, be.destination, rt.craft.id(), false, shipClass(be));
         if (landing.pad() == null) {
             if (!rt.toldWaiting) tell(be, "flight.note.no_way_out");
             rt.toldWaiting = true;
             return;      // looked at again with the next step
         }
         be.destination = landing.pad();
-        final List<BlockPos> way = net.route(be.at, be.destination);
+        final List<BlockPos> way = net.route(be.at, be.destination, shipClass(be));
         // Out and back, with what the tank holds now (the racks had their chance above).
         final long fuelNeeded = Fuel.need(rt.craft.type, flightTicks(net, way, rt.craft.type) * 2);
         if (Fuel.total(be) < fuelNeeded) {
@@ -1350,7 +1381,7 @@ final class FlightController {
                 if (carried) Handling.rest(level, be, rt);
                 return;
             }
-            final List<BlockPos> back = be.home == null || !free(level, be.home, c.id()) ? List.of() : net.route(be.at, be.home);
+            final List<BlockPos> back = be.home == null || !free(level, be.home, c.id()) ? List.of() : net.route(be.at, be.home, shipClass(be));
             if (back.size() < 2) {
                 if (!rt.toldWaiting) tell(be, "flight.note.no_way_back");
                 rt.toldWaiting = true;
@@ -1530,6 +1561,8 @@ final class FlightController {
         final RouteNetwork net = RouteNetwork.get(level);
         final RouteNetwork.Node node = net.node(pad);
         if (node == null || node.kind() != RouteNetwork.Kind.AIRFIELD) return new Answer(false, "flight.no_pad");
+        // Only where this class may berth: an aircraft's home is a pad that takes it.
+        if (!node.berths(type.shipClass)) return new Answer(false, "flight.no_berth");
         // Not on a pad where an aircraft stands, is expected, or has its home (also one that is not loaded now).
         loaded(level);
         if (!free(level, pad, null)) return new Answer(false, "flight.pad_taken");
@@ -1588,6 +1621,8 @@ final class FlightController {
         final RouteNetwork net = RouteNetwork.get(level);
         final RouteNetwork.Node node = net.node(pad);
         if (node == null || node.kind() != RouteNetwork.Kind.AIRFIELD) return new Answer(false, "flight.no_pad");
+        // (The window only begins sites for classes the place builds; a site begun before a design changed its class is not finished.)
+        if (!node.berths(type.shipClass)) return new Answer(false, "flight.no_berth");
         final Map<BlockPos, Shipyard.Part> parts = Shipyard.parts(level, type);
         final net.minecraft.world.level.block.Rotation turn = Shipyard.turn(node.heading());
         if (parts == null || Shipyard.missing(level, pad.above(), type, turn) != 0) return new Answer(false, "flight.bad_design");
@@ -1660,9 +1695,9 @@ final class FlightController {
         if (!be.lacks.isEmpty()) return new Answer(false, "flight.unfit", Shipyard.partNames(be.lacks));
         if (pilot == null) return new Answer(false, "flight.no_pilot");
         // The pad it lands on: the one asked for, or another pad of that airfield (its own home is never exchanged).
-        final Landing landing = landing(level, net, from, to, rt.craft.id(), to.equals(be.home));
+        final Landing landing = landing(level, net, from, to, rt.craft.id(), to.equals(be.home), shipClass(be));
         if (landing.pad() == null) return new Answer(false, landing.why());
-        final List<BlockPos> way = net.route(from, landing.pad());
+        final List<BlockPos> way = net.route(from, landing.pad(), shipClass(be));
         final long fuelNeeded = Fuel.need(rt.craft.type, flightTicks(net, way, rt.craft.type) * (round ? 2 : 1));
         if (fuelNeeded > Fuel.capacity()) return new Answer(false, "flight.too_far", Fuel.minutes(rt.craft.type, Fuel.capacity()), Fuel.minutes(rt.craft.type, fuelNeeded));
         if (Fuel.total(be) < fuelNeeded) return new Answer(false, "flight.no_fuel", Fuel.minutes(rt.craft.type, Fuel.total(be)), Fuel.minutes(rt.craft.type, fuelNeeded));

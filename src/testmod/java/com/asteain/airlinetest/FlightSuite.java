@@ -5,7 +5,9 @@ import com.asteain.airline.colony.BuildingAirfield;
 import com.asteain.airline.flight.AircraftBlockEntity;
 import com.asteain.airline.flight.AircraftBlockEntity.Phase;
 import com.asteain.airline.flight.Flights;
+import com.asteain.airline.route.Facility;
 import com.asteain.airline.route.RouteNetwork;
+import com.asteain.airline.route.ShipClass;
 import com.asteain.airline.route.RouteNetwork.Edge;
 import com.asteain.airline.route.RouteNetwork.State;
 import com.asteain.colonypatchserver.boarding.Boarding;
@@ -95,11 +97,17 @@ final class FlightSuite {
 
     /** Colony, airfield hut (placed by hand), pilot, aircraft. The floor under hut and pad is stone, kept loaded. */
     private static void addField(Script s, ServerLevel level, Field f, String name) {
+        addField(s, level, f, name, Facility.SMALL_AIRFIELD);
+    }
+
+    /** The same with another kind of airfield (its floor sized for its pad). */
+    private static void addField(Script s, ServerLevel level, Field f, String name, Facility facility) {
         s.step(name + ": colony and airfield", () -> {
-            Fixture.platform(level, f.hut.offset(1, 0, -8), 10, 16);
+            if (facility == Facility.SMALL_AIRFIELD) Fixture.platform(level, f.hut.offset(1, 0, -8), 10, 16);
+            else floorFor(level, f.hut, facility);
             f.colony = Fixture.create(level, f.hut.offset(4, 0, 4), "Airline " + name);
             Fixture.townHall(f.colony, f.hut.offset(4, 0, 4));
-            f.airfield = (BuildingAirfield) Fixture.placeHut(level, f.colony, Airline.AIRFIELD_HUT.get(), f.hut);
+            f.airfield = (BuildingAirfield) Fixture.placeHut(level, f.colony, hutOf(facility), f.hut);
             f.pad = f.airfield.pad();
             RouteNetwork.Node node = RouteNetwork.get(level).node(f.pad);
             s.soft(name + " / placing the airfield puts its landing pad on the network", node != null && node.kind() == RouteNetwork.Kind.AIRFIELD && node.heading() == f.airfield.padHeading(),
@@ -227,9 +235,287 @@ final class FlightSuite {
             case "reopen1" -> reopen1(s, level);
             case "reopen2" -> reopen2(s, level);
             case "reopen3" -> reopen3(s, level);
+            case "classes" -> classes(s, level);
             default -> throw new AssertionError("unknown scene " + scene);
         }
         return s;
+    }
+
+    // ---- size classes: which aircraft may berth where (the user's ruling of 2026-10-14) ---------------------------
+
+    /** A bare landing pad of that kind of place (no building): a stone floor of the place's size, on the network. */
+    private static void pad(ServerLevel level, BlockPos floor, int heading, Facility facility) {
+        final int half = facility.padHalfSize();
+        for (int x = -half; x <= half; x++) for (int z = -half; z <= half; z++) level.setBlockAndUpdate(floor.offset(x, 0, z), Blocks.STONE.defaultBlockState());
+        RouteNetwork.get(level).setAirfield(floor, heading, 1, floor, facility);
+    }
+
+    /** The hut block of each kind of place. */
+    private static com.minecolonies.api.blocks.AbstractColonyBlock<?> hutOf(Facility facility) {
+        return switch (facility) {
+            case SMALL_AIRFIELD -> Airline.AIRFIELD_HUT.get();
+            case MEDIUM_AIRFIELD -> Airline.MEDIUM_AIRFIELD_HUT.get();
+            case LARGE_AIRFIELD -> Airline.LARGE_AIRFIELD_HUT.get();
+            case ANCHORAGE -> Airline.ANCHORAGE_HUT.get();
+        };
+    }
+
+    /** Stone under a place's hut and its first landing pad, and between them (the hut not turned: the pad lies north of it). */
+    private static void floorFor(ServerLevel level, BlockPos hut, Facility facility) {
+        final int half = facility.padHalfSize();
+        Fixture.platform(level, hut.offset(1, 0, -(half + 2)), Math.max(half, 8), half + 6);
+    }
+
+    private static ExportStockModule exportOf(BuildingAirfield place) {
+        return place.getFirstModuleOccurance(ExportStockModule.class);
+    }
+
+    private static void forceChunks(ServerLevel level, int x0, int z0, int x1, int z1) {
+        for (int cx = x0 >> 4; cx <= x1 >> 4; cx++) for (int cz = z0 >> 4; cz <= z1 >> 4; cz++) { level.setChunkForced(cx, cz, true); level.getChunk(cx, cz); }
+    }
+
+    /**
+     * The size classes (run with the medium stand-in: classes@<kokaze_medium.json>). First the whole table on bare pads:
+     * every class sent to every kind of place, the class each line is for, the ways that are open to each class, what a
+     * pad and a design say about the class, and aircraft made by command where their class may not berth. Then colonies:
+     * a medium airfield with its own medium aircraft and a pilot; colony N with an anchorage only (not on the network
+     * without an airfield), then with a small airfield as well; where the dispatcher sends goods for N; what the windows
+     * offer and refuse to build; a small aircraft refused at the anchorage; the medium aircraft's round trip to the
+     * anchorage; and a flight to the anchorage while N loses its airfield, which turns back home.
+     */
+    private static void classes(Script s, ServerLevel level) {
+        final RouteNetwork net = RouteNetwork.get(level);
+        final WantLedger ledger = WantLedger.get(level.getServer());
+        final Facility[] places = Facility.values();
+        final ShipClass[] sizes = ShipClass.values();
+        final String small = com.asteain.airline.flight.AircraftType.STANDARD;
+
+        // ---- 1. the table, on bare pads around a grade 3 buoy (far from the colonies of part 2: no line between them)
+        final BlockPos hub = new BlockPos(5000, Y, 5000);
+        final BlockPos[] bare = new BlockPos[places.length];
+        s.step("classes: a grade 3 buoy and a bare pad of each kind of place around it", () -> {
+            s.check(Flights.classOf(design()) == ShipClass.MEDIUM && Flights.classOf(small) == ShipClass.SMALL,
+                    "this run flies a medium aircraft (" + design() + ": " + Flights.classOf(design()) + "), and " + small + " is a small one (" + Flights.classOf(small) + ")");
+            forceChunks(level, hub.getX() - 80, hub.getZ() - 80, hub.getX() + 80, hub.getZ() + 80);
+            level.setBlockAndUpdate(hub, Airline.BUOYS.get(2).get().defaultBlockState());
+            final int[][] around = {{-60, 0}, {0, -60}, {60, 0}, {0, 60}};
+            for (int i = 0; i < places.length; i++) {
+                bare[i] = hub.offset(around[i][0], -1, around[i][1]);
+                pad(level, bare[i], 0, places[i]);
+            }
+            s.check(net.node(hub) != null && net.node(hub).kind() == RouteNetwork.Kind.BUOY, "the buoy is a point of the network");
+        });
+        s.until("classes: the lines around the buoy are looked at", () -> {}, () -> net.pending() == 0, 2400);
+        s.step("classes: the table, the lines, the ways", () -> {
+            for (int i = 0; i < places.length; i++) {
+                final Edge line = net.edge(hub, bare[i]);
+                s.soft("classes / the line from a buoy to a pad of a " + places[i] + " is for aircraft up to " + places[i].largest() + ", and clear",
+                        line != null && line.serves() == places[i].largest() && line.state() == State.CLEAR, line == null ? "no line" : line.serves() + ", " + line.state() + " " + line.blockedAt());
+                for (final ShipClass size : sizes) {
+                    final boolean may = places[i].berths(size);
+                    final String got = Flights.landingFor(level, hub, bare[i], size);
+                    s.soft("classes / table: a " + size + " aircraft sent to a pad of a " + places[i] + (may ? " lands there" : " is refused: no berth for its class"),
+                            may ? "pad".equals(got) : "flight.no_berth".equals(got), got);
+                }
+            }
+            final BlockPos sm = bare[0], md = bare[1], lg = bare[2], an = bare[3];
+            s.soft("classes / to a medium airfield's pad a large aircraft has no way (its lines are for medium aircraft at most); a medium one has",
+                    net.route(hub, md, ShipClass.LARGE).isEmpty() && net.route(hub, md, ShipClass.MEDIUM).equals(List.of(hub, md)),
+                    net.route(hub, md, ShipClass.LARGE) + " / " + net.route(hub, md, ShipClass.MEDIUM));
+            s.soft("classes / out of a small airfield's pad only small aircraft have a way (its lines are for them)",
+                    net.route(sm, lg, ShipClass.MEDIUM).isEmpty() && net.route(sm, an, ShipClass.LARGE).isEmpty() && net.route(sm, lg, ShipClass.SMALL).size() >= 2,
+                    net.route(sm, lg, ShipClass.MEDIUM) + " / " + net.route(sm, an, ShipClass.LARGE) + " / " + net.route(sm, lg, ShipClass.SMALL));
+            s.soft("classes / between the medium airfield and the anchorage medium aircraft have a way, large ones none; between the large airfield and the anchorage large ones have",
+                    net.route(md, an, ShipClass.MEDIUM).size() >= 2 && net.route(md, an, ShipClass.LARGE).isEmpty() && net.route(lg, an, ShipClass.LARGE).size() >= 2,
+                    net.route(md, an, ShipClass.MEDIUM) + " / " + net.route(md, an, ShipClass.LARGE) + " / " + net.route(lg, an, ShipClass.LARGE));
+            final java.util.function.BiFunction<BlockPos, BlockPos, ShipClass> common = (x, y) -> RouteNetwork.common(net.node(x), net.node(y));
+            s.soft("classes / the largest class two pads have in common: small-large none, small-anchorage none, small-medium small, medium-anchorage medium, large-anchorage large",
+                    common.apply(sm, lg) == null && common.apply(sm, an) == null && common.apply(sm, md) == ShipClass.SMALL && common.apply(md, an) == ShipClass.MEDIUM && common.apply(lg, an) == ShipClass.LARGE,
+                    common.apply(sm, lg) + " " + common.apply(sm, an) + " " + common.apply(sm, md) + " " + common.apply(md, an) + " " + common.apply(lg, an));
+            // What each kind of place is (the user's matrix): connectors and building.
+            boolean right = true;
+            final StringBuilder seen = new StringBuilder();
+            for (final Facility place : places) {
+                for (int lv = 1; lv <= 5; lv++) {
+                    final boolean floor = place.floorConnector(lv), side = place.sideConnector();
+                    right &= switch (place) {
+                        case SMALL_AIRFIELD -> floor == (lv >= 3) && !side;
+                        case MEDIUM_AIRFIELD -> floor && !side;
+                        case LARGE_AIRFIELD, ANCHORAGE -> !floor && side;
+                    };
+                    seen.append(place).append(lv).append(floor ? "F" : "-").append(side ? "S" : "-").append(' ');
+                }
+            }
+            s.soft("classes / connectors: a small airfield has one in the floor from level 3, a medium airfield always; a large airfield and an anchorage have side connectors and none in the floor", right, seen.toString());
+            final String builds = java.util.Arrays.stream(places).map(p -> p + ":" + java.util.Arrays.stream(sizes).filter(p::builds).map(Enum::name).toList()).toList().toString();
+            s.soft("classes / what each kind of place builds: small airfield small; medium airfield small and medium; large airfield medium and large; anchorage nothing",
+                    builds.equals("[SMALL_AIRFIELD:[SMALL], MEDIUM_AIRFIELD:[SMALL, MEDIUM], LARGE_AIRFIELD:[MEDIUM, LARGE], ANCHORAGE:[]]"), builds);
+            // Saved and read back: the kind of place and the class each line is for.
+            final RouteNetwork copy = RouteNetwork.load(net.save(new net.minecraft.nbt.CompoundTag(), level.registryAccess()), level.registryAccess());
+            boolean kept = true;
+            final StringBuilder after = new StringBuilder();
+            for (int i = 0; i < places.length; i++) {
+                final RouteNetwork.Node node = copy.node(bare[i]);
+                final Edge line = copy.edge(hub, bare[i]);
+                kept &= node != null && node.facility() == places[i] && line != null && line.serves() == places[i].largest();
+                after.append(node == null ? "none" : node.facility()).append('/').append(line == null ? "no line" : line.serves()).append(' ');
+            }
+            s.soft("classes / saved and read back, each pad is still the kind of place it was and its line is for the same classes", kept, after.toString());
+            // Made by command where the class may not berth: refused, and nothing is made.
+            final Flights.Answer mediumAtSmall = Flights.spawn(level, sm, design()), smallAtLarge = Flights.spawn(level, lg, small), smallAtAnchorage = Flights.spawn(level, an, small);
+            s.soft("classes / an aircraft made by command on a pad that does not take its class is refused (medium on a small airfield's pad, small on a large airfield's and on an anchorage's)",
+                    !mediumAtSmall.ok() && !smallAtLarge.ok() && !smallAtAnchorage.ok() && "flight.no_berth".equals(mediumAtSmall.key()) && "flight.no_berth".equals(smallAtLarge.key())
+                            && "flight.no_berth".equals(smallAtAnchorage.key()) && Flights.aircraft(level).isEmpty(),
+                    mediumAtSmall.key() + " / " + smallAtLarge.key() + " / " + smallAtAnchorage.key() + ", " + Flights.aircraft(level).size() + " aircraft");
+        });
+
+        // ---- 2. colonies: M has a medium airfield with its own medium aircraft; N an anchorage, later a small airfield too
+        final Field m = new Field(new BlockPos(0, Y, 40));
+        addField(s, level, m, "classes M", Facility.MEDIUM_AIRFIELD);
+        final BlockPos hutN = new BlockPos(130, Y, 40), hutS = new BlockPos(100, Y, 40), between = new BlockPos(65, Y, 0);
+        final IColony[] colonyN = new IColony[1];
+        final BuildingAirfield[] anchorage = new BuildingAirfield[1], smallN = new BuildingAirfield[1];
+        final TileEntityRack[] rack = new TileEntityRack[1];
+        s.step("classes: colony N with an anchorage and no airfield; a buoy between the colonies", () -> {
+            floorFor(level, hutN, Facility.ANCHORAGE);
+            colonyN[0] = Fixture.create(level, hutN.offset(4, 0, 4), "Airline classes N");
+            Fixture.townHall(colonyN[0], hutN.offset(4, 0, 4));
+            anchorage[0] = (BuildingAirfield) Fixture.placeHut(level, colonyN[0], Airline.ANCHORAGE_HUT.get(), hutN);
+            anchorage[0].setBuildingLevel(1);
+            anchorage[0].setCorners(hutN.offset(-3, 0, -3), hutN.offset(3, 2, 3));
+            anchorage[0].registerPad();
+            forceChunks(level, -16, -16, 160, 47);
+            level.setBlockAndUpdate(between, Airline.BUOYS.get(2).get().defaultBlockState());
+            s.soft("classes / the anchorage's hut is an anchorage; its pad lies where an anchorage's lies", anchorage[0].facility() == Facility.ANCHORAGE && anchorage[0].pad().equals(hutN.offset(Facility.ANCHORAGE.padFromHut())),
+                    anchorage[0].facility() + " pad " + anchorage[0].pad().toShortString());
+            s.soft("classes / an anchorage in a colony without an airfield is not on the network", net.node(anchorage[0].pad()) == null, String.valueOf(net.node(anchorage[0].pad())));
+            final String asked = Flights.requestAircraft(level, anchorage[0], small, null), askedMedium = Flights.requestAircraft(level, anchorage[0], design(), null);
+            s.soft("classes / an anchorage builds nothing: its window offers no design, and asked for one it says that class is not built here",
+                    Flights.designCards(anchorage[0]).isEmpty() && "class_not_here".equals(asked) && "class_not_here".equals(askedMedium), Flights.designCards(anchorage[0]) + " / " + asked + " / " + askedMedium);
+            final List<String> offered = Flights.designCards(m.airfield).stream().map(Flights.Design::name).toList();
+            s.soft("classes / a medium airfield offers small and medium designs", offered.contains(small) && offered.contains(design()), String.valueOf(offered));
+        });
+        s.settle("classes: a colony tick or two", 100);
+        s.step("classes: goods for colony N while it has no place that takes the medium aircraft", () -> {
+            s.soft("classes / still: the anchorage is not on the network without an airfield in its colony", net.node(anchorage[0].pad()) == null, String.valueOf(net.node(anchorage[0].pad())));
+            rack[0] = equip(level, m);
+            Fixture.stock(rack[0], Items.IRON_INGOT, 16);
+            final WantLedger.Key keyN = WantLedger.Key.of(colonyN[0]);
+            ledger.set(keyN, Items.IRON_INGOT, 16);
+            final List<String> barred = new ArrayList<>();
+            final BlockPos choice = Flights.cargoChoice(level, m.aircraft, barred);
+            ledger.set(keyN, Items.IRON_INGOT, 0);
+            s.soft("classes / cargo: for a colony with no place on the network that takes medium aircraft, no flight; the dispatcher says why",
+                    choice == null && barred.stream().anyMatch(l -> l.contains("colony " + colonyN[0].getID()) && l.contains("no place there takes medium aircraft")), choice + " | " + barred);
+            ledger.set(keyN, Items.IRON_INGOT, 1);
+            final java.util.Set<WantLedger.Key> reach = exportOf(m.airfield).reachableForChecks();
+            ledger.set(keyN, Items.IRON_INGOT, 0);
+            s.soft("classes / export collection: the medium airfield does not count colony N as one it can send goods to", !reach.contains(keyN), String.valueOf(reach));
+        });
+        s.step("classes: colony N gets a small airfield", () -> {
+            Fixture.platform(level, hutS.offset(1, 0, -8), 10, 16);
+            smallN[0] = (BuildingAirfield) Fixture.placeHut(level, colonyN[0], Airline.AIRFIELD_HUT.get(), hutS);
+            smallN[0].setBuildingLevel(1);
+            smallN[0].setCorners(hutS.offset(-3, 0, -3), hutS.offset(3, 2, 3));
+            smallN[0].registerPad();
+            s.soft("classes / the anchorage comes onto the network as soon as its colony has an airfield", net.node(anchorage[0].pad()) != null, String.valueOf(net.node(anchorage[0].pad())));
+        });
+        s.until("classes: with an airfield in colony N the anchorage is on the network", () -> {}, () -> net.node(anchorage[0].pad()) != null, 1200);
+        s.until("classes: the lines are looked at", () -> {}, () -> net.pending() == 0, 2400);
+        s.step("classes: the anchorage on the network; where goods for N go; a small aircraft and the anchorage", () -> {
+            final RouteNetwork.Node node = net.node(anchorage[0].pad());
+            s.soft("classes / the anchorage's pad is on the network as an anchorage: medium and large aircraft berth there, small ones do not",
+                    node != null && node.facility() == Facility.ANCHORAGE && node.berths(ShipClass.MEDIUM) && node.berths(ShipClass.LARGE) && !node.berths(ShipClass.SMALL), String.valueOf(node));
+            final List<String> offered = Flights.designCards(smallN[0]).stream().map(Flights.Design::name).toList();
+            final String asked = Flights.requestAircraft(level, smallN[0], design(), null);
+            s.soft("classes / a small airfield does not offer the medium design, and asked for it, says that class is not built here",
+                    offered.contains(small) && !offered.contains(design()) && "class_not_here".equals(asked), offered + " / " + asked);
+            final WantLedger.Key keyN = WantLedger.Key.of(colonyN[0]);
+            ledger.set(keyN, Items.IRON_INGOT, 16);
+            final List<String> barred = new ArrayList<>();
+            final BlockPos choice = Flights.cargoChoice(level, m.aircraft, barred);
+            ledger.set(keyN, Items.IRON_INGOT, 0);
+            s.soft("classes / cargo: goods for colony N go with the medium aircraft to N's anchorage (N's small airfield does not take it)",
+                    anchorage[0].pad().equals(choice) && barred.isEmpty(), choice + " | " + barred);
+            final WantLedger.Key keyM = WantLedger.Key.of(m.colony);
+            ledger.set(keyN, Items.IRON_INGOT, 1);
+            ledger.set(keyM, Items.IRON_INGOT, 1);
+            final java.util.Set<WantLedger.Key> reachM = exportOf(m.airfield).reachableForChecks(), reachAnchorage = exportOf(anchorage[0]).reachableForChecks();
+            ledger.set(keyN, Items.IRON_INGOT, 0);
+            ledger.set(keyM, Items.IRON_INGOT, 0);
+            s.soft("classes / export collection: now the medium airfield counts colony N (by its anchorage), and the anchorage counts colony M (for the medium aircraft that call)",
+                    reachM.contains(keyN) && reachAnchorage.contains(keyM), reachM + " / " + reachAnchorage);
+            final String toSmallN = Flights.landingFor(level, m.pad, smallN[0].pad(), ShipClass.MEDIUM), toAnchorage = Flights.landingFor(level, m.pad, anchorage[0].pad(), ShipClass.MEDIUM);
+            s.soft("classes / sent by command from M, the medium aircraft is refused at N's small airfield and may go to the anchorage",
+                    "flight.no_berth".equals(toSmallN) && "pad".equals(toAnchorage), toSmallN + " / " + toAnchorage);
+            final Flights.Answer made = Flights.spawn(level, smallN[0].pad(), small);
+            s.soft("classes / a small aircraft is made on N's small airfield", made.ok(), made.key());
+        });
+        s.settle("classes: the small aircraft settles on its pad", 60);
+        s.step("classes: the small aircraft is sent to the anchorage", () -> {
+            final Flights.Answer refused = Flights.send(level, smallN[0].pad(), anchorage[0].pad(), false, m.pilot);
+            s.soft("classes / a small aircraft at N's small airfield, sent to the anchorage beside it, is refused: no berth for its class",
+                    !refused.ok() && "flight.no_berth".equals(refused.key()), refused.key());
+        });
+        final boolean[] atAnchorage = new boolean[1];
+        s.step("classes: the medium aircraft flies to the anchorage and back", () -> {
+            watch(s, m, "classes");
+            s.monitor(() -> {
+                if (m.aircraft.phase == Phase.DISEMBARK && anchorage[0].pad().equals(m.aircraft.at)) atAnchorage[0] = true;
+            });
+            final Flights.Answer sent = Flights.send(level, m.pad, anchorage[0].pad(), true, m.pilot);
+            s.soft("classes / the medium aircraft's round trip to the anchorage is ordered", sent.ok(), sent.text().getString());
+        });
+        s.until("classes: there and back", () -> {}, () -> m.clock > 100 && m.aircraft.phase == Phase.PARKED && m.pad.equals(m.aircraft.at), 16000);
+        s.step("classes: result of the round trip", () -> {
+            final double[] r = Flights.readings(m.aircraft);
+            final long landings = m.log.stream().filter(l -> l.contains("-> DISEMBARK")).count();
+            s.soft("classes / the medium aircraft landed at the anchorage and came home, landing twice", atAnchorage[0] && landings == 2 && m.pad.equals(m.aircraft.at),
+                    "at the anchorage " + atAnchorage[0] + ", landings " + landings + ", " + at(r));
+            s.soft("classes / the pilot is alive and off the aircraft", m.pilot.isAlive() && Boarding.state(m.pilot) == Boarding.State.NONE, "state " + Boarding.state(m.pilot));
+            for (String l : m.log) if (l.contains("->")) s.note("OBS classes: " + l);
+        });
+
+        // ---- 3. on the way to the anchorage, colony N loses its airfield: the anchorage leaves the network
+        final boolean[] cut = new boolean[1], goneAtOnce = new boolean[1];
+        final int[] cutAt = new int[1];
+        s.step("classes: a one-way flight to the anchorage; on the way colony N's airfield is taken down", () -> {
+            m.log.clear();
+            m.clock = 0;
+            m.since = 0;
+            atAnchorage[0] = false;
+            s.monitor(() -> {
+                if (cut[0] || m.aircraft.phase != Phase.CRUISE) return;
+                final double[] r = Flights.readings(m.aircraft);
+                if (r == null || Math.hypot(r[0] - (m.pad.getX() + 0.5), r[2] - (m.pad.getZ() + 0.5)) < 30) return;
+                cut[0] = true;
+                cutAt[0] = m.clock;
+                s.note(String.format("FLT classes: colony N's small airfield is taken down at t=%d, the aircraft at %s", m.clock, at(r)));
+                smallN[0].destroy();
+                level.removeBlock(hutS, false);
+                goneAtOnce[0] = net.node(anchorage[0].pad()) == null;
+            });
+            final Flights.Answer sent = Flights.send(level, m.pad, anchorage[0].pad(), false, m.pilot);
+            s.soft("classes / the one-way flight to the anchorage is ordered", sent.ok(), sent.text().getString());
+        });
+        s.until("classes: back home after the anchorage left the network", () -> {}, () -> cut[0] && m.clock > cutAt[0] + 100 && m.aircraft.phase == Phase.PARKED, 16000);
+        s.step("classes: result of the flight whose destination left the network", () -> {
+            final double[] r = Flights.readings(m.aircraft);
+            s.soft("classes / when colony N's last airfield was taken down, its anchorage left the network at once (the same tick)", goneAtOnce[0], "at once " + goneAtOnce[0]);
+            s.soft("classes / without an airfield in colony N the anchorage stays off the network", net.node(anchorage[0].pad()) == null, String.valueOf(net.node(anchorage[0].pad())));
+            final WantLedger.Key keyN = WantLedger.Key.of(colonyN[0]);
+            ledger.set(keyN, Items.IRON_INGOT, 1);
+            final java.util.Set<WantLedger.Key> reach = exportOf(m.airfield).reachableForChecks();
+            ledger.set(keyN, Items.IRON_INGOT, 0);
+            s.soft("classes / export collection: with the anchorage gone the medium airfield no longer counts colony N", !reach.contains(keyN), String.valueOf(reach));
+            s.soft("classes / the aircraft did not land at the anchorage that left the network; it went back and stands at home", !atAnchorage[0] && m.pad.equals(m.aircraft.at),
+                    "at the anchorage " + atAnchorage[0] + ", at " + m.aircraft.at + ", " + at(r) + " | " + m.aircraft.note);
+            s.soft("classes / within 1.5 blocks of the middle of the home pad, and the pilot is alive and off", r != null && r[6] <= 1.5 && m.pilot.isAlive() && Boarding.state(m.pilot) == Boarding.State.NONE,
+                    r == null ? "?" : String.format("miss %.2f, state %s", r[6], Boarding.state(m.pilot)));
+            for (String l : m.log) if (l.contains("->")) s.note("OBS classes: " + l);
+            s.note("OBS classes: last note " + m.aircraft.note);
+            s.clearMonitors();
+        });
     }
 
     // ---- an aircraft is built on its pad ------------------------------------------------------------------------
@@ -564,8 +850,8 @@ final class FlightSuite {
             Fixture.stock(Fixture.rack(level, airfieldB[0], hutB.offset(-2, 0, 0)), Items.COAL, 20);
             level.setBlockAndUpdate(buoy, Airline.BUOYS.get(1).get().defaultBlockState());
             ledger.set(WantLedger.Key.of(a.colony), Items.COAL, 12);
-            s.soft("fetch / the two airfields are joined, and nothing lies on the home racks", routes.route(a.pad, airfieldB[0].pad()).size() >= 2 && com.asteain.airline.flight.Cargo.contents(a.airfield.getItemHandlerCap()).isEmpty(),
-                    "way " + routes.route(a.pad, airfieldB[0].pad()));
+            s.soft("fetch / the two airfields are joined, and nothing lies on the home racks", routes.route(a.pad, airfieldB[0].pad(), ShipClass.SMALL).size() >= 2 && com.asteain.airline.flight.Cargo.contents(a.airfield.getItemHandlerCap()).isEmpty(),
+                    "way " + routes.route(a.pad, airfieldB[0].pad(), ShipClass.SMALL));
             watch(s, a, "fetch");
             s.monitor(() -> {
                 if (a.aircraft.phase == Phase.CLIMB && a.aircraft.at == null && a.aircraft.origin != null && a.aircraft.origin.equals(a.pad) && !a.aircraft.returning)
@@ -629,7 +915,7 @@ final class FlightSuite {
             for (int y = WALL; y <= WALL + 2; y++) for (int z = -11; z <= -9; z++) wall[n++] = new BlockPos(40, y, z);
             for (BlockPos pos : wall) level.setBlockAndUpdate(pos, Blocks.STONE.defaultBlockState());
             s.soft("trip / the wall blocks the direct line at once", net.edge(a.pad, padB).state() == State.BLOCKED, String.valueOf(net.edge(a.pad, padB).state()));
-            s.soft("trip / the route goes over the buoy", net.route(a.pad, padB).equals(List.of(a.pad, buoy, padB)), String.valueOf(net.route(a.pad, padB)));
+            s.soft("trip / the route goes over the buoy", net.route(a.pad, padB, ShipClass.SMALL).equals(List.of(a.pad, buoy, padB)), String.valueOf(net.route(a.pad, padB, ShipClass.SMALL)));
             watch(s, a, "trip");
             Flights.Answer sent = Flights.send(level, a.pad, padB, true, a.pilot);
             s.soft("trip / the round trip is ordered", sent.ok(), sent.text().getString());
@@ -660,7 +946,7 @@ final class FlightSuite {
         });
         s.until("blocked: verified", () -> {}, () -> net.pending() == 0, 400);
         s.step("blocked: order a one-way flight over the direct line", () -> {
-            s.soft("blocked / the direct line is clear and is the route", net.edge(a.pad, padB).state() == State.CLEAR && net.route(a.pad, padB).size() == 2, net.edge(a.pad, padB).state() + " " + net.route(a.pad, padB));
+            s.soft("blocked / the direct line is clear and is the route", net.edge(a.pad, padB).state() == State.CLEAR && net.route(a.pad, padB, ShipClass.SMALL).size() == 2, net.edge(a.pad, padB).state() + " " + net.route(a.pad, padB, ShipClass.SMALL));
             a.log.clear();
             a.clock = 0;
             a.since = 0;
@@ -766,7 +1052,7 @@ final class FlightSuite {
             a.airfield.registerPad();
             b.airfield.registerPad();
             s.soft("traffic / at level 1 an airfield has one pad", a.airfield.pads().size() == 1 && net.node(a.airfield.guestPad()) == null, a.airfield.pads() + ", point at the place of the second pad: " + net.node(a.airfield.guestPad()));
-            s.soft("traffic / the two home pads are joined by a line", net.route(a.pad, b.pad).size() == 2, String.valueOf(net.route(a.pad, b.pad)));
+            s.soft("traffic / the two home pads are joined by a line", net.route(a.pad, b.pad, ShipClass.SMALL).size() == 2, String.valueOf(net.route(a.pad, b.pad, ShipClass.SMALL)));
             s.soft("traffic / a pad that is the home of an aircraft is not free for others", !Flights.padFree(level, a.pad) && !Flights.padFree(level, b.pad), "A free=" + Flights.padFree(level, a.pad) + ", B free=" + Flights.padFree(level, b.pad));
             Flights.Answer refused = Flights.send(level, a.pad, b.pad, false, a.pilot);
             s.soft("traffic / a flight to a level 1 airfield that has an aircraft of its own is refused: no pad is free there", !refused.ok() && refused.key().equals("flight.no_free_pad") && a.aircraft.phase == Phase.PARKED,
@@ -784,7 +1070,7 @@ final class FlightSuite {
                     a.airfield.pads().size() == 2 && node != null && node.kind() == RouteNetwork.Kind.AIRFIELD && node.heading() == a.airfield.padHeading() && guest[0].equals(a.pad.offset(17, 0, 0)),
                     a.airfield.pads() + " point " + node);
             s.soft("traffic / a way never leads through a landing pad: from A's own pad to B's pad for visitors it goes over the buoy",
-                    net.edge(a.pad, guest[1]) == null && net.route(a.pad, guest[1]).equals(List.of(a.pad, buoy, guest[1])), String.valueOf(net.route(a.pad, guest[1])));
+                    net.edge(a.pad, guest[1]) == null && net.route(a.pad, guest[1], ShipClass.SMALL).equals(List.of(a.pad, buoy, guest[1])), String.valueOf(net.route(a.pad, guest[1], ShipClass.SMALL)));
             s.soft("traffic / the pads for visitors are free, the home pads are not", Flights.padFree(level, guest[0]) && Flights.padFree(level, guest[1]) && !Flights.padFree(level, a.pad) && !Flights.padFree(level, b.pad),
                     "visitors' pads free: " + Flights.padFree(level, guest[0]) + ", " + Flights.padFree(level, guest[1]));
         });
@@ -877,7 +1163,7 @@ final class FlightSuite {
             for (int i = 0; i < 3; i++) guest[i] = upgrade(level, all[i]);
             level.setBlockAndUpdate(hub, Airline.BUOYS.get(1).get().defaultBlockState());
             for (int i = 0; i < 3; i++) {
-                List<BlockPos> way = net.route(all[i].pad, guest[(i + 1) % 3]);
+                List<BlockPos> way = net.route(all[i].pad, guest[(i + 1) % 3], ShipClass.SMALL);
                 s.note("OBS three: way of " + names[i] + " to the next airfield's pad for visitors: " + way + " (" + Math.round(net.length(way)) + " blocks)");
             }
         });
@@ -956,8 +1242,8 @@ final class FlightSuite {
         });
         s.until("detour: second citizen, lines verified", () -> {}, () -> (b.pilot = Fixture.entity(second[0])) != null && net.pending() == 0, 1200);
         s.step("detour: the first aircraft flies the direct line and is given up on it", () -> {
-            s.soft("detour / the direct line is clear and is the way; there is another way over the buoy", net.edge(a.pad, padB).state() == State.CLEAR && net.route(a.pad, padB).size() == 2
-                    && net.route(a.pad, padB, List.of(net.edge(a.pad, padB))).equals(List.of(a.pad, buoy, padB)), net.route(a.pad, padB) + " / " + net.route(a.pad, padB, List.of(net.edge(a.pad, padB))));
+            s.soft("detour / the direct line is clear and is the way; there is another way over the buoy", net.edge(a.pad, padB).state() == State.CLEAR && net.route(a.pad, padB, ShipClass.SMALL).size() == 2
+                    && net.route(a.pad, padB, ShipClass.SMALL, List.of(net.edge(a.pad, padB))).equals(List.of(a.pad, buoy, padB)), net.route(a.pad, padB, ShipClass.SMALL) + " / " + net.route(a.pad, padB, ShipClass.SMALL, List.of(net.edge(a.pad, padB))));
             s.monitor(() -> {
                 double[] r = Flights.readings(a.aircraft);
                 if (r != null && !done[0] && a.aircraft.phase == Phase.CRUISE && r[0] > 35) {
@@ -1027,7 +1313,7 @@ final class FlightSuite {
         s.step("direct: a level 2 pad on the next large map, and the flight", () -> {
             pad(level, padC, 270);
             net.setAirfield(padC, 270, 2);
-            List<BlockPos> way = net.route(a.pad, padC);
+            List<BlockPos> way = net.route(a.pad, padC, ShipClass.SMALL);
             Edge line = net.edge(a.pad, padC);
             s.soft("direct / two airfields on large maps that touch (level 1 and level 2) have a direct line, and it is the route",
                     com.asteain.airline.route.RouteRules.mapsApart(net.node(a.pad).home(), net.node(padC).home()) == 1 && line != null && way.equals(List.of(a.pad, padC)) && net.nodes().size() == 2,
@@ -1079,7 +1365,7 @@ final class FlightSuite {
             level.setBlockAndUpdate(b1, Airline.BUOYS.get(2).get().defaultBlockState());
             level.setBlockAndUpdate(b2, Airline.BUOYS.get(2).get().defaultBlockState());
             pad(level, padC, 270);
-            List<BlockPos> way = net.route(a.pad, padC);
+            List<BlockPos> way = net.route(a.pad, padC, ShipClass.SMALL);
             s.soft("far / the route is pad, buoy, buoy, pad", way.equals(List.of(a.pad, b1, b2, padC)), way + " length " + net.length(way));
             watch(s, a, "far");
             s.monitor(() -> {
@@ -1198,7 +1484,7 @@ final class FlightSuite {
             store[3].setBuildingLevel(1);
             store[1] = warehouse(level, colonyB[0], hutB.offset(-4, 0, 12), courier, 1);
             level.setBlockAndUpdate(buoy, Airline.BUOYS.get(1).get().defaultBlockState());
-            List<BlockPos> way = net.route(a.pad, airfieldB[0].pad());
+            List<BlockPos> way = net.route(a.pad, airfieldB[0].pad(), ShipClass.SMALL);
             s.soft("cargo / the two airfields are joined over a grade 2 buoy", way.size() == 3, way + " length " + net.length(way));
             s.soft("cargo / each airfield finds its import store (a MineColonies stash near the pad)", com.asteain.airline.flight.Cargo.importStore(level, a.airfield) != null
                     && com.asteain.airline.flight.Cargo.importStore(level, airfieldB[0]) != null, "A " + com.asteain.airline.flight.Cargo.importStore(level, a.airfield) + ", B " + com.asteain.airline.flight.Cargo.importStore(level, airfieldB[0]));
@@ -1588,7 +1874,7 @@ final class FlightSuite {
             Fixture.stock(equip(level, a), Items.IRON_INGOT, 64);
             ledger.set(WantLedger.Key.of(b.colony), Items.IRON_INGOT, 64);
             n[0] = iron(a.airfield.getItemHandlerCap()) + held(a) + lying(level, Items.IRON_INGOT);
-            s.soft("ground / the two pads are joined by one line", RouteNetwork.get(level).route(a.pad, b.pad).size() == 2, String.valueOf(RouteNetwork.get(level).route(a.pad, b.pad)));
+            s.soft("ground / the two pads are joined by one line", RouteNetwork.get(level).route(a.pad, b.pad, ShipClass.SMALL).size() == 2, String.valueOf(RouteNetwork.get(level).route(a.pad, b.pad, ShipClass.SMALL)));
             watch(s, a, "ground");
         });
 
@@ -1911,6 +2197,13 @@ final class FlightSuite {
         level.getDataStorage().computeIfAbsent(net.minecraft.world.level.ForcedChunksSavedData.factory(), "chunks").setDirty();
     }
 
+    /** The colony's (first) airfield, found among its buildings. */
+    private static BuildingAirfield airfieldOf(IColony colony) {
+        for (final com.minecolonies.api.colony.buildings.IBuilding building : colony.getServerBuildingManager().getBuildings().values())
+            if (building instanceof BuildingAirfield airfield && airfield.facility().airfield()) return airfield;
+        return null;
+    }
+
     /** After a restart: the colonies, airfields, B's stash, the pilot and the aircraft are found again in the saved world. */
     private static void findAgain(Script s, ServerLevel level, Field a, Port b, java.util.Map<String, String> before, String name) {
         int[] waited = new int[1];
@@ -1918,8 +2211,8 @@ final class FlightSuite {
             a.colony = IColonyManager.getInstance().getColonyByDimension(Integer.parseInt(before.get("colonyA")), level.dimension());
             b.colony = IColonyManager.getInstance().getColonyByDimension(Integer.parseInt(before.get("colonyB")), level.dimension());
             s.check(a.colony != null && b.colony != null, "both colonies are there after the restart");
-            a.airfield = com.asteain.airline.flight.Cargo.airfieldOf(level, a.colony.getID());
-            b.airfield = com.asteain.airline.flight.Cargo.airfieldOf(level, b.colony.getID());
+            a.airfield = airfieldOf(a.colony);
+            b.airfield = airfieldOf(b.colony);
             s.check(a.airfield != null && b.airfield != null, "both airfields are there after the restart");
             a.pad = a.airfield.pad();
             b.pad = b.airfield.pad();

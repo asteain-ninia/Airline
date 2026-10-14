@@ -273,6 +273,11 @@ final class Shipyard {
      */
     static String request(ServerLevel level, BuildingAirfield airfield, AircraftType type, @Nullable ServerPlayer player) {
         final BlockPos pad = airfield.pad(), at = pad.above();
+        if (!airfield.facility().builds(type.shipClass)) {
+            // A small airfield builds small aircraft only, and so on; an anchorage builds none.
+            say(player, "class_not_here", Component.translatable(type.title()), Component.translatable("ship_class." + Airline.MOD_ID + "." + type.shipClass.key()));
+            return "class_not_here";
+        }
         if (level.getBlockEntity(at) instanceof AircraftBlockEntity site && pad.equals(site.yard)) {
             if (type.name.equals(site.type)) {
                 say(player, "design", Component.translatable(type.title()), missing(level, at, type, turn(airfield.padHeading())));

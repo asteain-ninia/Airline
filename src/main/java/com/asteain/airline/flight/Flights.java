@@ -131,6 +131,34 @@ public final class Flights {
         return Shipyard.turn(heading);
     }
 
+    /**
+     * For the checks: where an aircraft of class {@code ship} coming from the point {@code from} would land when sent to
+     * the pad {@code to}: "pad" when that pad (or another of its airfield) takes it, else the key of why not
+     * ("flight.no_berth", "flight.no_route", ...).
+     */
+    public static String landingFor(ServerLevel level, BlockPos from, BlockPos to, com.asteain.airline.route.ShipClass ship) {
+        if (!available()) return "off";
+        final FlightController.Landing landing = FlightController.landing(level, com.asteain.airline.route.RouteNetwork.get(level), from, to, null, true, ship);
+        return landing.pad() != null ? "pad" : landing.why();
+    }
+
+    /**
+     * For the checks: where the dispatcher would send this aircraft (standing at home) now, the pad, or null; what it
+     * found it could not do is put into {@code barred} (as it is written to the log).
+     */
+    @Nullable
+    public static BlockPos cargoChoice(ServerLevel level, AircraftBlockEntity aircraft, List<String> barred) {
+        final FlightController.Runtime rt = available() ? FlightController.runtime(aircraft) : null;
+        if (rt == null) return null;
+        final Cargo.Order order = Cargo.consider(level, aircraft, com.asteain.airline.route.RouteNetwork.get(level), rt.craft.id(), barred);
+        return order == null ? null : order.pad();
+    }
+
+    /** For the checks: the size class of a design. */
+    public static com.asteain.airline.route.ShipClass classOf(String design) {
+        return AircraftType.of(design).shipClass;
+    }
+
     /** For the checks: the key of what the last request from the airfield's window ({@link #requestAircraft}, {@link #stopAircraft}) said. */
     public static String lastBuilding = "";
 
@@ -213,6 +241,18 @@ public final class Flights {
         return Fuel.minutes(aircraft);
     }
 
+    /**
+     * The size class of the aircraft whose home is this airfield's pad; while it has none (or the flying part is not
+     * there), the largest class the airfield builds.
+     */
+    public static com.asteain.airline.route.ShipClass ownClass(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield) {
+        if (available()) {
+            for (final AircraftBlockEntity aircraft : FlightController.loaded(level)) if (airfield.pad().equals(aircraft.home)) return AircraftType.of(aircraft.type).shipClass;
+        }
+        final com.asteain.airline.route.ShipClass largest = airfield.facility().largest();
+        return airfield.facility().builds(largest) ? largest : com.asteain.airline.route.ShipClass.SMALL;
+    }
+
     /** Everything the aircraft has to burn (ticks of one engine): its fuel store and what was taken out of it. */
     public static long fuelTicks(AircraftBlockEntity aircraft) {
         return Fuel.total(aircraft);
@@ -255,10 +295,13 @@ public final class Flights {
     public record Design(String name, String title, int blocks, double topSpeed, long tankMinutes) {}
 
     /** The designs that can be built, in the order they are offered (the first is the one built when none is chosen). None without the flying part. */
-    public static List<Design> designCards() {
+    public static List<Design> designCards(com.asteain.airline.colony.BuildingAirfield airfield) {
         if (!available()) return List.of();
         final List<Design> all = new java.util.ArrayList<>();
-        for (final AircraftType type : AircraftType.ALL.values()) all.add(new Design(type.name, type.title(), type.parts.size() + 1, type.topSpeed, Fuel.minutes(type, Fuel.capacity())));
+        for (final AircraftType type : AircraftType.ALL.values()) {
+            // Only the classes this airfield builds (a small airfield: small aircraft).
+            if (airfield.facility().builds(type.shipClass)) all.add(new Design(type.name, type.title(), type.parts.size() + 1, type.topSpeed, Fuel.minutes(type, Fuel.capacity())));
+        }
         return all;
     }
 

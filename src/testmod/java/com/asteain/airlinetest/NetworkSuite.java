@@ -3,6 +3,7 @@ package com.asteain.airlinetest;
 import com.asteain.airline.Airline;
 import com.asteain.airline.route.BuoyBlock;
 import com.asteain.airline.route.RouteNetwork;
+import com.asteain.airline.route.ShipClass;
 import com.asteain.airline.route.RouteNetwork.Edge;
 import com.asteain.airline.route.RouteNetwork.State;
 import com.asteain.airline.route.RouteRules;
@@ -157,7 +158,7 @@ final class NetworkSuite {
             boolean middleLoaded = level.getChunkSource().getChunkNow(150 >> 4, 0) != null;      // forced chunks keep their neighbours two chunks out loaded, so look beyond those
             s.soft("A / a line through chunks that are not loaded stays not verified", edge.state() == State.UNVERIFIED && edge.hasUnseenParts(), describe(edge));
             s.soft("A / the scan did not load the chunks in between", !middleLoaded, "chunk at x=150 loaded=" + middleLoaded);
-            s.soft("A / a route may use a line that is not verified", net.route(a, far).equals(List.of(a, b, far)), String.valueOf(net.route(a, far)));
+            s.soft("A / a route may use a line that is not verified", net.route(a, far, ShipClass.SMALL).equals(List.of(a, b, far)), String.valueOf(net.route(a, far, ShipClass.SMALL)));
             net.confirmClear(edge);
             s.soft("A / flying it through (reported by an aircraft) makes it clear", edge.state() == State.CLEAR && !edge.hasUnseenParts(), describe(edge));
         });
@@ -192,22 +193,22 @@ final class NetworkSuite {
         });
         s.until("B: all verified", () -> {}, () -> net.pending() == 0, 600);
         s.step("B: the short way, then the long way", () -> {
-            List<BlockPos> way = net.route(start, end);
+            List<BlockPos> way = net.route(start, end, ShipClass.SMALL);
             s.soft("B / all lines of the second scene are clear", net.edgesAt(mid).stream().allMatch(e -> e.state() == State.CLEAR) && net.edge(side1, side2).state() == State.CLEAR,
                     describe(net.edge(start, mid)) + " / " + describe(net.edge(side1, side2)));
             s.soft("B / the route is the short way over the middle buoy", way.equals(List.of(start, mid, end)), way + " length " + net.length(way));
             level.setBlockAndUpdate(onShort, Blocks.STONE.defaultBlockState());
-            List<BlockPos> second = net.route(start, end);
+            List<BlockPos> second = net.route(start, end, ShipClass.SMALL);
             s.soft("B / with the first line blocked the route goes round, without the blocked line",
                     second.size() >= 4 && second.get(0).equals(start) && second.get(second.size() - 1).equals(end) && second.get(1).equals(side1) && net.length(second) > net.length(way),
                     second + " length " + net.length(second));
             level.setBlockAndUpdate(onSecond, Blocks.STONE.defaultBlockState());
-            List<BlockPos> third = net.route(start, end);
+            List<BlockPos> third = net.route(start, end, ShipClass.SMALL);
             s.soft("B / with both short lines blocked the route is the long way round", third.equals(List.of(start, side1, side2, end)), third + " length " + net.length(third));
             s.note(String.format("OBS routes: short %.1f, round the first block %.1f, long %.1f", net.length(way), net.length(second), net.length(third)));
             // every way shut
             level.setBlockAndUpdate(new BlockPos(15, Y + 8, z0 + 31), Blocks.STONE.defaultBlockState());
-            s.soft("B / with every line out of the start blocked there is no route", net.route(start, end).isEmpty(), String.valueOf(net.route(start, end)));
+            s.soft("B / with every line out of the start blocked there is no route", net.route(start, end, ShipClass.SMALL).isEmpty(), String.valueOf(net.route(start, end, ShipClass.SMALL)));
         });
 
         // ---- commands -----------------------------------------------------------------------------------------
@@ -258,7 +259,7 @@ final class NetworkSuite {
         });
         s.until("B: everything verified again", () -> {}, () -> net.pending() == 0, 800);
         s.step("B: back to the short way", () -> {
-            List<BlockPos> way = net.route(start, end);
+            List<BlockPos> way = net.route(start, end, ShipClass.SMALL);
             s.soft("B / with the stones gone and the lines looked at again, the short way is back", way.equals(List.of(start, mid, end)), String.valueOf(way));
         });
 
@@ -319,7 +320,7 @@ final class NetworkSuite {
                     describe(net.edge(padA, between)));
             level.setBlockAndUpdate(inShaft, Blocks.STONE.defaultBlockState());
             s.soft("D / a block in the shaft over the pad (6 up, well below the lines) blocks the pad's line at once", net.edge(padA, between).state() == State.BLOCKED && inShaft.equals(net.edge(padA, between).blockedAt())
-                    && net.route(padA, padB).isEmpty(), describe(net.edge(padA, between)) + ", way " + net.route(padA, padB));
+                    && net.route(padA, padB, ShipClass.SMALL).isEmpty(), describe(net.edge(padA, between)) + ", way " + net.route(padA, padB, ShipClass.SMALL));
         });
         s.until("D: the link is taken back", () -> {}, () -> net.pending() == 0 && !net.linked(padA, padB), 200);
         s.step("D: blocked shaft, described; cleared again", () -> {
@@ -345,7 +346,7 @@ final class NetworkSuite {
             level.setBlockAndUpdate(inShaft, Blocks.AIR.defaultBlockState());
         });
         s.until("D: clear and linked again", () -> {}, () -> net.pending() == 0 && net.linked(padA, padB), 400);
-        s.step("D: the end", () -> s.soft("D / in the end the way is clear and the pads are linked again", net.route(padA, padB).size() == 3 && net.linked(padA, padB), String.valueOf(net.route(padA, padB))));
+        s.step("D: the end", () -> s.soft("D / in the end the way is clear and the pads are linked again", net.route(padA, padB, ShipClass.SMALL).size() == 3 && net.linked(padA, padB), String.valueOf(net.route(padA, padB, ShipClass.SMALL))));
 
         // ---- E: a way never leads through a landing pad (the space over a pad belongs to the aircraft that go up and down there) ----
         BlockPos padC = new BlockPos(220, Y, z2);
@@ -353,9 +354,9 @@ final class NetworkSuite {
             net.setAirfield(padC, 270, 1);
             s.soft("E / the third pad has one line, to the second pad", net.edgesAt(padC).size() == 1 && net.edge(padB, padC) != null, net.edgesAt(padC).size() + " lines");
             s.soft("E / from the second pad there is a way to the third; from the first there is none, because it would lead through the second",
-                    net.route(padB, padC).equals(List.of(padB, padC)) && net.route(padA, padC).isEmpty(), net.route(padB, padC) + " / " + net.route(padA, padC));
+                    net.route(padB, padC, ShipClass.SMALL).equals(List.of(padB, padC)) && net.route(padA, padC, ShipClass.SMALL).isEmpty(), net.route(padB, padC, ShipClass.SMALL) + " / " + net.route(padA, padC, ShipClass.SMALL));
             net.remove(padC);
-            s.soft("E / with the third pad gone the first two are still joined", net.route(padA, padB).size() == 3, String.valueOf(net.route(padA, padB)));
+            s.soft("E / with the third pad gone the first two are still joined", net.route(padA, padB, ShipClass.SMALL).size() == 3, String.valueOf(net.route(padA, padB, ShipClass.SMALL)));
         });
 
         // ---- F: no line may come low over a landing pad (an aircraft may stand there) ----
@@ -388,8 +389,8 @@ final class NetworkSuite {
         s.until("F: the high line is looked at", () -> {}, () -> net.pending() == 0, 600);
         s.step("F: a line high over a pad", () -> {
             Edge high = net.edge(highWest, highEast);
-            s.soft("F / a line that passes as high over the pad as the pad's own lines begin is clear", high != null && high.barredBy() == null && high.state() == State.CLEAR && net.route(highWest, highEast).equals(List.of(highWest, highEast)),
-                    describe(high) + ", way " + net.route(highWest, highEast));
+            s.soft("F / a line that passes as high over the pad as the pad's own lines begin is clear", high != null && high.barredBy() == null && high.state() == State.CLEAR && net.route(highWest, highEast, ShipClass.SMALL).equals(List.of(highWest, highEast)),
+                    describe(high) + ", way " + net.route(highWest, highEast, ShipClass.SMALL));
             // When the pad goes, a line it barred is looked at like any other.
             level.setBlockAndUpdate(highWest, Blocks.AIR.defaultBlockState());
             level.setBlockAndUpdate(highEast, Blocks.AIR.defaultBlockState());
@@ -424,8 +425,8 @@ final class NetworkSuite {
         });
         s.until("G: verified", () -> {}, () -> net.pending() == 0 && net.linked(g1, g2), 900);
         s.step("G: a direct flight; levels go up", () -> {
-            s.soft("G / the direct line is clear, it is the way, and the two airfields count as linked with no buoy anywhere", direct[0].state() == State.CLEAR && net.route(g1, g2).equals(List.of(g1, g2)) && net.linked(g1, g2),
-                    describe(direct[0]) + ", way " + net.route(g1, g2));
+            s.soft("G / the direct line is clear, it is the way, and the two airfields count as linked with no buoy anywhere", direct[0].state() == State.CLEAR && net.route(g1, g2, ShipClass.SMALL).equals(List.of(g1, g2)) && net.linked(g1, g2),
+                    describe(direct[0]) + ", way " + net.route(g1, g2, ShipClass.SMALL));
             net.setAirfield(g1, 270, 3);
             s.soft("G / when an airfield's level goes up, a line that still connects stays the same line, with what is known about it", net.edge(g1, g2) == direct[0] && direct[0].state() == State.CLEAR && net.node(g1).tier() == 3,
                     describe(net.edge(g1, g2)));
@@ -438,7 +439,7 @@ final class NetworkSuite {
         s.until("G: the new line is verified", () -> {}, () -> net.pending() == 0 && net.linked(g2, g3), 900);
         s.step("G: no way through an airfield; a level goes down; the longest line", () -> {
             s.soft("G / a way still never leads through an airfield: the second pad has lines to both others, but from the first to the third there is no way",
-                    net.route(g2, g3).equals(List.of(g2, g3)) && net.route(g1, g2).size() == 2 && net.route(g1, g3).isEmpty() && !net.linked(g1, g3), net.route(g2, g3) + " / " + net.route(g1, g3));
+                    net.route(g2, g3, ShipClass.SMALL).equals(List.of(g2, g3)) && net.route(g1, g2, ShipClass.SMALL).size() == 2 && net.route(g1, g3, ShipClass.SMALL).isEmpty() && !net.linked(g1, g3), net.route(g2, g3, ShipClass.SMALL) + " / " + net.route(g1, g3, ShipClass.SMALL));
             net.setAirfield(g2, 270, 1);
             s.soft("G / when the level goes down, the line that does not reach any more is gone and the other one stays", net.edge(g2, g3) == null && net.edge(g1, g2) == direct[0] && direct[0].state() == State.CLEAR,
                     net.edgesAt(g2).size() + " lines at the second pad, " + net.edgesAt(g3).size() + " at the third");
@@ -493,7 +494,7 @@ final class NetworkSuite {
         });
         s.until("H: verified", () -> {}, () -> net.pending() == 0 && net.linked(h1, h2), 900);
         s.step("H: levels go up and down", () -> {
-            s.soft("H / the line on the same large map is clear, it is the way, and the two airfields count as linked", sameMap[0].state() == State.CLEAR && net.route(h1, h2).equals(List.of(h1, h2)) && net.linked(h1, h2), describe(sameMap[0]));
+            s.soft("H / the line on the same large map is clear, it is the way, and the two airfields count as linked", sameMap[0].state() == State.CLEAR && net.route(h1, h2, ShipClass.SMALL).equals(List.of(h1, h2)) && net.linked(h1, h2), describe(sameMap[0]));
             net.setAirfield(h1, 270, 2);
             s.soft("H / at level 2 an airfield reaches the airfields on the large maps around its own, whatever their level, but not the map after that",
                     net.edge(h1, h3) != null && net.edge(h1, h4) == null && net.edge(h1, h2) == sameMap[0], describe(net.edge(h1, h3)) + " / " + describe(net.edge(h1, h4)));
@@ -534,7 +535,7 @@ final class NetworkSuite {
             // (Looked at square by square, as lines were before 0.11.0, this line would take 2700 ticks a pass: 11 million columns at 4000 a tick.
             // What is waited for here is the chunks of the short line, which were asked for a moment ago.)
             s.soft("H / the long line is looked at within 10 seconds, stays 'not verified' with unseen parts, can be flown, and the short line beside it is verified meanwhile",
-                    took <= 200 && line.state() == State.UNVERIFIED && line.hasUnseenParts() && net.route(far1, far2).equals(List.of(far1, far2)) && shortLine != null && shortLine.state() == State.CLEAR,
+                    took <= 200 && line.state() == State.UNVERIFIED && line.hasUnseenParts() && net.route(far1, far2, ShipClass.SMALL).equals(List.of(far1, far2)) && shortLine != null && shortLine.state() == State.CLEAR,
                     took + " ticks, " + describe(line) + " / short line " + describe(shortLine));
             net.remove(far1);
             net.remove(far2);

@@ -278,7 +278,9 @@ public final class AirlineCommand {
     private static int netRoute(CommandContext<CommandSourceStack> ctx) {
         final BlockPos from = BlockPosArgument.getBlockPos(ctx, FROM), to = BlockPosArgument.getBlockPos(ctx, TO);
         final RouteNetwork network = RouteNetwork.get(ctx.getSource().getLevel());
-        final List<BlockPos> way = network.route(from, to);
+        final RouteNetwork.Node a = network.node(from), b = network.node(to);
+        final com.asteain.airline.route.ShipClass both = a == null || b == null ? null : RouteNetwork.common(a, b);
+        final List<BlockPos> way = network.route(from, to, both == null ? com.asteain.airline.route.ShipClass.SMALL : both);
         if (way.isEmpty()) {
             ctx.getSource().sendFailure(Component.translatable(KEY + "net.no_route", at(from), at(to)));
             return 0;

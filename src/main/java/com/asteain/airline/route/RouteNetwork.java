@@ -53,12 +53,37 @@ public final class RouteNetwork extends SavedData {
      * a multiple of 90) an aircraft has to face when it rests on the pad. {@code tier} is the grade of a buoy (1 to 3), or
      * the building level of the airfield a landing pad belongs to (1 to 5); either decides how far the point reaches.
      * {@code home} is where the airfield of a landing pad stands (its hut block): the place that says which large map the
-     * airfield is on. For a buoy it is the buoy itself.
+     * airfield is on. For a buoy it is the buoy itself. {@code facility} is the kind of place a landing pad belongs to
+     * (small, medium or large airfield, or anchorage; null for a buoy): which classes of aircraft may berth there.
      */
-    public record Node(BlockPos pos, Kind kind, int tier, int heading, BlockPos home) {
-        /** A point that stands where it is: a buoy, or a landing pad whose airfield is not told (older saves; tests). */
+    public record Node(BlockPos pos, Kind kind, int tier, int heading, BlockPos home, @Nullable Facility facility) {
+        /** A point that stands where it is: a buoy, or a landing pad of a small airfield whose hut is not told (older saves; tests). */
         public Node(BlockPos pos, Kind kind, int tier, int heading) {
             this(pos, kind, tier, heading, pos);
+        }
+
+        public Node(BlockPos pos, Kind kind, int tier, int heading, BlockPos home) {
+            this(pos, kind, tier, heading, home, kind == Kind.AIRFIELD ? Facility.SMALL_AIRFIELD : null);
+        }
+
+        /** The grade of a buoy (1 to 3). */
+        public int grade() {
+            return tier;
+        }
+
+        /** The building level of the airfield (or anchorage) a landing pad belongs to (1 to 5). */
+        public int airfieldLevel() {
+            return tier;
+        }
+
+        /** Whether an aircraft of this class may berth at this point (a landing pad whose facility takes the class). */
+        public boolean berths(ShipClass ship) {
+            return kind == Kind.AIRFIELD && facility != null && facility.berths(ship);
+        }
+
+        /** The largest class this point is made for: a pad, its facility's; a buoy, any. */
+        public ShipClass largest() {
+            return kind == Kind.AIRFIELD && facility != null ? facility.largest() : ShipClass.LARGE;
         }
 
         public Vec3 waypoint() {
@@ -89,6 +114,12 @@ public final class RouteNetwork extends SavedData {
          * Such a line counts as blocked by that pad whatever a scan finds. Not saved: worked out from the points.
          */
         @Nullable private BlockPos barred;
+        /**
+         * The largest class of aircraft this line is for: the smaller of what its two ends are made for (a line to a small
+         * airfield's pad is only ever flown by small aircraft; between buoys, any). A line that is not blocked is open to
+         * the classes up to this one. Not saved: worked out from the points.
+         */
+        private ShipClass serves = ShipClass.SMALL;
 
         private Edge(BlockPos a, BlockPos b, Kind kindA, Kind kindB) {
             this.a = a;
@@ -112,6 +143,9 @@ public final class RouteNetwork extends SavedData {
         }
 
         public State state() { return state; }
+        public ShipClass serves() { return serves; }
+        /** Whether an aircraft of this class may fly this line (not blocked, and made for that class). */
+        public boolean opens(ShipClass ship) { return state != State.BLOCKED && serves.atLeast(ship); }
         @Nullable public BlockPos blockedAt() { return blockedAt; }
         public boolean hasUnseenParts() { return gaps; }
         @Nullable public BlockPos barredBy() { return barred; }
@@ -226,10 +260,16 @@ public final class RouteNetwork extends SavedData {
         return edges.get(Pair.of(a, b));
     }
 
-    /** Where the line passes over a point of the network (for a place that is no point: as over a buoy). */
+    /**
+     * What the points that left the network were (not saved): an aircraft that was on its way to a landing pad when the
+     * pad left still flies over it at the height of a pad's lines, and turns back there.
+     */
+    private final Map<BlockPos, Kind> left = new HashMap<>();
+
+    /** Where the line passes over a point of the network (for a place that is no point: as over what it was, else a buoy). */
     public Vec3 waypoint(BlockPos pos) {
         final Node node = nodes.get(pos);
-        return RouteRules.waypoint(pos, node == null ? Kind.BUOY : node.kind());
+        return RouteRules.waypoint(pos, node == null ? left.getOrDefault(pos, Kind.BUOY) : node.kind());
     }
 
     public List<Edge> edgesAt(BlockPos pos) {
@@ -257,17 +297,30 @@ public final class RouteNetwork extends SavedData {
 
     /** ... and {@code hut} the hut block of the airfield: where the airfield stands, for the large maps. */
     public void setAirfield(BlockPos pad, int heading, int level, BlockPos hut) {
-        put(new Node(pad.immutable(), Kind.AIRFIELD, Math.max(1, Math.min(RouteRules.AIRFIELD_LEVELS, level)), Math.floorMod(heading, 360), hut.immutable()));
+        setAirfield(pad, heading, level, hut, Facility.SMALL_AIRFIELD);
+    }
+
+    /** ... and {@code facility} the kind of place the pad belongs to (which classes of aircraft may berth there). */
+    public void setAirfield(BlockPos pad, int heading, int level, BlockPos hut, Facility facility) {
+        put(new Node(pad.immutable(), Kind.AIRFIELD, Math.max(1, Math.min(RouteRules.AIRFIELD_LEVELS, level)), Math.floorMod(heading, 360), hut.immutable(), facility));
+    }
+
+    /** What a line's two ends are made for decides the largest class it serves ({@link Edge#serves}). */
+    private void serve(Edge edge) {
+        final Node a = nodes.get(edge.a), b = nodes.get(edge.b);
+        edge.serves = a == null || b == null ? ShipClass.SMALL : ShipClass.smaller(a.largest(), b.largest());
     }
 
     private void put(Node node) {
         final Node before = nodes.get(node.pos());
         if (node.equals(before)) return;
+        left.remove(node.pos());
         if (before != null && before.kind() == node.kind() && before.heading() == node.heading()) {
             // Only the reach is different (an airfield was built up or taken down a level): the lines that still connect
             // stay as they are, with what is known about them; lines that do not reach any more go, new ones come.
             nodes.put(node.pos(), node);
             linksDue = true;
+            for (final Edge edge : around.getOrDefault(node.pos(), List.of())) serve(edge);
             for (final Edge edge : new ArrayList<>(around.getOrDefault(node.pos(), List.of()))) {
                 final Node other = nodes.get(edge.other(node.pos()));
                 if (other == null || !RouteRules.connects(node, other)) unlink(edge);
@@ -291,6 +344,7 @@ public final class RouteNetwork extends SavedData {
     public boolean remove(BlockPos pos) {
         final Node gone = nodes.remove(pos);
         if (gone == null) return false;
+        left.put(pos.immutable(), gone.kind());
         linksDue = true;
         watchers.remove(pos);
         for (final Edge edge : new ArrayList<>(around.getOrDefault(pos, List.of()))) unlink(edge);
@@ -331,6 +385,7 @@ public final class RouteNetwork extends SavedData {
         Edge edge = edges.get(pair);
         if (edge != null) return edge;
         edge = new Edge(pair.a(), pair.b(), nodes.get(pair.a()).kind(), nodes.get(pair.b()).kind());
+        serve(edge);
         edges.put(pair, edge);
         around.computeIfAbsent(edge.a, p -> new ArrayList<>()).add(edge);
         around.computeIfAbsent(edge.b, p -> new ArrayList<>()).add(edge);
@@ -430,6 +485,7 @@ public final class RouteNetwork extends SavedData {
             }
             index(edge, false);
             edge.rebuild(a.kind(), b.kind());
+            serve(edge);
             index(edge, true);
             edge.version++;
             edge.gaps = false;
@@ -610,7 +666,7 @@ public final class RouteNetwork extends SavedData {
         final StringBuilder fields = new StringBuilder();
         for (final Node other : nodes.values()) {
             if (other.kind() != Kind.AIRFIELD || other.pos().equals(point)) continue;
-            final List<BlockPos> way = route(point, other.pos());
+            final List<BlockPos> way = route(point, other.pos(), other.largest());
             if (way.size() < 2) continue;
             fields.append(fields.isEmpty() ? "" : ", ").append(AirLinks.name(level, other.pos())).append(" (").append(Math.round(length(way))).append(")");
         }
@@ -623,6 +679,16 @@ public final class RouteNetwork extends SavedData {
         return linked.contains(Pair.of(a, b));
     }
 
+    /** The largest class of aircraft that may berth at both these pads; null when there is none (a small and a large airfield). */
+    @Nullable
+    public static ShipClass common(Node a, Node b) {
+        for (int i = ShipClass.values().length - 1; i >= 0; i--) {
+            final ShipClass ship = ShipClass.values()[i];
+            if (a.berths(ship) && b.berths(ship)) return ship;
+        }
+        return null;
+    }
+
     /** Looks which landing pads have a way between them now, and tells the colonies what changed since the last look. */
     private void tellLinks(ServerLevel level) {
         final List<Node> fields = new ArrayList<>();
@@ -631,7 +697,9 @@ public final class RouteNetwork extends SavedData {
         final Map<Pair, Double> lengths = new HashMap<>();
         for (int i = 0; i < fields.size(); i++) {
             for (int j = i + 1; j < fields.size(); j++) {
-                final List<BlockPos> way = route(fields.get(i).pos(), fields.get(j).pos());
+                final ShipClass both = common(fields.get(i), fields.get(j));
+                if (both == null) continue;
+                final List<BlockPos> way = route(fields.get(i).pos(), fields.get(j).pos(), both);
                 if (way.size() < 2) continue;
                 final Pair pair = Pair.of(fields.get(i).pos(), fields.get(j).pos());
                 now.add(pair);
@@ -743,12 +811,16 @@ public final class RouteNetwork extends SavedData {
      * {@code from} and ends with {@code to}; it is empty when there is no way. A way never leads through a landing pad:
      * the space over a pad belongs to the aircraft that go up and down there (proposal of the assistant).
      */
-    public List<BlockPos> route(BlockPos from, BlockPos to) {
-        return route(from, to, List.of());
+    public List<BlockPos> route(BlockPos from, BlockPos to, ShipClass ship) {
+        return route(from, to, ship, List.of());
     }
 
-    /** The same, leaving out some lines (those an aircraft found another ship on: they are not blocked for anybody else). */
-    public List<BlockPos> route(BlockPos from, BlockPos to, Collection<Edge> without) {
+    /**
+     * The same, leaving out some lines (those an aircraft found another ship on: they are not blocked for anybody else).
+     * Only lines that this class may fly are used ({@link Edge#opens}); whether it may berth at the far end is the
+     * caller's question.
+     */
+    public List<BlockPos> route(BlockPos from, BlockPos to, ShipClass ship, Collection<Edge> without) {
         if (!nodes.containsKey(from) || !nodes.containsKey(to)) return List.of();
         final Map<BlockPos, Double> best = new HashMap<>();
         final Map<BlockPos, BlockPos> cameFrom = new HashMap<>();
@@ -762,7 +834,7 @@ public final class RouteNetwork extends SavedData {
             if (here.pos().equals(to)) break;
             if (!here.pos().equals(from) && nodes.get(here.pos()).kind() == Kind.AIRFIELD) continue;
             for (final Edge edge : around.getOrDefault(here.pos(), List.of())) {
-                if (edge.state == State.BLOCKED || without.contains(edge)) continue;
+                if (!edge.opens(ship) || without.contains(edge)) continue;
                 final BlockPos next = edge.other(here.pos());
                 final double distance = here.distance() + edge.length();
                 if (distance < best.getOrDefault(next, Double.MAX_VALUE)) {
@@ -801,6 +873,7 @@ public final class RouteNetwork extends SavedData {
             point.putInt("tier", node.tier());
             point.putInt("heading", node.heading());
             if (!node.home().equals(node.pos())) point.putLong("home", node.home().asLong());
+            if (node.facility() != null && node.facility() != Facility.SMALL_AIRFIELD) point.putString("facility", node.facility().name());
             points.add(point);
         }
         tag.put("points", points);
@@ -835,7 +908,9 @@ public final class RouteNetwork extends SavedData {
                 final BlockPos pos = BlockPos.of(point.getLong("pos"));
                 // (A save of before 0.11.1 does not say where the airfield stands: the pad itself, until the airfield puts its pads on again.)
                 final BlockPos home = point.contains("home") ? BlockPos.of(point.getLong("home")) : pos;
-                network.nodes.put(pos, new Node(pos, Kind.valueOf(point.getString("kind")), point.getInt("tier"), point.getInt("heading"), home));
+                final Kind kind = Kind.valueOf(point.getString("kind"));
+                network.nodes.put(pos, new Node(pos, kind, point.getInt("tier"), point.getInt("heading"), home,
+                        kind == Kind.AIRFIELD ? Facility.of(point.getString("facility")) : null));
             } catch (IllegalArgumentException unknownKind) {
                 // A kind this version does not know: the point is left out.
             }

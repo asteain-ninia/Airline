@@ -1,6 +1,7 @@
 package com.asteain.airline.colony;
 
 import com.asteain.airline.Airline;
+import com.asteain.airline.route.Facility;
 import com.asteain.airline.route.RouteNetwork;
 import com.asteain.airline.route.RouteRules;
 import com.ldtteam.structurize.storage.StructurePacks;
@@ -14,7 +15,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The airfield. Its racks are the export store: goods that other colonies want are collected here from the warehouse by couriers.
+ * An airfield (small, medium or large) or an anchorage: what kind is its {@link Facility} (the user's ruling of
+ * 2026-10-14). They are one building class; the kind decides the size and place of the pads, which classes of aircraft
+ * may berth and are built there, and whether it is an airfield at all (an anchorage has no pilot, no aircraft of its
+ * own and builds none, and is only on the air network while its colony has an airfield). Its racks are the export store: goods that other colonies want are collected here from the warehouse by couriers.
  * The import store is the stash that comes with its blueprint.
  *
  * <p>Level 1 has one landing pad: the home of the airfield's own aircraft. From level 2 on there is a second pad beside
@@ -22,14 +26,26 @@ import java.util.List;
  * add racks; the plot and the two pads stay as they are (tools/make_blueprint.py).</p>
  */
 public class BuildingAirfield extends AbstractBuilding {
+    private final Facility facility;
+
     public BuildingAirfield(IColony colony, BlockPos pos) {
+        this(colony, pos, Facility.SMALL_AIRFIELD);
+    }
+
+    public BuildingAirfield(IColony colony, BlockPos pos, Facility facility) {
         super(colony, pos);
+        this.facility = facility;
+    }
+
+    /** What kind of place this is: small, medium or large airfield, or anchorage. */
+    public Facility facility() {
+        return facility;
     }
 
     @NotNull
     @Override
     public String getSchematicName() {
-        return Airline.BUILDING_NAME;
+        return facility.schematic;
     }
 
     @Override
@@ -39,12 +55,12 @@ public class BuildingAirfield extends AbstractBuilding {
 
     /** The middle block of the first landing pad's floor: this airfield's own point in the air network, the home of its aircraft. */
     public BlockPos pad() {
-        return getPosition().offset(getRotationMirror().applyToPos(RouteRules.PAD_FROM_HUT));
+        return getPosition().offset(getRotationMirror().applyToPos(facility.padFromHut()));
     }
 
     /** The second landing pad (for visitors), whether it is built yet or not. */
     public BlockPos guestPad() {
-        return getPosition().offset(getRotationMirror().applyToPos(RouteRules.GUEST_PAD_FROM_HUT));
+        return getPosition().offset(getRotationMirror().applyToPos(facility.guestPadFromHut()));
     }
 
     /** Every landing pad this airfield has at its level: the first is its own, the others are for visitors. */
@@ -70,12 +86,42 @@ public class BuildingAirfield extends AbstractBuilding {
      * A pad the airfield does not have at its level (any more) leaves the network.
      */
     public void registerPad() {
+        registerPad(null);
+        // An airfield's anchorages follow it at once, not with their own next colony tick.
+        if (facility.airfield()) anchoragesFollow(null);
+    }
+
+    /** ... {@code gone}: an airfield of the colony that is being taken down (still among its buildings for this moment). */
+    private void registerPad(@org.jetbrains.annotations.Nullable BuildingAirfield gone) {
         if (!(getColony().getWorld() instanceof ServerLevel level)) return;
         final RouteNetwork network = RouteNetwork.get(level);
-        final List<BlockPos> pads = pads();
-        for (final BlockPos pad : pads) network.setAirfield(pad, padHeading(), getBuildingLevel(), getPosition());
+        // An anchorage serves the colony's airfield: without one (built) it is not on the network.
+        final List<BlockPos> pads = facility.airfield() || hasAirfield(getColony(), gone) ? pads() : List.of();
+        for (final BlockPos pad : pads) network.setAirfield(pad, padHeading(), getBuildingLevel(), getPosition(), facility);
+        if (!pads.contains(pad())) {
+            final RouteNetwork.Node own = network.node(pad());
+            if (own != null && own.kind() == RouteNetwork.Kind.AIRFIELD) network.remove(pad());
+        }
         final RouteNetwork.Node guest = network.node(guestPad());
         if (!pads.contains(guestPad()) && guest != null && guest.kind() == RouteNetwork.Kind.AIRFIELD) network.remove(guestPad());
+    }
+
+    /** Whether the colony has an airfield (of any size, built): what an anchorage needs. */
+    public static boolean hasAirfield(IColony colony) {
+        return hasAirfield(colony, null);
+    }
+
+    /** The same, not counting {@code gone} (an airfield that is being taken down). */
+    private static boolean hasAirfield(IColony colony, @org.jetbrains.annotations.Nullable BuildingAirfield gone) {
+        for (final var building : colony.getServerBuildingManager().getBuildings().values())
+            if (building != gone && building instanceof BuildingAirfield other && other.facility.airfield() && other.getBuildingLevel() >= 1) return true;
+        return false;
+    }
+
+    /** The colony's anchorages come onto the network, or leave it, as the colony has an airfield or not (without {@code gone}). */
+    private void anchoragesFollow(@org.jetbrains.annotations.Nullable BuildingAirfield gone) {
+        for (final var building : getColony().getServerBuildingManager().getBuildings().values())
+            if (building != gone && building instanceof BuildingAirfield anchorage && !anchorage.facility.airfield()) anchorage.registerPad(gone);
     }
 
     @Override
@@ -90,7 +136,7 @@ public class BuildingAirfield extends AbstractBuilding {
      * little of it lies on its racks (one request at a time; couriers bring it like anything else a building asks for).
      */
     private void askForFuel() {
-        if (com.asteain.airline.flight.Cargo.fuelStock() <= 0 || !(getColony().getWorld() instanceof ServerLevel level)) return;
+        if (!facility.airfield() || com.asteain.airline.flight.Cargo.fuelStock() <= 0 || !(getColony().getWorld() instanceof ServerLevel level)) return;
         if (!com.asteain.airline.flight.Flights.wantsFuel(level, this)) return;
         final com.google.common.reflect.TypeToken<com.minecolonies.api.colony.requestsystem.requestable.StackList> kind = com.google.common.reflect.TypeToken.of(com.minecolonies.api.colony.requestsystem.requestable.StackList.class);
         if (!getOpenRequestsOfType(-1, kind).isEmpty()) return;
@@ -113,6 +159,8 @@ public class BuildingAirfield extends AbstractBuilding {
                 final RouteNetwork.Node guest = network.node(guestPad());
                 if (guest != null && guest.kind() == RouteNetwork.Kind.AIRFIELD) network.remove(guestPad());
             }
+            // The colony's anchorages leave with its last airfield (this one is still among the colony's buildings now).
+            if (facility.airfield()) anchoragesFollow(this);
         }
         super.onDestroyed();
     }
@@ -128,14 +176,14 @@ public class BuildingAirfield extends AbstractBuilding {
         registerPad();
         if (!hasOwnBlueprint() && getTileEntity() != null && StructurePacks.hasPack(Airline.PACK_NAME)) {
             setStructurePack(Airline.PACK_NAME);
-            setBlueprintPath(Airline.BLUEPRINT_PATH);
+            setBlueprintPath(Airline.blueprintPath(facility));
         }
     }
 
     /** Until {@link #onPlacement()} has run (or when the pack was not loaded yet) the answers still name the shipped blueprint. */
     @Override
     public String getBlueprintPath() {
-        return hasOwnBlueprint() ? super.getBlueprintPath() : Airline.BLUEPRINT_PATH;
+        return hasOwnBlueprint() ? super.getBlueprintPath() : Airline.blueprintPath(facility);
     }
 
     @Override

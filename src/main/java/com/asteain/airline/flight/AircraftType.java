@@ -47,6 +47,11 @@ public final class AircraftType {
     }
 
     public final String name;
+    /**
+     * The size class of the design (the user's ruling of 2026-10-14): where it may berth, which lines it may fly, which
+     * airfields build it. From the file's {@code "class"} ("small", "medium", "large"); small when it says nothing.
+     */
+    public com.asteain.airline.route.ShipClass shipClass = com.asteain.airline.route.ShipClass.SMALL;
     /** Block states in the text form of commands ("create:shaft[axis=x]"). The aircraft's own block is not in this map. */
     public final Map<BlockPos, String> parts = new LinkedHashMap<>();
     public BlockPos seat;
@@ -317,6 +322,7 @@ public final class AircraftType {
             final JsonObject file = com.google.gson.JsonParser.parseReader(json).getAsJsonObject();
             final boolean own = file.has("format") && file.get("format").getAsInt() >= 2;
             final AircraftType t = own ? new AircraftType(name) : core(name);
+            if (file.has("class")) t.shipClass = com.asteain.airline.route.ShipClass.of(file.get("class").getAsString());
             if (own) {
                 // A design of its own climbs to the line with its target raised a block a second (the measured designs go on as they were measured).
                 t.climbRate = 1.0;

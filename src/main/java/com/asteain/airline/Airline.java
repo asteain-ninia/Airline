@@ -89,6 +89,16 @@ public final class Airline {
     public static final String PACK_NAME = "Airline";
     public static final String BLUEPRINT_PATH = "infrastructure/airfield1.blueprint";
 
+    /** The first level's blueprint of a kind of airfield (or anchorage) in this mod's pack. */
+    public static String blueprintPath(com.asteain.airline.route.Facility facility) {
+        return "infrastructure/" + facility.schematic + "1.blueprint";
+    }
+
+    /** The hut block's name: "blockhutairfield" (the small airfield, as it always was), "blockhutmediumairfield", and so on. */
+    public static String hutName(com.asteain.airline.route.Facility facility) {
+        return "blockhut" + facility.schematic;
+    }
+
     private static final DeferredRegister.Blocks BLOCKS = DeferredRegister.createBlocks(MOD_ID);
     private static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MOD_ID);
     private static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITIES = DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, MOD_ID);
@@ -100,9 +110,22 @@ public final class Airline {
     public static final DeferredHolder<net.minecraft.world.inventory.MenuType<?>, net.minecraft.world.inventory.MenuType<com.asteain.airline.flight.FuelMenu>> FUEL_MENU =
             MENUS.register("fuel_store", () -> new net.minecraft.world.inventory.MenuType<>(com.asteain.airline.flight.FuelMenu::new, net.minecraft.world.flag.FeatureFlags.VANILLA_SET));
 
-    public static final DeferredBlock<BlockHutAirfield> AIRFIELD_HUT = BLOCKS.register(HUT_NAME, BlockHutAirfield::new);
+    public static final DeferredBlock<BlockHutAirfield> AIRFIELD_HUT = BLOCKS.register(HUT_NAME, () -> new BlockHutAirfield());
     public static final DeferredItem<ItemBlockHut> AIRFIELD_HUT_ITEM =
             ITEMS.register(HUT_NAME, () -> new ItemBlockHut(AIRFIELD_HUT.get(), new Item.Properties()));
+    /** The huts of the medium and the large airfield and of the anchorage (2026-10-14; their blueprints are provisional). */
+    public static final DeferredBlock<BlockHutAirfield> MEDIUM_AIRFIELD_HUT = BLOCKS.register(hutName(com.asteain.airline.route.Facility.MEDIUM_AIRFIELD),
+            id -> new BlockHutAirfield(com.asteain.airline.route.Facility.MEDIUM_AIRFIELD));
+    public static final DeferredBlock<BlockHutAirfield> LARGE_AIRFIELD_HUT = BLOCKS.register(hutName(com.asteain.airline.route.Facility.LARGE_AIRFIELD),
+            id -> new BlockHutAirfield(com.asteain.airline.route.Facility.LARGE_AIRFIELD));
+    public static final DeferredBlock<BlockHutAirfield> ANCHORAGE_HUT = BLOCKS.register(hutName(com.asteain.airline.route.Facility.ANCHORAGE),
+            id -> new BlockHutAirfield(com.asteain.airline.route.Facility.ANCHORAGE));
+    public static final DeferredItem<ItemBlockHut> MEDIUM_AIRFIELD_HUT_ITEM = ITEMS.register(hutName(com.asteain.airline.route.Facility.MEDIUM_AIRFIELD),
+            () -> new ItemBlockHut(MEDIUM_AIRFIELD_HUT.get(), new Item.Properties()));
+    public static final DeferredItem<ItemBlockHut> LARGE_AIRFIELD_HUT_ITEM = ITEMS.register(hutName(com.asteain.airline.route.Facility.LARGE_AIRFIELD),
+            () -> new ItemBlockHut(LARGE_AIRFIELD_HUT.get(), new Item.Properties()));
+    public static final DeferredItem<ItemBlockHut> ANCHORAGE_HUT_ITEM = ITEMS.register(hutName(com.asteain.airline.route.Facility.ANCHORAGE),
+            () -> new ItemBlockHut(ANCHORAGE_HUT.get(), new Item.Properties()));
 
     /** The three grades of buoy (index 0 is grade 1) and their items. */
     public static final List<DeferredBlock<BuoyBlock>> BUOYS = buoys();
@@ -129,7 +152,8 @@ public final class Airline {
 
     /** MineColonies' own building block entity type only accepts MineColonies' huts, so the airfield brings its own type. */
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<AirfieldBlockEntity>> AIRFIELD_BLOCK_ENTITY =
-            BLOCK_ENTITIES.register(BUILDING_NAME, () -> BlockEntityType.Builder.of(AirfieldBlockEntity::new, AIRFIELD_HUT.get()).build(null));
+            BLOCK_ENTITIES.register(BUILDING_NAME, () -> BlockEntityType.Builder.of(AirfieldBlockEntity::new,
+                    AIRFIELD_HUT.get(), MEDIUM_AIRFIELD_HUT.get(), LARGE_AIRFIELD_HUT.get(), ANCHORAGE_HUT.get()).build(null));
 
     public static final DeferredHolder<JobEntry, JobEntry> PILOT = JOBS.register(JOB_NAME, () -> new JobEntry.Builder()
             .setJobProducer(JobPilot::new)
@@ -169,6 +193,46 @@ public final class Airline {
             .addBuildingModuleProducer(TIMETABLE)
             .addBuildingModuleProducer(AIRCRAFT_TAB)
             .createBuildingEntry());
+    /** The medium and the large airfield: the same pages as the small one. */
+    public static final DeferredHolder<BuildingEntry, BuildingEntry> MEDIUM_AIRFIELD = BUILDINGS.register(com.asteain.airline.route.Facility.MEDIUM_AIRFIELD.schematic, () -> new BuildingEntry.Builder()
+            .setBuildingBlock(MEDIUM_AIRFIELD_HUT.get())
+            .setBuildingProducer((colony, pos) -> new BuildingAirfield(colony, pos, com.asteain.airline.route.Facility.MEDIUM_AIRFIELD))
+            .setBuildingViewProducer(() -> EmptyView::new)
+            .setRegistryName(id(com.asteain.airline.route.Facility.MEDIUM_AIRFIELD.schematic))
+            .addBuildingModuleProducer(PILOT_WORK)
+            .addBuildingModuleProducer(EXPORT_STOCK)
+            .addBuildingModuleProducer(TIMETABLE)
+            .addBuildingModuleProducer(AIRCRAFT_TAB)
+            .createBuildingEntry());
+    public static final DeferredHolder<BuildingEntry, BuildingEntry> LARGE_AIRFIELD = BUILDINGS.register(com.asteain.airline.route.Facility.LARGE_AIRFIELD.schematic, () -> new BuildingEntry.Builder()
+            .setBuildingBlock(LARGE_AIRFIELD_HUT.get())
+            .setBuildingProducer((colony, pos) -> new BuildingAirfield(colony, pos, com.asteain.airline.route.Facility.LARGE_AIRFIELD))
+            .setBuildingViewProducer(() -> EmptyView::new)
+            .setRegistryName(id(com.asteain.airline.route.Facility.LARGE_AIRFIELD.schematic))
+            .addBuildingModuleProducer(PILOT_WORK)
+            .addBuildingModuleProducer(EXPORT_STOCK)
+            .addBuildingModuleProducer(TIMETABLE)
+            .addBuildingModuleProducer(AIRCRAFT_TAB)
+            .createBuildingEntry());
+    /** The anchorage: no pilot and no aircraft page (it has no aircraft of its own and builds none). */
+    public static final DeferredHolder<BuildingEntry, BuildingEntry> ANCHORAGE = BUILDINGS.register(com.asteain.airline.route.Facility.ANCHORAGE.schematic, () -> new BuildingEntry.Builder()
+            .setBuildingBlock(ANCHORAGE_HUT.get())
+            .setBuildingProducer((colony, pos) -> new BuildingAirfield(colony, pos, com.asteain.airline.route.Facility.ANCHORAGE))
+            .setBuildingViewProducer(() -> EmptyView::new)
+            .setRegistryName(id(com.asteain.airline.route.Facility.ANCHORAGE.schematic))
+            .addBuildingModuleProducer(EXPORT_STOCK)
+            .addBuildingModuleProducer(TIMETABLE)
+            .createBuildingEntry());
+
+    /** The building entry of a kind of airfield (or the anchorage). */
+    public static BuildingEntry building(com.asteain.airline.route.Facility facility) {
+        return switch (facility) {
+            case SMALL_AIRFIELD -> AIRFIELD.get();
+            case MEDIUM_AIRFIELD -> MEDIUM_AIRFIELD.get();
+            case LARGE_AIRFIELD -> LARGE_AIRFIELD.get();
+            case ANCHORAGE -> ANCHORAGE.get();
+        };
+    }
 
     /** The name of the pilot's look (a MineColonies "model type"). Its path is also the first part of the texture file names. */
     public static final ResourceLocation PILOT_LOOK = ResourceLocation.fromNamespaceAndPath(MOD_ID, "pilot");
