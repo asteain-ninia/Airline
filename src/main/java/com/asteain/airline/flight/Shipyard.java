@@ -3,7 +3,6 @@ package com.asteain.airline.flight;
 import com.asteain.airline.Airline;
 import com.asteain.airline.colony.BuildingAirfield;
 import com.ldtteam.structurize.api.RotationMirror;
-import com.minecolonies.api.colony.IColony;
 import com.minecolonies.api.colony.workorders.IServerWorkOrder;
 import com.minecolonies.api.colony.workorders.WorkOrderType;
 import com.minecolonies.api.util.MessageUtils;
@@ -24,8 +23,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Building an aircraft where it will stand. The aircraft's own block, set down on the middle of an airfield's own landing
- * pad, makes that pad a building site: a work order goes to the colony's builders (every design is a blueprint of the
+ * Building an aircraft where it will stand. It is the airfield's business alone (the user's ruling of 2026-10-14): asked
+ * for in the airfield's window, the aircraft's own block is set down on the middle of the airfield's own landing pad and
+ * makes that pad a building site: a work order goes to the colony's builders (every design is a blueprint of the
  * mod's pack, so the builders ask for its materials and put it up the way they do any decoration), and when every block
  * of the design stands there, put up by a builder or by hand, the whole becomes a ship, parked on its pad.
  *
@@ -200,55 +200,72 @@ final class Shipyard {
     }
 
     /**
-     * The aircraft's own block was set down in the world. On the middle of an airfield's own landing pad that begins the
-     * building of an aircraft; anywhere else it is told where it belongs. Returns the key of what was said.
+     * Asked for from the airfield's window: an aircraft of this design is built on the airfield's own pad. Where nothing
+     * stands yet the aircraft's own block is set down on the middle of the pad and the site begins (as when a player sets
+     * the block down there); where a site is already, it builds this design instead. Returns the key of what was said.
      */
-    static String placed(ServerLevel level, BlockPos pos, AircraftBlockEntity be, @Nullable ServerPlayer player) {
-        final BlockPos pad = pos.below();
-        final BuildingAirfield airfield = Cargo.airfieldAt(level, pad);
-        if (airfield == null) {
-            // On a pad, but not on its middle? Then say where the middle is.
-            for (final IColony colony : com.minecolonies.api.colony.IColonyManager.getInstance().getColonies(level)) {
-                for (final var building : colony.getServerBuildingManager().getBuildings().values()) {
-                    if (!(building instanceof BuildingAirfield near)) continue;
-                    final BlockPos middle = near.pad();
-                    if (middle.getY() == pad.getY() && Math.abs(middle.getX() - pad.getX()) <= 6 && Math.abs(middle.getZ() - pad.getZ()) <= 6) {
-                        say(player, "not_middle", middle.getX(), middle.getY() + 1, middle.getZ());
-                        return "not_middle";
-                    }
-                }
+    static String request(ServerLevel level, BuildingAirfield airfield, AircraftType type, @Nullable ServerPlayer player) {
+        final BlockPos pad = airfield.pad(), at = pad.above();
+        if (level.getBlockEntity(at) instanceof AircraftBlockEntity site && pad.equals(site.yard)) {
+            if (type.name.equals(site.type)) {
+                say(player, "design", Component.translatable(type.title()), missing(level, at, type));
+                return "same";
             }
-            say(player, "no_pad");
-            return "no_pad";
-        }
-        if (!pad.equals(airfield.pad())) {
-            final BlockPos own = airfield.pad();
-            say(player, "guest_pad", own.getX(), own.getY() + 1, own.getZ());
-            return "guest_pad";
+            return switchTo(level, airfield, site, type, player);
         }
         FlightController.loaded(level);
+        // An aircraft's own block that stands on the middle of the pad without being a site (set down by hand): it becomes one.
+        if (level.getBlockEntity(at) instanceof AircraftBlockEntity loose && loose.yard == null && Craft.shipAt(level, at) == null && FlightController.unclaimed(level, pad, null))
+            return begin(level, airfield, loose, type, player);
         if (!FlightController.unclaimed(level, pad, null)) {
             say(player, "pad_taken");
             return "pad_taken";
         }
-        be.yard = pad;
-        be.type = AircraftType.DEFAULT.name;
+        if (!level.getBlockState(at).canBeReplaced()) {
+            say(player, "pad_blocked", at.getX(), at.getY(), at.getZ());
+            return "pad_blocked";
+        }
+        // (Set down by the server, not by a player: the block's own "placed" does not run, so the site is begun here.)
+        level.setBlock(at, Airline.AIRCRAFT.get().defaultBlockState(), 3);
+        if (!(level.getBlockEntity(at) instanceof AircraftBlockEntity be)) return "pad_blocked";
+        return begin(level, airfield, be, type, player);
+    }
+
+    /**
+     * Asked for from the airfield's window: the building of the aircraft on the airfield's own pad is called off. The
+     * builders are not asked any more and the aircraft's own block is taken away; what was put up already stays where it
+     * stands. Returns the key of what was said.
+     */
+    static String stop(ServerLevel level, BuildingAirfield airfield, @Nullable ServerPlayer player) {
+        final BlockPos at = airfield.pad().above();
+        if (!(level.getBlockEntity(at) instanceof AircraftBlockEntity site) || !airfield.pad().equals(site.yard)) {
+            say(player, "no_site");
+            return "no_site";
+        }
+        cancel(airfield, site);
+        site.yard = null;
+        level.removeBlock(at, false);
+        say(player, "stopped");
+        return "stopped";
+    }
+
+    /** A site begins: the builders are asked for this design. */
+    private static String begin(ServerLevel level, BuildingAirfield airfield, AircraftBlockEntity be, AircraftType type, @Nullable ServerPlayer player) {
+        be.yard = airfield.pad();
+        be.type = type.name;
         order(airfield, be);
         be.setChanged();
-        say(player, "started", Component.translatable(AircraftType.of(be.type).title()), missing(level, pos, AircraftType.of(be.type)));
+        say(player, "started", Component.translatable(type.title()), missing(level, be.getBlockPos(), type));
         return "started";
     }
 
-    /** The block of a site was used with an empty hand: the next design is built instead. */
-    static String next(ServerLevel level, AircraftBlockEntity be, @Nullable ServerPlayer player) {
-        final BuildingAirfield airfield = be.yard == null ? null : Cargo.airfieldAt(level, be.yard);
-        if (airfield == null) return placed(level, be.getBlockPos(), be, player);
-        final List<String> designs = new ArrayList<>(AircraftType.ALL.keySet());
+    /** A site builds another design: the builders' order is taken back and given again for it. */
+    private static String switchTo(ServerLevel level, BuildingAirfield airfield, AircraftBlockEntity be, AircraftType type, @Nullable ServerPlayer player) {
         cancel(airfield, be);
-        be.type = designs.get((designs.indexOf(be.type) + 1) % designs.size());
+        be.type = type.name;
         order(airfield, be);
         be.setChanged();
-        say(player, "design", Component.translatable(AircraftType.of(be.type).title()), missing(level, be.getBlockPos(), AircraftType.of(be.type)));
+        say(player, "design", Component.translatable(type.title()), missing(level, be.getBlockPos(), type));
         return "design";
     }
 

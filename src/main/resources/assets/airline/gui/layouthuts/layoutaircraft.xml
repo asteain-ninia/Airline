@@ -1,0 +1,16 @@
+<window xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/ldtteam/BlockUI/version/main/src/main/resources/assets/blockui/gui/block_ui.xsd"
+    size="190 244">
+    <image source="minecolonies:textures/gui/builderhut/builder_paper.png" size="190 244"/>
+    <text id="desc" size="130 11" pos="30 14" textalign="MIDDLE" color="black"/>
+    <text id="status" size="160 34" pos="16 30" color="black" wrap="true"/>
+    <button id="stop" size="86 17" pos="52 66" color="black" label="$(com.airline.gui.aircraft.stop)"
+            source="minecolonies:textures/gui/builderhut/builder_button_medium.png"/>
+    <list id="designs" size="164 146" pos="13 88">
+        <box size="100% 46" linewidth="1">
+            <text id="title" size="155 11" pos="3 2" color="black"/>
+            <text id="facts" size="155 11" pos="3 13" color="black"/>
+            <button id="build" size="86 17" pos="72 26" color="black"
+                    source="minecolonies:textures/gui/builderhut/builder_button_medium.png"/>
+        </box>
+    </list>
+</window>

@@ -243,49 +243,54 @@ final class FlightSuite {
         @SuppressWarnings("unchecked")
         java.util.concurrent.Future<com.ldtteam.structurize.blueprints.v1.Blueprint>[] blueprint = new java.util.concurrent.Future[1];
         TileEntityRack[] rack = new TileEntityRack[1];
-        s.step("yard: a pad to fly to; the aircraft's own block beside the middle of the pad", () -> {
+        s.step("yard: a pad to fly to; building is asked for from the airfield's window", () -> {
             for (int cx = -2; cx <= 6; cx++) for (int cz = -5; cz <= 1; cz++) { level.setChunkForced(cx, cz, true); level.getChunk(cx, cz); }
             pad(level, padB, 0);
-            BlockPos beside = a.pad.offset(2, 1, 1);
-            level.setBlockAndUpdate(beside, Airline.AIRCRAFT.get().defaultBlockState());
-            boolean done = Flights.building(level, beside, (AircraftBlockEntity) level.getBlockEntity(beside), null, false);
-            s.soft("yard / set down on the pad but not on its middle, the block says where the middle is and nothing is begun",
-                    done && "not_middle".equals(Flights.lastBuilding) && a.colony.getWorkManager().getWorkOrdersOfType(com.minecolonies.core.colony.workorders.WorkOrderDecoration.class).isEmpty()
-                            && ((AircraftBlockEntity) level.getBlockEntity(beside)).yard == null, "said " + Flights.lastBuilding);
-            level.removeBlock(beside, false);
-        });
-        s.step("yard: the block on the middle of the pad", () -> {
-            BlockPos middle = a.pad.above();
-            level.setBlockAndUpdate(middle, Airline.AIRCRAFT.get().defaultBlockState());
-            AircraftBlockEntity site = (AircraftBlockEntity) level.getBlockEntity(middle);
-            Flights.building(level, middle, site, null, false);
-            List<com.minecolonies.core.colony.workorders.WorkOrderDecoration> orders = a.colony.getWorkManager().getWorkOrdersOfType(com.minecolonies.core.colony.workorders.WorkOrderDecoration.class);
+            final BlockPos middle = a.pad.above();
             final List<String> designs = Flights.designs();
             final String first = designs.get(0), second = designs.get(1 % designs.size());
-            s.soft("yard / on the middle of the airfield's own pad it begins a building site: one work order for the builders, with the blueprint of the design that is offered first, where the block stands",
-                    "started".equals(Flights.lastBuilding) && a.pad.equals(site.yard) && first.equals(site.type) && orders.size() == 1 && Airline.PACK_NAME.equals(orders.get(0).getStructurePack())
-                            && Flights.blueprintOf(first).equals(orders.get(0).getStructurePath()) && middle.equals(orders.get(0).getLocation()) && site.workOrder == orders.get(0).getID() && site.workOrder != 0,
-                    "said " + Flights.lastBuilding + ", orders " + orders.size() + (orders.isEmpty() ? "" : " " + orders.get(0).getStructurePack() + "/" + orders.get(0).getStructurePath() + " at " + orders.get(0).getLocation()));
+            final java.util.function.Supplier<List<com.minecolonies.core.colony.workorders.WorkOrderDecoration>> orders =
+                    () -> a.colony.getWorkManager().getWorkOrdersOfType(com.minecolonies.core.colony.workorders.WorkOrderDecoration.class);
+            // Something in the way on the middle of the pad: nothing is begun.
+            level.setBlockAndUpdate(middle, net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+            String said = Flights.requestAircraft(level, a.airfield, first, null);
+            s.soft("yard / with a block on the middle of the pad, building is not begun and the block is not touched",
+                    "pad_blocked".equals(said) && orders.get().isEmpty() && level.getBlockState(middle).is(net.minecraft.world.level.block.Blocks.STONE), "said " + said);
+            level.removeBlock(middle, false);
+            s.soft("yard / a design that does not exist is not taken", "".equals(Flights.requestAircraft(level, a.airfield, "no-such-design", null)) && orders.get().isEmpty(), "orders " + orders.get().size());
+            // Asked for a design that is not the first one: the aircraft's own block is set down on the middle of the pad and the site begins with that design.
+            said = Flights.requestAircraft(level, a.airfield, second, null);
+            AircraftBlockEntity site = level.getBlockEntity(middle) instanceof AircraftBlockEntity be ? be : null;
+            List<com.minecolonies.core.colony.workorders.WorkOrderDecoration> now = orders.get();
+            s.soft("yard / asked for in the window, the aircraft's own block is set down on the middle of the airfield's own pad and a building site begins: one work order for the builders, with the blueprint of the design asked for, where the block stands",
+                    "started".equals(said) && site != null && a.pad.equals(site.yard) && second.equals(site.type) && now.size() == 1 && Airline.PACK_NAME.equals(now.get(0).getStructurePack())
+                            && Flights.blueprintOf(second).equals(now.get(0).getStructurePath()) && middle.equals(now.get(0).getLocation()) && site.workOrder == now.get(0).getID() && site.workOrder != 0,
+                    "said " + said + ", site " + (site == null ? "none" : site.type) + ", orders " + now.size() + (now.isEmpty() ? "" : " " + now.get(0).getStructurePack() + "/" + now.get(0).getStructurePath() + " at " + now.get(0).getLocation()));
+            if (site == null) return;
             s.soft("yard / the pad with a site on it is not free for another aircraft, and every block of the design is still to be put up",
-                    !Flights.padFree(level, a.pad) && Flights.buildingLacks(level, site) == Flights.blocksOf(first),
-                    "free " + Flights.padFree(level, a.pad) + ", lacks " + Flights.buildingLacks(level, site) + " of " + Flights.blocksOf(first) + " (" + first + ")");
-            Flights.building(level, middle, site, null, true);
-            orders = a.colony.getWorkManager().getWorkOrdersOfType(com.minecolonies.core.colony.workorders.WorkOrderDecoration.class);
-            s.soft("yard / used with an empty hand, the block asks for the next design instead: still one work order, now with the other blueprint",
-                    "design".equals(Flights.lastBuilding) && second.equals(site.type) && orders.size() == 1 && Flights.blueprintOf(second).equals(orders.get(0).getStructurePath()) && site.workOrder == orders.get(0).getID(),
-                    "design " + site.type + ", orders " + orders.size() + (orders.isEmpty() ? "" : " " + orders.get(0).getStructurePath()));
-            // On through the rest of the designs (as many as the mod has), and round to the first one again.
-            final StringBuilder seen = new StringBuilder(site.type);
-            for (int i = 2; i <= Flights.designs().size(); i++) {
-                Flights.building(level, middle, site, null, true);
-                seen.append(" -> ").append(site.type);
-            }
-            orders = a.colony.getWorkManager().getWorkOrdersOfType(com.minecolonies.core.colony.workorders.WorkOrderDecoration.class);
-            s.soft("yard / and used on through the designs: every one of them, and the first design again", first.equals(site.type) && orders.size() == 1 && Flights.blueprintOf(first).equals(orders.get(0).getStructurePath()),
-                    "designs " + seen + ", orders " + orders.size());
-            // The design this scene builds: on to it, if it is not the one that is offered first.
-            for (int i = 0; i < designs.size() && !design().equals(site.type); i++) Flights.building(level, middle, site, null, true);
-            s.check(design().equals(site.type), "the site is on the design of this scene (" + design() + ")");
+                    !Flights.padFree(level, a.pad) && Flights.buildingLacks(level, site) == Flights.blocksOf(second),
+                    "free " + Flights.padFree(level, a.pad) + ", lacks " + Flights.buildingLacks(level, site) + " of " + Flights.blocksOf(second) + " (" + second + ")");
+            said = Flights.requestAircraft(level, a.airfield, second, null);
+            s.soft("yard / asked again for the design that is being built, nothing changes", "same".equals(said) && orders.get().size() == 1 && second.equals(site.type), "said " + said + ", orders " + orders.get().size());
+            said = Flights.requestAircraft(level, a.airfield, first, null);
+            now = orders.get();
+            s.soft("yard / asked for another design while one is being built, the site builds that one instead: still one work order, now with the other blueprint",
+                    "design".equals(said) && first.equals(site.type) && now.size() == 1 && Flights.blueprintOf(first).equals(now.get(0).getStructurePath()) && site.workOrder == now.get(0).getID(),
+                    "said " + said + ", design " + site.type + ", orders " + now.size() + (now.isEmpty() ? "" : " " + now.get(0).getStructurePath()));
+            // Called off from the window: no order, no block on the middle of the pad.
+            said = Flights.stopAircraft(level, a.airfield, null);
+            s.soft("yard / stopped from the window, the builders are not asked any more and the aircraft's own block is taken away",
+                    "stopped".equals(said) && orders.get().isEmpty() && level.getBlockState(middle).isAir() && Flights.padFree(level, a.pad), "said " + said + ", orders " + orders.get().size() + ", middle " + level.getBlockState(middle));
+            s.soft("yard / with nothing being built, stopping says so", "no_site".equals(Flights.stopAircraft(level, a.airfield, null)), Flights.lastBuilding);
+            // An aircraft's own block set down by hand on the middle of the pad begins nothing by itself; asked for in the window, it becomes the site.
+            level.setBlockAndUpdate(middle, Airline.AIRCRAFT.get().defaultBlockState());
+            final boolean idle = level.getBlockEntity(middle) instanceof AircraftBlockEntity loose && loose.yard == null && orders.get().isEmpty();
+            said = Flights.requestAircraft(level, a.airfield, design(), null);
+            site = level.getBlockEntity(middle) instanceof AircraftBlockEntity be ? be : null;
+            s.soft("yard / the aircraft's own block on the middle of the pad begins nothing by itself; asked for in the window, that block becomes the site",
+                    idle && "started".equals(said) && site != null && a.pad.equals(site.yard) && design().equals(site.type) && orders.get().size() == 1,
+                    "idle " + idle + ", said " + said + ", orders " + orders.get().size());
+            s.check(site != null && design().equals(site.type), "the site is on the design of this scene (" + design() + ")");
         });
         s.settle("yard: the site is looked at; nothing is built yet", 100);
         s.step("yard: still a site; load the blueprint", () -> {

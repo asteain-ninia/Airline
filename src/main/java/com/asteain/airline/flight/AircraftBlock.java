@@ -5,8 +5,6 @@ import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.InteractionResult;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.BlockHitResult;
@@ -48,13 +46,8 @@ public final class AircraftBlock extends BaseEntityBlock {
         return RenderShape.MODEL;
     }
 
-    /** Set down by a player on the middle of an airfield's landing pad: an aircraft is built there ({@link Shipyard}). */
-    @Override
-    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
-        super.setPlacedBy(level, pos, state, placer, stack);
-        if (level instanceof ServerLevel server && Flights.available() && level.getBlockEntity(pos) instanceof AircraftBlockEntity aircraft)
-            Flights.building(server, pos, aircraft, placer instanceof ServerPlayer player ? player : null, false);
-    }
+    // (Building an aircraft is the airfield's business alone: it is asked for in the airfield's window, which sets this block
+    // down on the pad. The block itself begins nothing and chooses nothing; the user's ruling of 2026-10-14.)
 
     /** Used with fuel in the hand: it goes into the aircraft's tank (as much as there is room for). Not while the aircraft is still being built. */
     @Override
@@ -65,14 +58,6 @@ public final class AircraftBlock extends BaseEntityBlock {
             return net.minecraft.world.ItemInteractionResult.SUCCESS;
         }
         return net.minecraft.world.ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-    }
-
-    /** Used with an empty hand while the aircraft is being built: the next design is built instead. */
-    @Override
-    protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        if (level instanceof ServerLevel server && Flights.available() && level.getBlockEntity(pos) instanceof AircraftBlockEntity aircraft
-                && Flights.building(server, pos, aircraft, player instanceof ServerPlayer serverPlayer ? serverPlayer : null, true)) return InteractionResult.SUCCESS;
-        return level.isClientSide ? InteractionResult.PASS : InteractionResult.PASS;
     }
 
     /**

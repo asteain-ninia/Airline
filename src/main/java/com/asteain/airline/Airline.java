@@ -150,6 +150,9 @@ public final class Airline {
     /** Made after the two above, on both sides: the numbers MineColonies gives the producers must stay the same on server and client. */
     public static final BuildingEntry.ModuleProducer<TimetableModule, TimetableModuleView> TIMETABLE =
             new BuildingEntry.ModuleProducer<>(MOD_ID + "_timetable", TimetableModule::new, () -> TimetableModuleView::new);
+    /** The aircraft tab (building an aircraft is asked for here, and only here). Made after the timetable, for the same reason. */
+    public static final BuildingEntry.ModuleProducer<com.asteain.airline.colony.AircraftModule, com.asteain.airline.colony.AircraftModuleView> AIRCRAFT_TAB =
+            new BuildingEntry.ModuleProducer<>(MOD_ID + "_aircraft", com.asteain.airline.colony.AircraftModule::new, () -> com.asteain.airline.colony.AircraftModuleView::new);
 
     public static final DeferredHolder<BuildingEntry, BuildingEntry> AIRFIELD = BUILDINGS.register(BUILDING_NAME, () -> new BuildingEntry.Builder()
             .setBuildingBlock(AIRFIELD_HUT.get())
@@ -159,6 +162,7 @@ public final class Airline {
             .addBuildingModuleProducer(PILOT_WORK)
             .addBuildingModuleProducer(EXPORT_STOCK)
             .addBuildingModuleProducer(TIMETABLE)
+            .addBuildingModuleProducer(AIRCRAFT_TAB)
             .createBuildingEntry());
 
     /** The name of the pilot's look (a MineColonies "model type"). Its path is also the first part of the texture file names. */
@@ -178,9 +182,16 @@ public final class Airline {
         modBus.addListener(Airline::registerCapabilities);
         modBus.addListener(Airline::commonSetup);
         modBus.addListener(Airline::creativeTab);
+        modBus.addListener(Airline::registerPayloads);
         NeoForge.EVENT_BUS.addListener((RegisterCommandsEvent event) -> AirlineCommand.register(event.getDispatcher(), event.getBuildContext()));
         NeoForge.EVENT_BUS.addListener(RouteNetwork::onLevelTick);
         NeoForge.EVENT_BUS.addListener(RouteNetwork::onNeighborNotify);
+    }
+
+    /** What the client sends to the server: the aircraft tab's requests. */
+    private static void registerPayloads(net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) {
+        event.registrar("1").playToServer(com.asteain.airline.network.AircraftOrderPayload.TYPE, com.asteain.airline.network.AircraftOrderPayload.STREAM_CODEC,
+                com.asteain.airline.network.AircraftOrderPayload::handle);
     }
 
     public static ResourceLocation id(String path) {

@@ -126,18 +126,7 @@ public final class Flights {
         return available() ? FlightController.spawn(level, pad, AircraftType.of(design)) : OFF;
     }
 
-    /**
-     * The aircraft's own block stands in the world at {@code pos}: {@code again} false when it was just set down (on the
-     * middle of an airfield's own pad that begins the building of an aircraft), true when it was used with an empty hand
-     * (the next design is built instead). False when the block is part of a ship, or nothing was done.
-     */
-    public static boolean building(ServerLevel level, BlockPos pos, AircraftBlockEntity aircraft, @Nullable net.minecraft.server.level.ServerPlayer player, boolean again) {
-        if (!available() || Craft.shipAt(level, pos) != null) return false;
-        lastBuilding = again ? Shipyard.next(level, aircraft, player) : Shipyard.placed(level, pos, aircraft, player);
-        return true;
-    }
-
-    /** For the checks: the key of what the last call of {@link #building} said. */
+    /** For the checks: the key of what the last request from the airfield's window ({@link #requestAircraft}, {@link #stopAircraft}) said. */
     public static String lastBuilding = "";
 
     /** For the test bench: why the last aircraft could not be made by {@link #spawn}; empty when it was made. */
@@ -245,6 +234,33 @@ public final class Flights {
     /** Where a design's blueprint is in the mod's structure pack. */
     public static String blueprintOf(String design) {
         return "aircraft/" + AircraftType.of(design).name + ".blueprint";
+    }
+
+    /** A design that can be built, as the airfield's window shows it: blocks with the aircraft's own block, top speed in blocks a second, minutes a full tank lasts. */
+    public record Design(String name, String title, int blocks, double topSpeed, long tankMinutes) {}
+
+    /** The designs that can be built, in the order they are offered (the first is the one built when none is chosen). None without the flying part. */
+    public static List<Design> designCards() {
+        if (!available()) return List.of();
+        final List<Design> all = new java.util.ArrayList<>();
+        for (final AircraftType type : AircraftType.ALL.values()) all.add(new Design(type.name, type.title(), type.parts.size() + 1, type.topSpeed, Fuel.minutes(type, Fuel.capacity())));
+        return all;
+    }
+
+    /**
+     * Asked for from the airfield's window ({@link Shipyard#request}): an aircraft of this design is built on the airfield's
+     * own pad, or the site there builds it instead. The key of what was said; "" without the flying part or for a design
+     * that does not exist.
+     */
+    public static String requestAircraft(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield, String design, @Nullable net.minecraft.server.level.ServerPlayer player) {
+        if (!available() || !AircraftType.ALL.containsKey(design)) return "";
+        return lastBuilding = Shipyard.request(level, airfield, AircraftType.ALL.get(design), player);
+    }
+
+    /** Asked for from the airfield's window ({@link Shipyard#stop}): the building on the airfield's own pad is called off. */
+    public static String stopAircraft(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield, @Nullable net.minecraft.server.level.ServerPlayer player) {
+        if (!available()) return "";
+        return lastBuilding = Shipyard.stop(level, airfield, player);
     }
 
     /** Mass of an aircraft and its centre of mass seen from its own block (nose, up, right); null when it is not loaded. */
