@@ -59,8 +59,11 @@ PIER_BEYOND = 21                                # 桟橋の先は、台(機体�
 # 石の桟橋(2026-10-15 夕のご指示「アーチは幅5で、なおかつ桟橋自体の幅は4に…柱の幅は従来通り2で。アーチ脚の長さはそれ自体がアーチ状に
 # 短くなっていき、桟橋先端でちょうど0になる＝頂点になるように」、柱は 横 2・厚み 2 と選んでいただいた):
 # 床は幅 4(機体が東に横付けするので、木の桟橋より西へ 1 列広い)・厚さ 1(同じ日のご意見「床の厚さを1ブロックに。持ち送りは良いですね」で、
-# 床の下の梁をやめた)。床の下の真ん中 2 列に、2 × 2 の柱と、柱の間の幅 5 の弧。床の東西の縁の下は、逆さの階段の持ち送り。
-PILLAR_DEEPEST = 14                             # 根元の柱の長さ(床の下から)。先へ行くほど短く、先端で 0
+# 床の下の梁をやめた)。床の下の真ん中 2 列に、2 × 2 の柱と、柱の間の幅 5 の弧。床の東西の縁は、逆さの階段(続くご意見「持ち送りではなくて
+# 桟橋のヘリを逆付き階段にするのが良さそう」。縁の下の持ち送りは、弧の上半分を横から隠してしまった)。
+PILLAR_DEEPEST = 14                             # 根元の柱の長さ(床の下から)。先へ行くほど短い
+PILLAR_SHORTEST = 2                             # 柱の最低の長さ(続くご意見「柱の最低長さを2ブロックとしましょうか。多分こっちのほうがよりアーチっぽくなる」)。
+#                                                 幅 5 の弧の切り口は床の下 2 段に収まるので、長さ 2 の柱の間にも弧が全部そろう
 ARCH_DEPTH = PILLAR_DEEPEST                     # 石の桟橋の、床より下の深さ
 PILLAR_THICK = 2                                # 柱の厚み(南北)。横(東西)も 2
 ARCH_SPAN = 5                                   # 柱の間の弧の幅
@@ -188,11 +191,11 @@ def anchorage_design(mod_id="airline", name="anchorage"):
             put(x, ay, az, mb.FENCE)
             put(x, ay + 1, az, "minecraft:torch")
     else:
-        # 石の桟橋(2026-10-15 夕のご指示。定数の所の説明を参照): 床は幅 4・厚さ 1 の石レンガ。床の下の真ん中 2 列に、
-        # 2 × 2 の柱(7 おき)と、柱の間の幅 5 の半円の弧(天辺が床の下面)。床の東西の縁の下は、逆さの階段の持ち送り。
-        # 柱の長さは、先端(長さ 0 = 大きな弧の頂点)から根元(14)へ、4 分の 1 の楕円に沿って伸びる。根元では真下へ落ち、先では床と平らに並ぶ
+        # 石の桟橋(2026-10-15 夕のご指示。定数の所の説明を参照): 床は幅 4・厚さ 1 の石レンガで、東西の縁は逆さの階段。床の下の真ん中 2 列に、
+        # 2 × 2 の柱(7 おき。先端にも 1 本)と、柱の間の幅 5 の半円の弧(天辺が床の下面)。
+        # 柱の長さは、先端を頂点とする 4 分の 1 の楕円に沿って、根元(14)へ伸びる。根元では真下へ落ち、先では床と平らに並ぶ
         # (それまでのご意見「根本の足をさらに長く、外側に行くにつれて短く…ちょうど半アーチを描く」「もっと根元の方での減少が急激に」も、この形)。
-        # 弧が柱より深くなる所(先端の側)は、弧の下側を、その大きな楕円で切る。弧の形の選び方は choose_shape()。
+        # ただし最低 2(先端の側はどれも 2)。弧の下側は、その楕円か、柱の最低の長さの、深い方で切る。弧の形の選び方は choose_shape()。
         brick, chiseled, wall = mb.STONE_BRICKS, "minecraft:chiseled_stone_bricks", "minecraft:stone_brick_wall"
         west, east = ax - 2, ax + 1                                     # 床の西と東の縁(東の縁は機体の脇。連結器もここ)
         core = (ax - 1, ax)                                             # 梁・柱・弧の 2 列
@@ -200,6 +203,8 @@ def anchorage_design(mod_id="airline", name="anchorage"):
         for z in range(tip, az + 1):
             for x in range(west, east + 1):
                 put(x, deck, z, brick)
+            for x, facing in ((west, "east"), (east, "west")):          # 床の縁: 逆さの階段(上面は平ら。下の段は内向き)
+                put(x, deck, z, mb.stairs(facing, "top", "stone_brick"))
         for z in range(az - 2, az + 1):                                 # 根元の踊り場(島の上)、市松。床より東西に 1 ずつ広い
             for x in range(west - 1, east + 2):
                 put(x, deck, z, mb.DEEPSLATE if (x + z) % 2 else brick)
@@ -210,10 +215,10 @@ def anchorage_design(mod_id="airline", name="anchorage"):
             d = min(max(z - tip, 0.0), span) / span
             return PILLAR_DEEPEST * (1.0 - math.sqrt(max(0.0, 1.0 - d * d)))
 
-        # 柱 k は z = tip + 7k と その南。k = 0(先端)は長さ 0 なので置かない。根元の柱がいちばん長い(14)
-        pillars = [tip + PIER_SPACING * k for k in range(1, STONE_PIER_BAYS + 1)]
+        # 柱 k は z = tip + 7k と その南(k = 0 は先端)。根元の柱がいちばん長い(14)。どの柱も最低 2
+        pillars = [tip + PIER_SPACING * k for k in range(0, STONE_PIER_BAYS + 1)]
         assert pillars[-1] + PILLAR_THICK - 1 == root_end, (pillars, root_end)
-        lengths = {at: int(round(reach(at + PILLAR_THICK / 2.0))) for at in pillars}
+        lengths = {at: max(PILLAR_SHORTEST, int(round(reach(at + PILLAR_THICK / 2.0)))) for at in pillars}
         lengths[pillars[-1]] = PILLAR_DEEPEST
         bays = [tip + PIER_SPACING * k + PILLAR_THICK for k in range(STONE_PIER_BAYS)]   # 弧の北の端
         spring = deck - ARCH_SPAN / 2.0                                 # 弧の立ち上がり(床の下面から半径ぶん下。マスの途中)
@@ -225,15 +230,13 @@ def anchorage_design(mod_id="airline", name="anchorage"):
                     return y >= deck - lengths[at]
             for b0 in bays:
                 if b0 <= z < b0 + ARCH_SPAN:
-                    if y < deck - reach(z):
+                    if y < deck - max(reach(z), PILLAR_SHORTEST):
                         return False
                     c = b0 + ARCH_SPAN / 2.0
                     return y >= spring and (z - c) ** 2 + (y - spring) ** 2 >= (ARCH_SPAN / 2.0) ** 2
             return False
 
         for z in range(tip, root_end + 1):
-            for x, facing in ((west, "east"), (east, "west")):          # 床の縁の下の持ち送り(逆さの階段、内向き)
-                put(x, deck - 1, z, mb.stairs(facing, "top", "stone_brick"))
             for y in range(deck - PILLAR_DEEPEST, deck):
                 shape = choose_shape(solid, z, y)
                 if shape is None:
