@@ -224,6 +224,19 @@ final class Craft {
         return type.engines.length;
     }
 
+    /** Every engine set going again as a source of rotation (Create's updateGeneratedRotation); see FlightController.step. */
+    void restartEngines() {
+        for (final BlockPos at : type.engines) {
+            final BlockEntity engine = level.getBlockEntity(inShip(at));
+            if (engine == null) continue;
+            try {
+                call(engine, "updateGeneratedRotation");
+            } catch (RuntimeException e) {
+                org.slf4j.LoggerFactory.getLogger("Airline").warn("[Airline/flight] could not set the engine at {} going again: {}", at.toShortString(), e.toString());
+            }
+        }
+    }
+
     /** Ticks an engine still burns of what it has lit; -1 when there is no engine at its place. */
     int engineBurn(int side) {
         final BlockEntity engine = level.getBlockEntity(inShip(type.engines[side]));

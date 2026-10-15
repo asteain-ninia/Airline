@@ -81,7 +81,7 @@ def check(path, facility, level):
         for (x, y, z), name in blocks.items():
             if y < py + 2 or soft(name):
                 continue
-            if math.hypot(x + 0.5 - (px + 0.5), z + 0.5 - (pz + 0.5)) <= radius:
+            if math.hypot(x + 0.5 - (px + 0.5), z + 0.5 - (pz + 0.5)) <= radius + 0.5:  # (as the air network measures it: Tube.touchesColumn)
                 hard.append(((x - ax, y - ay, z - az), name))
         if hard:
             faults.append("4. 台 %d の竪穴(半径 %d、床から 2 上より上)に固いブロックが %d 個: %s" % (n, radius, len(hard), hard[:4]))

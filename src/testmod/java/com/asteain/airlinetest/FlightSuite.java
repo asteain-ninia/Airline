@@ -183,6 +183,30 @@ final class FlightSuite {
         return Flights.spawn(level, pad, design());
     }
 
+    /** For finding out why a reloaded aircraft does not get on (2026-10-15, koeda's belts): how fast each part of its drive turns. */
+    private static String turning(ServerLevel level, AircraftBlockEntity aircraft) {
+        final StringBuilder out = new StringBuilder();
+        for (final java.util.Map.Entry<BlockPos, String> part : com.asteain.airline.flight.AircraftType.of(aircraft.type).parts.entrySet()) {
+            final String name = part.getValue();
+            if (!(name.contains("propeller") || name.contains("belt") || name.contains("transmission") || name.contains("gearshift") || name.contains("engine"))) continue;
+            final BlockPos at = Flights.partOf(aircraft, part.getKey());
+            final net.minecraft.world.level.block.entity.BlockEntity be = at == null ? null : level.getBlockEntity(at);
+            Object speed = "-";
+            String more = "";
+            if (be != null) {
+                try {
+                    speed = be.getClass().getMethod("getSpeed").invoke(be);
+                    if (name.contains("engine")) more = " burn " + be.getClass().getMethod("getCurrentBurnTime").invoke(be) + " " + be.getBlockState();
+                } catch (ReflectiveOperationException e) {
+                    speed = "?";
+                }
+            }
+            out.append(part.getKey().toShortString()).append(' ').append(name.split("\\[")[0].replaceAll(".*:", "")).append(' ').append(speed).append(more).append("; ");
+        }
+        out.append("tank ").append(Flights.fuelTicks(aircraft)).append(" ticks");
+        return out.toString();
+    }
+
     /** Waits until a newly made aircraft has been loaded and has ticked (it has its runtime). Its ship's land loads beside the ticks: at the
      * normal speed within a tick or two, under -Psprint=on it can take hundreds of ticks (2026-10-15). */
     private static void loaded(Script s, String name, java.util.function.Supplier<AircraftBlockEntity> aircraft) {
@@ -447,6 +471,11 @@ final class FlightSuite {
                     fixedThere[0] = r != null && r[4] > 0;
                 }
             });
+            final RouteNetwork routes = RouteNetwork.get(level);
+            final Edge line = routes.edge(f.pad, anchorage.building().pad());
+            s.note("OBS facilities " + name + ": the line to the " + anchorage.name + ": " + (line == null ? "none" : line.state() + ", serves " + line.serves()
+                    + ", closed from " + line.closedFrom() + " (by a block at " + line.blockedFromAt() + ", or a pad at " + line.barredBy() + "), blocked at " + line.blockedAt()) + "; route for " + Flights.classOf(designName) + ": "
+                    + routes.route(f.pad, anchorage.building().pad(), Flights.classOf(designName)));
             final Flights.Answer sent = Flights.send(level, f.pad, anchorage.building().pad(), true, f.pilot);
             s.soft("facilities / " + name + ": a round trip to the " + anchorage.name + " is ordered", sent.ok(), sent.text().getString());
         });
@@ -2591,6 +2620,8 @@ final class FlightSuite {
                     a.aircraft.phase, at(Flights.readings(a.aircraft)), ironText(c), a.aircraft.manifest, ledger.covered(keyB, Items.IRON_INGOT), ledger.wanted(keyB, Items.IRON_INGOT),
                     level.getForcedChunks().size(), level.players().size()));
             s.soft(name + " / 3: after the restart no iron was made or lost", c[0] == Integer.parseInt(before.get("total")), "now " + ironText(c) + ", before the stop " + before.get("total"));
+            final int[] since = new int[1];
+            s.monitor(() -> { if (++since[0] == 100 && a.aircraft != null) s.note("OBS " + name + ": 100 ticks after the restart, " + a.aircraft.phase + ", turning: " + turning(level, a.aircraft)); });
         });
     }
 

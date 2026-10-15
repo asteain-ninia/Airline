@@ -453,6 +453,10 @@ final class FlightController {
         final Autopilot ap = rt.pilot;
         final RouteNetwork net = RouteNetwork.get(level);
         rt.age++;
+        // Every engine is set going again as a source of rotation once the ship has been loaded (and once more a moment
+        // later, when its land is surely there). An engine that was saved while it burnt is read back burning, but not as
+        // a source in the turning network: it burnt and nothing turned (2026-10-15, koeda after a restart in the air).
+        if (rt.fresh || rt.age == 40) c.restartEngines();
         if (rt.fresh) {
             rt.fresh = false;
             if (be.flying()) resume(be, rt, net);

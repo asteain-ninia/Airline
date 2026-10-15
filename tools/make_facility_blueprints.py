@@ -117,10 +117,12 @@ def choose_shape(solid, z, y):
     return best
 PIERS = ("anchorage", "anchoragestone")
 # 連結器の位置(台の中心から)。床置き: 上向き、台の中心から南へ 3(機体の下部連結器の位置が決まったら直す)。
-# 横型: 台の床の 1 段上、台の中心から東西へ 8(大型機の胴の幅 15 のすぐ外。中心を向く)。
+# 横型: 台の床の 1 段上、台の中心から東西へ 13(中心を向く)。8(大型機の胴の幅 15 のすぐ外)にしていたが、機体を作るときと、建てた
+# 機体を船にするときは、機体をいったん機首を東へ向けて置いてから台の向きへ回すので、前後 25 の大型機がその連結器にぶつかった
+# (2026-10-15、場面 facilities)。前後の長さ(中心から 12)の外へ。機体の連結器とつなぐときに、位置を見直す。
 CONNECTORS = {
     "mediumairfield": [((0, 0, 3), "up")],
-    "largeairfield": [((-8, 1, 0), "east"), ((8, 1, 0), "west")],
+    "largeairfield": [((-13, 1, 0), "east"), ((13, 1, 0), "west")],
     "anchorage": [((-8, 1, 0), "east"), ((8, 1, 0), "west")],
 }
 CONNECTOR = "simulated:docking_connector[extended=false,facing=%s,powered=false]"
@@ -398,7 +400,10 @@ def design(name, level=1, mod_id="airline"):
                 box(x, 1, z, x, top, z, log % "y")
 
     def in_shaft(x, y, z):
-        return y >= SHAFT_FREE_FROM and any(math.hypot(x - cx, z - cz) <= site.r for cx, _, cz in site.pads(level))
+        # (Measured as the air network measures it: a column is in the shaft when its middle lies within the radius and half
+        # a block (Tube.touchesColumn). Up to 2026-10-15 only within the radius: a lantern on a fence post at the large
+        # airfield's corner lay 17.03 from the pad's middle, and the network kept large aircraft off that pad's lines.)
+        return y >= SHAFT_FREE_FROM and any(math.hypot(x - cx, z - cz) <= site.r + 0.5 for cx, _, cz in site.pads(level))
 
     def pad_floor(cx, cz):
         h = site.h

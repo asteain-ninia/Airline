@@ -334,8 +334,11 @@ final class Autopilot {
         }
         final double legHeading = Math.toDegrees(Math.atan2(bz - az, bx - ax)), toPoint = Math.toDegrees(Math.atan2(dz, dx));
         // Far from the end: follow the line, leaning toward it by the distance from it. Near the end: head for the point itself.
+        // Past the end (it went too far, more than backing up covers): head for the point itself as well. (2026-10-15: a heavy
+        // design on a short leg went past it and, still following the leg's heading, flew on for 23,000 blocks.)
+        final boolean past = (p.x - bx) * (bx - ax) + (p.z - bz) * (bz - az) > 0;
         final double lean = Math.max(-t.maxLean, Math.min(t.maxLean, t.leanPerBlock * offLine(p)));
-        final double course = dist > Math.max(6.0, t.creepWithin) ? legHeading + lean : toPoint;
+        final double course = dist > Math.max(6.0, t.creepWithin) && !past ? legHeading + lean : toPoint;
         final boolean slowNow = speed < Math.max(0.5, 0.5 * slow());
         if (t.creepWithin > 0 && slowNow && Math.abs(wrap(course - c.yaw())) > t.smallError) {
             // A fast design that is nearly at rest and not headed along its way (the beginning of a leg): it turns on the

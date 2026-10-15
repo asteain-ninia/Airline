@@ -121,6 +121,8 @@ public final class RouteNetwork extends SavedData {
          * line is blocked): a large aircraft may not fly a line a small one may. Null: nothing found. Saved.
          */
         @Nullable private ShipClass blockedFrom;
+        /** Where the block is that keeps that class out (the first one the scan met; not saved). */
+        @Nullable private BlockPos blockedFromAt;
         /** The smallest class for which the line passes too low over a pad (as {@link #barred} is for the small one). Not saved. */
         @Nullable private ShipClass barredFrom;
         /** Goes up whenever a scan that is under way has become worthless. */
@@ -170,6 +172,8 @@ public final class RouteNetwork extends SavedData {
         @Nullable public BlockPos blockedAt() { return blockedAt; }
         public boolean hasUnseenParts() { return gaps; }
         @Nullable public BlockPos barredBy() { return barred; }
+        /** Where the block is that keeps the larger classes out ({@link #closedFrom}); null when nothing does or it is not known. */
+        @Nullable public BlockPos blockedFromAt() { return blockedFromAt; }
         public Tube tube() { return tube; }
         public double length() { return tube.length(); }
         public BlockPos other(BlockPos end) { return end.equals(a) ? b : a; }
@@ -201,8 +205,9 @@ public final class RouteNetwork extends SavedData {
         int part, chunk, column;
         boolean gaps, done;
         @Nullable BlockPos found;
-        /** The smallest class kept out by what was found that does not keep out the small one. */
+        /** The smallest class kept out by what was found that does not keep out the small one, and where that was. */
         @Nullable ShipClass blockedFrom;
+        @Nullable BlockPos blockedFromAt;
 
         Scan(Edge edge) {
             this.edge = edge;
@@ -687,6 +692,7 @@ public final class RouteNetwork extends SavedData {
                 edge.blockedFrom = scan.blockedFrom;
                 linksDue = true;
             }
+            edge.blockedFromAt = scan.blockedFromAt;
             if (scan.found != null) set(edge, State.BLOCKED, scan.found);
             else if (scan.gaps) set(edge, State.UNVERIFIED, null);
             else set(edge, State.CLEAR, null);
@@ -850,7 +856,10 @@ public final class RouteNetwork extends SavedData {
                             return budget;
                         }
                         // Only the larger classes are kept out: noted, and the scan goes on (the small class may still meet something).
-                        if (scan.blockedFrom == null || kept.ordinal() < scan.blockedFrom.ordinal()) scan.blockedFrom = kept;
+                        if (scan.blockedFrom == null || kept.ordinal() < scan.blockedFrom.ordinal()) {
+                            scan.blockedFrom = kept;
+                            scan.blockedFromAt = pos.immutable();
+                        }
                     }
                 }
             }
