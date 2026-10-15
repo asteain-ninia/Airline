@@ -64,6 +64,8 @@ def check(path, facility, level):
     hut = blocks.get((ax, ay, az), "minecraft:air")
     if hut != "airline:blockhut" + facility:
         faults.append("1. 基準点 %s にあるのは %s(小屋ブロック airline:blockhut%s のはず)" % ((ax, ay, az), hut, facility))
+    if facility == "anchorage":
+        return check_pier(blocks, (ax, ay, az), (sx, sy, sz), faults, radius)
     pads = [(ax + 1, ay - 1, az - (h + 8))]
     if level >= GUEST_PAD_LEVEL:
         pads.append((pads[0][0] + 2 * h + 5, pads[0][1], pads[0][2]))
@@ -89,6 +91,25 @@ def check(path, facility, level):
         high = sorted({name for (x, y, z), name in blocks.items() if y > floor + 8})
         faults.append("5. 建物が台の床から %d 上まである(8 まで): %s" % (top - floor, high[:5]))
     return faults, len(blocks), (sx, sy, sz), [(x - ax, y - ay, z - az) for x, y, z in pads]
+
+
+def check_pier(blocks, anchor, size, faults, radius):
+    """泊地(桟橋 1 本): 台は小屋から (9, -2, -20)、床は無い。桟橋の床は台の西 8、1 段上に、大型機の長さぶん続く。
+    機体の居る所(台の中心から東西 7・南北 12、桟橋の床の高さから上)は空。竪穴の中は、桟橋の床より上に固いものが無い。"""
+    ax, ay, az = anchor
+    px, py, pz = ax + 9, ay - 2, az - 20
+    gaps = [(px - 8 - ax, py + 1 - ay, z - az) for z in range(pz - 12, pz + 13) if (px - 8, py + 1, z) not in blocks]
+    if gaps:
+        faults.append("2. 桟橋の床が、機体の脇で途切れている所が %d 個(小屋から %s など)" % (len(gaps), gaps[:3]))
+    inside = [((x - ax, y - ay, z - az), name) for (x, y, z), name in blocks.items()
+              if px - 7 <= x <= px + 7 and pz - 12 <= z <= pz + 12 and y >= py + 1]
+    if inside:
+        faults.append("3. 機体の居る所にブロックがある: %s" % inside[:4])
+    hard = [((x - ax, y - ay, z - az), name) for (x, y, z), name in blocks.items()
+            if y >= py + 2 and not soft(name) and math.hypot(x + 0.5 - (px + 0.5), z + 0.5 - (pz + 0.5)) <= radius]
+    if hard:
+        faults.append("4. 竪穴(半径 %d、桟橋の床より上)に固いブロックが %d 個: %s" % (radius, len(hard), hard[:4]))
+    return faults, len(blocks), size, [(px - ax, py - ay, pz - az)]
 
 
 def main():

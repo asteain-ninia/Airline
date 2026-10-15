@@ -17,16 +17,27 @@ import net.minecraft.core.BlockPos;
  * <p>Connectors (Create Aeronautics): a small airfield has a connector in the floor of its pads from level 3 on, a
  * medium airfield always; a large airfield and an anchorage have side connectors and none in the floor.</p>
  *
- * <p>The geometry of a facility's pads, seen from its hut block in a building that was not turned (the designs are made
+ * <p>The geometry of an airfield's pads, seen from its hut block in a building that was not turned (the designs are made
  * to it): the first pad lies so far to the north and one block to the east, its floor one block lower than the hut; the
  * second (from {@link RouteRules#GUEST_PAD_LEVEL}) lies east of the first, with room for both shafts. Each pad is a
  * square of {@link #padHalfSize} each way from its middle.</p>
+ *
+ * <p>The anchorage (the user's rulings of 2026-10-15) is a pier, one berth, level 1 only: its hut block (a bollard) stands
+ * at the root of the pier, the pier runs north from it into the air, and the aircraft is held in the air beside the pier
+ * (east of it), its deck level with the pier's. Its "pad" is the block under where a large aircraft's own block is held
+ * ({@link #ANCHORAGE_BERTH}); there is no floor under it. The pier's deck runs along the berth a large aircraft's half
+ * width and one block to the west of the pad, one block higher; a smaller aircraft is held closer to the pier.</p>
  */
 public enum Facility {
     SMALL_AIRFIELD("airfield", 6),
     MEDIUM_AIRFIELD("mediumairfield", 10),
     LARGE_AIRFIELD("largeairfield", 15),
-    ANCHORAGE("anchorage", 15);
+    ANCHORAGE("anchorage", 0);
+
+    /** The anchorage's berth from its hut block (not turned): east of the pier, so far out that the bollard is outside the shaft. */
+    public static final BlockPos ANCHORAGE_BERTH = new BlockPos(ShipClass.LARGE.halfWidth + 2, -2, -20);
+    /** From an anchorage's pad to the edge of its pier's deck, sideways (and one block up). */
+    public static final int PIER_FROM_PAD = ShipClass.LARGE.halfWidth + 1;
 
     /** The building's name in MineColonies and in the blueprints ("airfield1" to "airfield5", and so on). */
     public final String schematic;
@@ -61,6 +72,16 @@ public enum Facility {
         return this != ANCHORAGE;
     }
 
+    /** Whether its aircraft are held in the air beside a pier instead of set down on a floor (the anchorage). */
+    public boolean airborne() {
+        return this == ANCHORAGE;
+    }
+
+    /** The highest building level (an anchorage has one level only). */
+    public int maxLevel() {
+        return this == ANCHORAGE ? 1 : 5;
+    }
+
     public boolean floorConnector(int level) {
         return this == SMALL_AIRFIELD ? level >= 3 : this == MEDIUM_AIRFIELD;
     }
@@ -75,12 +96,12 @@ public enum Facility {
 
     /** The middle of the first pad's floor, from the hut block (not turned). For the small airfield: 1 east, 1 down, 14 north. */
     public BlockPos padFromHut() {
-        return new BlockPos(1, -1, -(padHalfSize + 8));
+        return this == ANCHORAGE ? ANCHORAGE_BERTH : new BlockPos(1, -1, -(padHalfSize + 8));
     }
 
     /** The middle of the second pad's floor, from the hut block (not turned): east of the first, a block between the two shafts. */
     public BlockPos guestPadFromHut() {
-        return new BlockPos(1 + 2 * padHalfSize + 5, -1, -(padHalfSize + 8));
+        return this == ANCHORAGE ? ANCHORAGE_BERTH : new BlockPos(1 + 2 * padHalfSize + 5, -1, -(padHalfSize + 8));
     }
 
     /** Read from a save; an unknown or missing name is the small airfield (saves from before there were others). */

@@ -367,6 +367,49 @@ final class FlightController {
         else tell(be, key, args);
     }
 
+    /** Whether aircraft are held in the air at this pad beside a pier (an anchorage) instead of set down on a floor. */
+    static boolean airborne(RouteNetwork net, @Nullable BlockPos pad) {
+        final RouteNetwork.Node node = pad == null ? null : net.node(pad);
+        return node != null && node.facility() != null && node.facility().airborne();
+    }
+
+    /**
+     * At an anchorage: the side the pier is on, as {x, z} (one block), seen from the pad: where its deck is, the large
+     * aircraft's half width and one block to either side across the pad's heading, a block higher (a building that was
+     * mirrored has it on the other side). Null when there is no pier there, or that is not loaded, or it is no anchorage.
+     */
+    @Nullable
+    static int[] pierSide(ServerLevel level, RouteNetwork net, @Nullable BlockPos pad) {
+        if (!airborne(net, pad)) return null;
+        final double heading = Math.toRadians(net.node(pad).heading());
+        final int ax = (int) Math.round(Math.cos(heading)), az = (int) Math.round(Math.sin(heading));
+        final int reach = com.asteain.airline.route.Facility.PIER_FROM_PAD;
+        for (final int[] side : new int[][] {{-az, ax}, {az, -ax}}) {
+            final BlockPos deck = pad.offset(side[0] * reach, 1, side[1] * reach);
+            final LevelChunk chunk = level.getChunkSource().getChunkNow(deck.getX() >> 4, deck.getZ() >> 4);
+            if (chunk != null && !chunk.getBlockState(deck).getCollisionShape(level, deck).isEmpty()) return side;
+        }
+        return null;
+    }
+
+    /**
+     * Where the aircraft's own block is when it is berthed at this pad: over the middle of the pad's floor; at an
+     * anchorage, beside the pier, so far toward it that the edge of its deck lies against the pier ({@link AircraftType#deckReach}).
+     */
+    static BlockPos berthBlock(ServerLevel level, RouteNetwork net, BlockPos pad, AircraftType type) {
+        final int[] side = pierSide(level, net, pad);
+        if (side == null) return pad.above();
+        final int shift = com.asteain.airline.route.ShipClass.LARGE.halfWidth - type.deckReach();
+        return pad.offset(side[0] * shift, 1, side[1] * shift);
+    }
+
+    /** Whether there is nothing to berth at: no floor at the pad, or at an anchorage no pier beside it; false when that is not loaded. */
+    static boolean berthMissing(ServerLevel level, RouteNetwork net, BlockPos pad) {
+        if (!airborne(net, pad)) return floorMissing(level, pad);
+        if (level.getChunkSource().getChunkNow(pad.getX() >> 4, pad.getZ() >> 4) == null) return false;
+        return pierSide(level, net, pad) == null;
+    }
+
     /** 1-4: whether the pad has no floor to land on (its middle and four places around it); false when that is not loaded. */
     static boolean floorMissing(ServerLevel level, BlockPos pad) {
         for (final int[] d : new int[][] {{0, 0}, {4, 4}, {4, -4}, {-4, 4}, {-4, -4}}) {
@@ -567,7 +610,7 @@ final class FlightController {
             berth = true;
             if (net.route(from, pad, ship).size() < 2) continue;
             way = true;
-            if (floorMissing(level, pad)) continue;
+            if (berthMissing(level, net, pad)) continue;
             floor = true;
             if (free(level, pad, self)) return new Landing(pad, "");
         }
@@ -612,8 +655,9 @@ final class FlightController {
             at = point;
         }
         if (be.destination != null) {
-            // Placed over the pad, then down onto it.
-            final Vec3 over = new Vec3(be.destination.getX() + 0.5, at.y, be.destination.getZ() + 0.5);
+            // Placed over the pad (beside the pier at an anchorage), then down onto it.
+            final BlockPos spot = berthBlock(c.level, net, be.destination, c.type);
+            final Vec3 over = new Vec3(spot.getX() + 0.5, at.y, spot.getZ() + 0.5);
             if (be.phase != Phase.DESCEND) plan.then(over, Math.round(c.type.alignSeconds * 20.0));
             final double rest = be.destination.getY() + 1 + be.restOffset;
             plan.then(new Vec3(over.x, rest, over.z), Math.round(Math.max(0, at.y - rest) / c.type.descentRate * 20.0) + 60);
@@ -739,7 +783,7 @@ final class FlightController {
         final Mob pilot = pilot(level, be);
         // (Its home is kept for it; somebody can only stand there who was made there by command.)
         final List<BlockPos> back = be.home == null || !free(level, be.home, rt.craft.id()) ? List.of() : net.route(be.at, be.home, shipClass(be));
-        if (pilot == null || back.size() < 2 || floorMissing(level, be.home)) {
+        if (pilot == null || back.size() < 2 || berthMissing(level, net, be.home)) {
             if (++rt.homeTries == HOME_TRIES) {
                 // Not for ever: the surroundings are let go. It goes on trying whenever somebody is near.
                 Handling.release(rt);
@@ -784,10 +828,18 @@ final class FlightController {
         be.timer++;
         // Behind the tail first, then ahead of the nose, in turn: from a ship that does not lie on the world's block grid
         // the walk off one end of the deck can fail (seen in the tests) while the other end works.
-        final BlockPos spot = leaveSpot(net, be.at, (be.timer / RETRY_LEAVING) % 2 == 1);
+        final BlockPos spot = leaveSpot(level, net, be, be.at, (be.timer / RETRY_LEAVING) % 2 == 1);
         if (pilot != null && be.at != null) {
             final Boarding.State state = Boarding.state(pilot);
-            final boolean onPad = pilot.getY() < be.at.getY() + 1.6;      // the deck is a block higher than the pad
+            final int[] pier = pierSide(level, net, be.at);
+            // Off the deck: on the pad (the deck is a block higher than the pad); at an anchorage, on the pier beside the hull.
+            final boolean onPad;
+            if (pier == null) onPad = pilot.getY() < be.at.getY() + 1.6;
+            else {
+                final BlockPos own = berthBlock(level, net, be.at, AircraftType.of(be.type));
+                final double across = (pilot.getX() - (own.getX() + 0.5)) * pier[0] + (pilot.getZ() - (own.getZ() + 0.5)) * pier[1];
+                onPad = across > AircraftType.of(be.type).deckReach() + 0.3;
+            }
             if (state == Boarding.State.SEATED) {
                 // Refused while the ship does not count as stopped yet; asked again until it is accepted.
                 if (be.timer % 10 == 0) Boarding.leave(pilot, spot);
@@ -802,7 +854,7 @@ final class FlightController {
                 // The aircraft stays fixed and waits. After twice the limit it is at least free for the next order.
                 if (be.timer < 2 * LEAVING_LIMIT) return;
             }
-            post(pilot, be.at.equals(be.home) ? null : leaveSpot(net, be.at, false));
+            post(pilot, be.at.equals(be.home) ? null : leaveSpot(level, net, be, be.at, false));
         }
         // The ticket is kept until here: a landed aircraft at a pad nobody else keeps loaded would stop in the middle of
         // letting its pilot off. It goes when the order is over; for a round trip it stays for the wait and the way back.
@@ -840,10 +892,22 @@ final class FlightController {
         be.timer = 0;
     }
 
-    /** Where the pilot walks to after landing: on the pad, at its edge behind the aircraft (the side of the airfield's hut). */
-    static BlockPos leaveSpot(RouteNetwork net, @Nullable BlockPos pad, boolean ahead) {
+    /**
+     * Where the pilot walks to after landing: on the pad, at its edge behind the aircraft (the side of the airfield's hut);
+     * at an anchorage, onto the middle of the pier beside the hull (a little astern, or ahead).
+     */
+    static BlockPos leaveSpot(ServerLevel level, RouteNetwork net, AircraftBlockEntity be, @Nullable BlockPos pad, boolean ahead) {
         if (pad == null) return BlockPos.ZERO;
         final RouteNetwork.Node node = net.node(pad);
+        final int[] pier = pierSide(level, net, pad);
+        if (pier != null) {
+            final BlockPos own = berthBlock(level, net, pad, AircraftType.of(be.type));
+            // To the middle of the pier (3 wide): walking is over within a block of the spot, which at its edge left the pilot on the deck's end.
+            final int across = AircraftType.of(be.type).deckReach() + 2;
+            final double heading = Math.toRadians(node.heading());
+            final int along = ahead ? 2 : -2;
+            return own.offset(pier[0] * across + (int) Math.round(Math.cos(heading) * along), 1, pier[1] * across + (int) Math.round(Math.sin(heading) * along));
+        }
         final double heading = Math.toRadians(node == null ? 0 : node.heading());
         final int far = ahead ? 5 : -5;
         return pad.offset((int) Math.round(Math.cos(heading) * far), 1, (int) Math.round(Math.sin(heading) * far));
@@ -972,7 +1036,7 @@ final class FlightController {
                 // a pilot cannot walk off a ship that rests half a block off the world's block grid.
                 ap.tick();
                 if (ap.placed || ++be.timer > 900) {
-                    final Vec3 middle = Vec3.atBottomCenterOf(be.destination);
+                    final Vec3 middle = Vec3.atBottomCenterOf(berthBlock(c.level, net, be.destination, c.type).below());
                     if (rt.placeStep++ == 0) {
                         // Along the pad's heading it is the aircraft's own block (the middle of the hull's floor) that is put
                         // over the middle of the pad, not the centre of mass: a design whose centre of mass lies ahead of
@@ -991,12 +1055,15 @@ final class FlightController {
             }
             case DESCEND -> {
                 final double rest = be.destination.getY() + 1 + be.restOffset;
-                ap.altTarget = Math.max(rest - 0.4, ap.altTarget - c.type.descentRate / 20.0);
-                if (c.pos().y < rest + 0.12) {
-                    if (rt.still++ == 0) ap.hover();      // touching the pad: no more pushes
+                // At an anchorage there is no floor to come down onto: the aircraft is brought to rest at the pier's height
+                // and held there (and fixed, as on a pad), the controller kept on.
+                final boolean held = airborne(net, be.destination);
+                ap.altTarget = Math.max(held ? rest : rest - 0.4, ap.altTarget - c.type.descentRate / 20.0);
+                if (held ? Math.abs(c.pos().y - rest) < 0.15 : c.pos().y < rest + 0.12) {
+                    if (rt.still++ == 0 && !held) ap.hover();      // touching the pad: no more pushes
                 } else {
                     if (rt.still > 0) {
-                        final Vec3 middle = Vec3.atBottomCenterOf(be.destination);
+                        final Vec3 middle = Vec3.atBottomCenterOf(berthBlock(c.level, net, be.destination, c.type).below());
                         ap.placeAt(rt.heading, middle.x, middle.z, true);
                     }
                     rt.still = 0;
@@ -1089,7 +1156,7 @@ final class FlightController {
         // A pad that does not take this class (any more: the airfield was built anew as another kind while the aircraft
         // was on its way) is never gone down onto, as one without a floor.
         final boolean noBerth = be.destination != null && !berthsAt(net, be.destination, shipClass(be));
-        final boolean noFloor = noBerth || (be.destination != null && floorMissing(level, be.destination));
+        final boolean noFloor = noBerth || (be.destination != null && berthMissing(level, net, be.destination));
         if (noFloor || (be.destination != null && stoodOn(level, be.destination, rt.craft.id()))) {
             // An airfield that is not built (or lost its pad), or a pad somebody stands on after all (an aircraft was made
             // there by command): never go down there.
@@ -1101,7 +1168,7 @@ final class FlightController {
             }
             // Another pad of the same airfield, when it has one that is free.
             for (final BlockPos other : padsWith(level, here)) {
-                if (other.equals(here) || !berthsAt(net, other, shipClass(be)) || floorMissing(level, other) || !free(level, other, rt.craft.id()) || net.route(here, other, shipClass(be)).size() < 2) continue;
+                if (other.equals(here) || !berthsAt(net, other, shipClass(be)) || berthMissing(level, net, other) || !free(level, other, rt.craft.id()) || net.route(here, other, shipClass(be)).size() < 2) continue;
                 be.destination = other;
                 be.route = new ArrayList<>(net.route(here, other, shipClass(be)));
                 be.leg = 0;
@@ -1143,7 +1210,7 @@ final class FlightController {
         rt.heading = node == null ? rt.craft.yaw() : node.heading();
         // Across first: the heading at a right angle to the pad's that is nearer to where the nose points now.
         final double across = Math.abs(Autopilot.wrap(rt.heading + 90 - rt.craft.yaw())) <= 90 ? rt.heading + 90 : rt.heading - 90;
-        final Vec3 middle = Vec3.atBottomCenterOf(be.destination == null ? BlockPos.containing(rt.craft.pos()) : be.destination);
+        final Vec3 middle = Vec3.atBottomCenterOf(be.destination == null ? BlockPos.containing(rt.craft.pos()) : berthBlock(level, net, be.destination, AircraftType.of(be.type)).below());
         rt.pilot.placeAt(across, middle.x, middle.z);
         rt.placeStep = 0;
         be.phase = Phase.ALIGN;
@@ -1165,7 +1232,7 @@ final class FlightController {
         be.landed = c.level.getGameTime();
         rt.lastHeadingError = Autopilot.wrap(rt.heading - c.yaw());
         // (How far the aircraft's own block lies from the middle of the pad: that is what says whether its blocks sit on the world's grid.)
-        final Vec3 centre = Vec3.atBottomCenterOf(be.at.above()), at = c.ownBlock();
+        final Vec3 centre = Vec3.atBottomCenterOf(berthBlock(c.level, net, be.at, c.type)), at = c.ownBlock();
         rt.lastMiss = Math.hypot(at.x - centre.x, at.z - centre.z);
         be.note = String.format("landed %.2f from the middle of the pad, heading off by %.2f degrees", rt.lastMiss, rt.lastHeadingError);
         LOGGER.info("[Airline/flight] aircraft {}", be.note);
@@ -1173,7 +1240,7 @@ final class FlightController {
         // Away from home with cargo the pilot's own job is told to stay by the aircraft: whenever nobody holds the pilot
         // or has it on the seat, it must not set out for its own airfield, a flight away.
         final Mob pilot = pilot(c.level, be);
-        if (pilot != null && be.cargo && !be.at.equals(be.home)) post(pilot, leaveSpot(net, be.at, false));
+        if (pilot != null && be.cargo && !be.at.equals(be.home)) post(pilot, leaveSpot(c.level, net, be, be.at, false));
         // A cargo flight unloads first; otherwise the pilot gets off.
         be.phase = be.cargo ? Phase.UNLOAD : Phase.DISEMBARK;
         be.timer = 0;
@@ -1561,7 +1628,8 @@ final class FlightController {
         final RouteNetwork net = RouteNetwork.get(level);
         final RouteNetwork.Node node = net.node(pad);
         if (node == null || node.kind() != RouteNetwork.Kind.AIRFIELD) return new Answer(false, "flight.no_pad");
-        // Only where this class may berth: an aircraft's home is a pad that takes it.
+        // Only where this class may berth: an aircraft's home is a pad that takes it. Never at an anchorage (no home).
+        if (node.facility() != null && !node.facility().airfield()) return new Answer(false, "flight.anchorage_no_home");
         if (!node.berths(type.shipClass)) return new Answer(false, "flight.no_berth");
         // Not on a pad where an aircraft stands, is expected, or has its home (also one that is not loaded now).
         loaded(level);

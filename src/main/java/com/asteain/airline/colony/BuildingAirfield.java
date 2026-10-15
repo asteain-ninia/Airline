@@ -50,7 +50,7 @@ public class BuildingAirfield extends AbstractBuilding {
 
     @Override
     public int getMaxBuildingLevel() {
-        return 5;
+        return facility.maxLevel();
     }
 
     /** The middle block of the first landing pad's floor: this airfield's own point in the air network, the home of its aircraft. */
@@ -67,7 +67,7 @@ public class BuildingAirfield extends AbstractBuilding {
     public List<BlockPos> pads() {
         final List<BlockPos> all = new ArrayList<>();
         all.add(pad());
-        if (getBuildingLevel() >= RouteRules.GUEST_PAD_LEVEL) all.add(guestPad());
+        if (facility.airfield() && getBuildingLevel() >= RouteRules.GUEST_PAD_LEVEL) all.add(guestPad());
         return all;
     }
 

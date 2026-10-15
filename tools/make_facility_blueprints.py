@@ -69,6 +69,16 @@ class Site:
         spec = FACILITIES[name]
         self.name = name
         self.h, self.r, self.airfield = spec["half"], spec["shaft"], spec["airfield"]
+        if name == "anchorage":
+            # 泊地は桟橋 1 本(2026-10-15 のご裁定)。係船柱(小屋ブロック)が根元に立ち、桟橋は北へ空中に突き出す。
+            # 機体は桟橋の東に、空中で横付け。「台」は大型機の機体ブロックの 1 つ下(床は無い): 小屋から (9, -2, -20)。
+            # 設計図の箱は、竪穴(台の中心から半径 17)の東西南北と、根元まで。高さは 4(桟橋の裏・桟橋・係船柱・松明)。
+            self.pad1 = (self.r, 0, self.r)
+            self.pad2 = self.pad1
+            self.anchor = (self.pad1[0] - 9, 2, self.pad1[2] + 20)
+            self.size = (2 * self.r + 1, 4, self.anchor[2] + 1)
+            self.north_end = self.anchor[2]
+            return
         self.pad1 = (self.r, 0, self.r)
         self.pad2 = (self.r + 2 * self.h + 5, 0, self.r)
         self.anchor = (self.pad1[0] - 1, 1, self.pad1[2] + self.h + 8)
@@ -76,11 +86,60 @@ class Site:
         self.north_end = self.pad1[2] + self.r          # 竪穴の南の端(ここまでが台の側)
 
     def pads(self, level):
+        if self.name == "anchorage":
+            return [self.pad1]
         return [self.pad1] + ([self.pad2] if level >= GUEST_PAD_LEVEL else [])
+
+
+def anchorage_design(mod_id="airline"):
+    """泊地(桟橋 1 本、レベル 1 だけ)。返すのは design() と同じ形(棚と回収箱は無い)。"""
+    site = Site("anchorage")
+    sx, sy, sz = site.size
+    b = {}
+    px, py, pz = site.pad1
+    ax, ay, az = site.anchor
+    deck = py + 1                                                       # 桟橋の床(機体の甲板と同じ高さ)
+
+    def put(x, y, z, state):
+        assert 0 <= x < sx and 0 <= y < sy and 0 <= z < sz, ("anchorage", x, y, z)
+        b[(x, y, z)] = state
+
+    # 桟橋: 幅 3(係船柱の列を中心に)、根元から北へ、大型機の長さと少しを越えるまで
+    tip = pz - 13
+    for z in range(tip, az + 1):
+        for x in range(ax - 1, ax + 2):
+            put(x, deck, z, mb.PLANKS)
+    for z in range(az - 2, az + 1):                                     # 根元の踊り場(島の上)
+        for x in range(ax - 2, ax + 3):
+            put(x, deck, z, mb.COBBLE)
+    for z in range(tip + 2, az - 2, 6):                                 # 桟橋の裏の梁と、吊ったランタン
+        for x in range(ax - 1, ax + 2):
+            put(x, py, z, mb.LOG % "x")
+    for z in range(tip + 5, az - 2, 6):
+        put(ax, py, z, mb.LANTERN % "true")
+    put(ax + 1, deck, pz, CONNECTOR % "east")                          # 横型の連結器(桟橋の東の縁、機体の脇)
+    put(ax, ay, az, mod_id + ":blockhutanchorage[facing=north]")       # 係船柱(小屋ブロック)
+    for x in (ax - 2, ax + 2):                                          # 踊り場の柵の柱と松明(竪穴の外)
+        put(x, ay, az, mb.FENCE)
+        put(x, ay + 1, az, "minecraft:torch")
+    # 柵のつながり
+    for (x, y, z), state in list(b.items()):
+        if state == mb.FENCE:
+            sides = {"north": (x, y, z - 1), "south": (x, y, z + 1), "west": (x - 1, y, z), "east": (x + 1, y, z)}
+            b[(x, y, z)] = state + "[" + ",".join("%s=%s" % (side, "true" if b.get(spot, "").split("[")[0] in mb.FULL else "false") for side, spot in sorted(sides.items())) + ",waterlogged=false]"
+    # 約束: 竪穴(台の中心から半径 17)の中は、桟橋の床より上に何も無い。台の上(機体の居る所)は空。
+    for (x, y, z), state in b.items():
+        assert not (y >= py + 2 and math.hypot(x - px, z - pz) <= site.r), ("anchorage: in the shaft", state, (x, y, z))
+    for x in range(px - 7, px + 8):
+        for z in range(pz - 12, pz + 13):
+            assert (x, deck, z) not in b, ("anchorage: something where the aircraft is held", (x, deck, z))
+    return b, [], None
 
 
 def design(name, level=1, mod_id="airline"):
     """座標 (x, y, z) → ブロックの状態。返すのは (ブロック, 棚の位置, 回収箱の位置か None)。"""
+    if name == "anchorage":
+        return anchorage_design(mod_id)
     site = Site(name)
     sx, _, sz = site.size
     east = sx - 1
@@ -503,10 +562,11 @@ def main():
         if a.startswith("--levels="):
             levels = tuple(int(v) for v in a.split("=", 1)[1].split(","))
     for name in names:
-        designs = {level: design(name, level) for level in levels}
-        for lower, upper in zip(levels, levels[1:]):
+        designs = {level: design(name, level) for level in (levels if name != "anchorage" else (1,))}
+        levels_here = sorted(designs)
+        for lower, upper in zip(levels_here, levels_here[1:]):
             check_levels(name, designs[lower], designs[upper])
-        for level in levels:
+        for level in levels_here:
             blocks, racks, stash = designs[level]
             write(name, level, blocks, stash)
 

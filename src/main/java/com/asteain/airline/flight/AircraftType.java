@@ -54,6 +54,16 @@ public final class AircraftType {
     public com.asteain.airline.route.ShipClass shipClass = com.asteain.airline.route.ShipClass.SMALL;
     /** Block states in the text form of commands ("create:shaft[axis=x]"). The aircraft's own block is not in this map. */
     public final Map<BlockPos, String> parts = new LinkedHashMap<>();
+
+    /**
+     * How far the deck reaches to either side of the aircraft's own block (the widest of its blocks at the deck's height):
+     * at an anchorage the aircraft is held so that this edge lies against the pier, where the pilot steps across.
+     */
+    public int deckReach() {
+        int reach = 0;
+        for (final BlockPos part : parts.keySet()) if (part.getY() == 0) reach = Math.max(reach, Math.abs(part.getZ()));
+        return Math.min(reach, shipClass.halfWidth);
+    }
     public BlockPos seat;
     /** The burners, the lever beside each (the height is held with these levers, all set alike), and the setting of each burner's own dial. */
     public BlockPos[] burners = {}, burnerLevers = {};

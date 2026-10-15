@@ -243,11 +243,29 @@ final class FlightSuite {
 
     // ---- size classes: which aircraft may berth where (the user's ruling of 2026-10-14) ---------------------------
 
-    /** A bare landing pad of that kind of place (no building): a stone floor of the place's size, on the network. */
+    /**
+     * A bare landing pad of that kind of place (no building), on the network: a stone floor of the place's size; for an
+     * anchorage no floor but a pier beside it (3 wide, as long as a large aircraft and more, a block higher than the pad).
+     */
     private static void pad(ServerLevel level, BlockPos floor, int heading, Facility facility) {
-        final int half = facility.padHalfSize();
-        for (int x = -half; x <= half; x++) for (int z = -half; z <= half; z++) level.setBlockAndUpdate(floor.offset(x, 0, z), Blocks.STONE.defaultBlockState());
+        if (facility.airborne()) {
+            final double h = Math.toRadians(heading);
+            final int ax = (int) Math.round(Math.cos(h)), az = (int) Math.round(Math.sin(h));
+            final int[] side = {az, -ax};
+            for (int along = -14; along <= 14; along++) for (int across = Facility.PIER_FROM_PAD; across <= Facility.PIER_FROM_PAD + 2; across++)
+                level.setBlockAndUpdate(floor.offset(ax * along + side[0] * across, 1, az * along + side[1] * across), Blocks.OAK_PLANKS.defaultBlockState());
+        } else {
+            final int half = facility.padHalfSize();
+            for (int x = -half; x <= half; x++) for (int z = -half; z <= half; z++) level.setBlockAndUpdate(floor.offset(x, 0, z), Blocks.STONE.defaultBlockState());
+        }
         RouteNetwork.get(level).setAirfield(floor, heading, 1, floor, facility);
+    }
+
+    /** An anchorage's ground and pier (its hut not turned): a little ground at the hut, the pier north from it into the air, west of the berth. */
+    private static void pier(ServerLevel level, BlockPos hut) {
+        Fixture.platform(level, hut.offset(2, 0, 4), 5, 4);
+        for (int z = hut.getZ() - 33; z <= hut.getZ() - 1; z++) for (int x = hut.getX() - 1; x <= hut.getX() + 1; x++)
+            level.setBlockAndUpdate(new BlockPos(x, hut.getY() - 1, z), Blocks.OAK_PLANKS.defaultBlockState());
     }
 
     /** The hut block of each kind of place. */
@@ -363,11 +381,12 @@ final class FlightSuite {
             }
             s.soft("classes / saved and read back, each pad is still the kind of place it was and its line is for the same classes", kept, after.toString());
             // Made by command where the class may not berth: refused, and nothing is made.
-            final Flights.Answer mediumAtSmall = Flights.spawn(level, sm, design()), smallAtLarge = Flights.spawn(level, lg, small), smallAtAnchorage = Flights.spawn(level, an, small);
-            s.soft("classes / an aircraft made by command on a pad that does not take its class is refused (medium on a small airfield's pad, small on a large airfield's and on an anchorage's)",
-                    !mediumAtSmall.ok() && !smallAtLarge.ok() && !smallAtAnchorage.ok() && "flight.no_berth".equals(mediumAtSmall.key()) && "flight.no_berth".equals(smallAtLarge.key())
-                            && "flight.no_berth".equals(smallAtAnchorage.key()) && Flights.aircraft(level).isEmpty(),
-                    mediumAtSmall.key() + " / " + smallAtLarge.key() + " / " + smallAtAnchorage.key() + ", " + Flights.aircraft(level).size() + " aircraft");
+            final Flights.Answer mediumAtSmall = Flights.spawn(level, sm, design()), smallAtLarge = Flights.spawn(level, lg, small), smallAtAnchorage = Flights.spawn(level, an, small),
+                    mediumAtAnchorage = Flights.spawn(level, an, design());
+            s.soft("classes / an aircraft made by command on a pad that does not take its class is refused (medium on a small airfield's pad, small on a large airfield's); none is made at an anchorage (no home there)",
+                    !mediumAtSmall.ok() && !smallAtLarge.ok() && !smallAtAnchorage.ok() && !mediumAtAnchorage.ok() && "flight.no_berth".equals(mediumAtSmall.key()) && "flight.no_berth".equals(smallAtLarge.key())
+                            && "flight.anchorage_no_home".equals(smallAtAnchorage.key()) && "flight.anchorage_no_home".equals(mediumAtAnchorage.key()) && Flights.aircraft(level).isEmpty(),
+                    mediumAtSmall.key() + " / " + smallAtLarge.key() + " / " + smallAtAnchorage.key() + " / " + mediumAtAnchorage.key() + ", " + Flights.aircraft(level).size() + " aircraft");
         });
 
         // ---- 2. colonies: M has a medium airfield with its own medium aircraft; N an anchorage, later a small airfield too
@@ -379,7 +398,7 @@ final class FlightSuite {
         final AbstractBuilding[] stashN = new AbstractBuilding[1];
         final TileEntityRack[] rack = new TileEntityRack[1];
         s.step("classes: colony N with an anchorage and no airfield; a buoy between the colonies", () -> {
-            floorFor(level, hutN, Facility.ANCHORAGE);
+            pier(level, hutN);
             colonyN[0] = Fixture.create(level, hutN.offset(4, 0, 4), "Airline classes N");
             Fixture.townHall(colonyN[0], hutN.offset(4, 0, 4));
             anchorage[0] = (BuildingAirfield) Fixture.placeHut(level, colonyN[0], Airline.ANCHORAGE_HUT.get(), hutN);
@@ -468,7 +487,7 @@ final class FlightSuite {
         s.step("classes: colony N wants the iron on M's racks; the dispatcher sends the medium aircraft to N's anchorage", () -> {
             watch(s, m, "classes");
             s.monitor(() -> {
-                if (m.aircraft.phase == Phase.DISEMBARK && anchorage[0].pad().equals(m.aircraft.at)) atAnchorage[0] = true;
+                if (!m.aircraft.flying() && m.aircraft.phase != Phase.PARKED && anchorage[0].pad().equals(m.aircraft.at)) atAnchorage[0] = true;
             });
             ironAtStart[0] = Fixture.count(m.airfield, Items.IRON_INGOT);
             ledger.set(WantLedger.Key.of(colonyN[0]), Items.IRON_INGOT, 16);
@@ -477,7 +496,7 @@ final class FlightSuite {
         s.until("classes: the cargo flight, there and back", () -> {}, () -> atAnchorage[0] && m.aircraft.phase == Phase.PARKED && m.pad.equals(m.aircraft.at), 20000);
         s.step("classes: result of the cargo flight", () -> {
             final double[] r = Flights.readings(m.aircraft);
-            final long landings = m.log.stream().filter(l -> l.contains("-> DISEMBARK")).count();
+            final long landings = m.log.stream().filter(l -> l.contains("-> UNLOAD")).count();
             final WantLedger.Key keyN = WantLedger.Key.of(colonyN[0]);
             final int there = Fixture.count(stashN[0], Items.IRON_INGOT), left = Fixture.count(m.airfield, Items.IRON_INGOT);
             s.soft("classes / the medium aircraft landed at the anchorage and came home, landing twice", atAnchorage[0] && landings == 2 && m.pad.equals(m.aircraft.at),
@@ -487,6 +506,39 @@ final class FlightSuite {
             s.soft("classes / the ledger counts the iron as delivered: colony N wants no more of it", ledger.net(keyN, Items.IRON_INGOT) == 0 && ledger.covered(keyN, Items.IRON_INGOT) == 0,
                     "net " + ledger.net(keyN, Items.IRON_INGOT) + ", on the way " + ledger.covered(keyN, Items.IRON_INGOT));
             s.soft("classes / the pilot is alive and off the aircraft", m.pilot.isAlive() && Boarding.state(m.pilot) == Boarding.State.NONE, "state " + Boarding.state(m.pilot));
+            for (String l : m.log) if (l.contains("->")) s.note("OBS classes: " + l);
+        });
+
+        // ---- the berth in the air: by command, a round trip to the anchorage; the pilot gets off onto the pier
+        final double[] onPier = {Double.NaN, Double.NaN, Double.NaN, Double.NaN};
+        final boolean[] fixedThere = new boolean[1];
+        s.step("classes: by command, a round trip to the anchorage (the pilot gets off there)", () -> {
+            m.log.clear();
+            m.clock = 0;
+            m.since = 0;
+            s.monitor(() -> {
+                if (Double.isNaN(onPier[0]) && m.aircraft.phase == Phase.WAIT && anchorage[0].pad().equals(m.aircraft.at)) {
+                    onPier[0] = m.pilot.getX();
+                    onPier[1] = m.pilot.getY();
+                    onPier[2] = m.pilot.getZ();
+                    final double[] r = Flights.readings(m.aircraft);
+                    fixedThere[0] = r != null && r[4] > 0;
+                    onPier[3] = r == null ? Double.NaN : r[6];
+                }
+            });
+            final Flights.Answer sent = Flights.send(level, m.pad, anchorage[0].pad(), true, m.pilot);
+            s.soft("classes / a round trip to the anchorage is ordered by command", sent.ok(), sent.text().getString());
+        });
+        s.until("classes: there, the pilot off and on again, and back", () -> {}, () -> m.clock > 100 && !Double.isNaN(onPier[0]) && m.aircraft.phase == Phase.PARKED && m.pad.equals(m.aircraft.at), 16000);
+        s.step("classes: result of the round trip to the anchorage", () -> {
+            final BlockPos pad = anchorage[0].pad();
+            // The hut was not turned: the pier runs west of the berth, its deck a block higher than the pad, 8 to 10 blocks west.
+            final boolean onTheDeck = onPier[1] > pad.getY() + 1.9 && onPier[1] < pad.getY() + 2.6 && onPier[0] >= pad.getX() - 10 && onPier[0] < pad.getX() - 7;
+            s.soft("classes / at the anchorage the aircraft was held in the air beside the pier, fixed, its own block within 1.5 blocks of where it belongs",
+                    fixedThere[0] && onPier[3] < 1.5, "fixed " + fixedThere[0] + ", " + onPier[3] + " from where its own block belongs");
+            s.soft("classes / the pilot got off onto the pier (not into the air) and is alive", onTheDeck && m.pilot.isAlive(),
+                    String.format("the pilot stood at (%.1f, %.1f, %.1f) while the aircraft waited; the pad is %s", onPier[0], onPier[1], onPier[2], pad.toShortString()));
+            s.soft("classes / then it came home", m.pad.equals(m.aircraft.at) && m.pilot.isAlive(), "at " + m.aircraft.at);
             for (String l : m.log) if (l.contains("->")) s.note("OBS classes: " + l);
         });
 

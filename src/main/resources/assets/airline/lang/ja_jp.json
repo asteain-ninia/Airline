@@ -193,5 +193,6 @@
   "commands.airline.flight.note.no_berth_stranded": "%s %s %s の台は、この機体の級を泊められなくなり、戻る道もありません。機体は、その上の空中に固定しました。見に来てください。",
   "commands.airline.flight.note.pad_gone": "%s %s %s の台が空路網から外れました(飛行場が取り壊されたか、泊地の町に飛行場がなくなりました)。機体は出発地へ戻り、便は欠航にします。",
   "commands.airline.flight.note.pad_gone_stranded": "%s %s %s の台が空路網から外れ、戻る道もありません。機体は、その上の空中に固定しました。見に来てください。",
-  "commands.airline.flight.note.cancelled_pad": "欠航: 行き先の台に降りられませんでした。機体は出発地に戻りました。"
+  "commands.airline.flight.note.cancelled_pad": "欠航: 行き先の台に降りられませんでした。機体は出発地に戻りました。",
+  "commands.airline.flight.anchorage_no_home": "泊地には機体を作れません(機体の母港は飛行場です)。"
 }

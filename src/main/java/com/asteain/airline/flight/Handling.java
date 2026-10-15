@@ -218,7 +218,7 @@ final class Handling {
         final Boarding.State state = Boarding.state(citizen);
         if (state != Boarding.State.NONE) {
             // Still on the seat (or on the way to or from it): asked to get off, now and then.
-            if (state == Boarding.State.SEATED && rt.age % 20 < LOOK) Boarding.leave(citizen, FlightController.leaveSpot(RouteNetwork.get(level), be.at, false));
+            if (state == Boarding.State.SEATED && rt.age % 20 < LOOK) Boarding.leave(citizen, FlightController.leaveSpot(level, RouteNetwork.get(level), be, be.at, false));
             return waiting(be, rt, "flight.note.nobody_carries");
         }
         if (citizen.getCitizenSleepHandler().isAsleep()) return waiting(be, rt, "flight.note.nobody_carries");
