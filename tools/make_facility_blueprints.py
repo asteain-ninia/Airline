@@ -58,8 +58,9 @@ FACILITIES = {
 PIER_BEYOND = 21                                # 桟橋の先は、台(機体の真ん中)からこれだけ先まで(大型機の半分の長さ 12 と、8 余分に)
 # 石の桟橋(2026-10-15 夕のご指示「アーチは幅5で、なおかつ桟橋自体の幅は4に…柱の幅は従来通り2で。アーチ脚の長さはそれ自体がアーチ状に
 # 短くなっていき、桟橋先端でちょうど0になる＝頂点になるように」、柱は 横 2・厚み 2 と選んでいただいた):
-# 床は幅 4(機体が東に横付けするので、木の桟橋より西へ 1 列広い)。床の下の真ん中 2 列に、梁と、2 × 2 の柱と、柱の間の幅 5 の弧。
-PILLAR_DEEPEST = 14                             # 根元の柱の長さ(梁の段を含めて、床の下から)。先へ行くほど短く、先端で 0
+# 床は幅 4(機体が東に横付けするので、木の桟橋より西へ 1 列広い)・厚さ 1(同じ日のご意見「床の厚さを1ブロックに。持ち送りは良いですね」で、
+# 床の下の梁をやめた)。床の下の真ん中 2 列に、2 × 2 の柱と、柱の間の幅 5 の弧。床の東西の縁の下は、逆さの階段の持ち送り。
+PILLAR_DEEPEST = 14                             # 根元の柱の長さ(床の下から)。先へ行くほど短く、先端で 0
 ARCH_DEPTH = PILLAR_DEEPEST                     # 石の桟橋の、床より下の深さ
 PILLAR_THICK = 2                                # 柱の厚み(南北)。横(東西)も 2
 ARCH_SPAN = 5                                   # 柱の間の弧の幅
@@ -187,8 +188,8 @@ def anchorage_design(mod_id="airline", name="anchorage"):
             put(x, ay, az, mb.FENCE)
             put(x, ay + 1, az, "minecraft:torch")
     else:
-        # 石の桟橋(2026-10-15 夕のご指示。定数の所の説明を参照): 床は幅 4 の石レンガ。床の下の真ん中 2 列に、
-        # 梁(床のすぐ下)、2 × 2 の柱(7 おき)、柱の間の幅 5 の半円の弧(天辺が梁の下面)。床の東西の縁の下は、逆さの階段の持ち送り。
+        # 石の桟橋(2026-10-15 夕のご指示。定数の所の説明を参照): 床は幅 4・厚さ 1 の石レンガ。床の下の真ん中 2 列に、
+        # 2 × 2 の柱(7 おき)と、柱の間の幅 5 の半円の弧(天辺が床の下面)。床の東西の縁の下は、逆さの階段の持ち送り。
         # 柱の長さは、先端(長さ 0 = 大きな弧の頂点)から根元(14)へ、4 分の 1 の楕円に沿って伸びる。根元では真下へ落ち、先では床と平らに並ぶ
         # (それまでのご意見「根本の足をさらに長く、外側に行くにつれて短く…ちょうど半アーチを描く」「もっと根元の方での減少が急激に」も、この形)。
         # 弧が柱より深くなる所(先端の側)は、弧の下側を、その大きな楕円で切る。弧の形の選び方は choose_shape()。
@@ -205,7 +206,7 @@ def anchorage_design(mod_id="airline", name="anchorage"):
         span = root_end + 1 - tip
 
         def reach(z):
-            """床の下から大きな楕円までの深さ(梁の段を含む)。z はブロックの境目で測る、連続の値。先端で 0、根元の柱の南の端で 14。"""
+            """床の下から大きな楕円までの深さ。z はブロックの境目で測る、連続の値。先端で 0、根元の柱の南の端で 14。"""
             d = min(max(z - tip, 0.0), span) / span
             return PILLAR_DEEPEST * (1.0 - math.sqrt(max(0.0, 1.0 - d * d)))
 
@@ -215,10 +216,10 @@ def anchorage_design(mod_id="airline", name="anchorage"):
         lengths = {at: int(round(reach(at + PILLAR_THICK / 2.0))) for at in pillars}
         lengths[pillars[-1]] = PILLAR_DEEPEST
         bays = [tip + PIER_SPACING * k + PILLAR_THICK for k in range(STONE_PIER_BAYS)]   # 弧の北の端
-        spring = deck - 1 - ARCH_SPAN / 2.0                             # 弧の立ち上がり(梁の下面から半径ぶん下。マスの途中)
+        spring = deck - ARCH_SPAN / 2.0                                 # 弧の立ち上がり(床の下面から半径ぶん下。マスの途中)
 
         def solid(z, y):
-            """南北の縦の切り口(真ん中 2 列)の、理想の形。梁より下だけを聞く。"""
+            """南北の縦の切り口(真ん中 2 列)の、理想の形。床より下だけを聞く。"""
             for at in pillars:
                 if at <= z < at + PILLAR_THICK:
                     return y >= deck - lengths[at]
@@ -231,11 +232,9 @@ def anchorage_design(mod_id="airline", name="anchorage"):
             return False
 
         for z in range(tip, root_end + 1):
-            for x in core:
-                put(x, deck - 1, z, brick)                              # 梁
             for x, facing in ((west, "east"), (east, "west")):          # 床の縁の下の持ち送り(逆さの階段、内向き)
                 put(x, deck - 1, z, mb.stairs(facing, "top", "stone_brick"))
-            for y in range(deck - PILLAR_DEEPEST, deck - 1):
+            for y in range(deck - PILLAR_DEEPEST, deck):
                 shape = choose_shape(solid, z, y)
                 if shape is None:
                     continue
@@ -244,10 +243,12 @@ def anchorage_design(mod_id="airline", name="anchorage"):
                     state = chiseled                                    # 柱の帯
                 for x in core:
                     put(x, y, z, state)
-        for b0 in bays:                                                 # 弧の天辺(梁の下)に吊ったランタン。先端の側の、弧の無い所も同じ
-            spot = (ax, deck - 2, b0 + ARCH_SPAN // 2)
-            if spot not in b:
-                put(spot[0], spot[1], spot[2], mb.LANTERN % "true")
+        for b0 in bays:
+            # 弧の天辺に、床から鎖 1 つで吊ったランタン(先端の側の、弧の無い所も同じ)。床のすぐ下に吊ると、両脇の持ち送りの陰で横から見えない
+            c = b0 + ARCH_SPAN // 2
+            if (ax, deck - 1, c) not in b and (ax, deck - 2, c) not in b:
+                put(ax, deck - 1, c, "minecraft:chain[axis=y,waterlogged=false]")
+                put(ax, deck - 2, c, mb.LANTERN % "true")
         for x in (west - 1, east + 1):                                  # 踊り場の灯籠(竪穴の外): 塀の柱にランタン
             put(x, ay, az, wall)
             put(x, ay + 1, az, mb.LANTERN % "false")
