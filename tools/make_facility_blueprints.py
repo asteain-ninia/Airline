@@ -51,7 +51,17 @@ FACILITIES = {
     "mediumairfield": {"half": 10, "shaft": 12, "airfield": True, "title": "中型飛行場"},
     "largeairfield": {"half": 15, "shaft": 17, "airfield": True, "title": "大型飛行場"},
     "anchorage": {"half": 15, "shaft": 17, "airfield": False, "title": "泊地"},
+    # 泊地の石の別版(2026-10-15 のご指示「桟橋は石タイプも欲しいです。別バリエで、アーチ状の高級目な柱があると良いです。柱の下端は虚空前提で」)。
+    # 同じ小屋ブロック・同じ建物で、設計図の名前だけが違う(MineColonies の別版)。
+    "anchoragestone": {"half": 15, "shaft": 17, "airfield": False, "title": "泊地(石)"},
 }
+PILLAR_DEEPEST = 14                             # 石の桟橋の、根元の柱の長さ(床の下から)。先へ行くほど短い
+ARCH_DEPTH = PILLAR_DEEPEST + 3                 # 石の桟橋の、床より下の深さ(柱と、垂れた先の塀・鎖・ランタン)
+PIER_BEYOND = 21                                # 桟橋の先は、台(機体の真ん中)からこれだけ先まで(大型機の半分の長さ 12 と、8 余分に)
+PIER_SPACING = 4                                # 石の桟橋の柱の間
+# Domum Ornamentum のパネル(厚さ 3/16 の板)。天井側(half=top、閉じた形)に置いて、弧の細かい段にする。材料は石レンガ。
+STONE_PANEL = "domum_ornamentum:panel[facing=north,half=top,open=false,type=full,waterlogged=false]|minecraft:block/oak_planks=minecraft:stone_bricks"
+PIERS = ("anchorage", "anchoragestone")
 # 連結器の位置(台の中心から)。床置き: 上向き、台の中心から南へ 3(機体の下部連結器の位置が決まったら直す)。
 # 横型: 台の床の 1 段上、台の中心から東西へ 8(大型機の胴の幅 15 のすぐ外。中心を向く)。
 CONNECTORS = {
@@ -69,14 +79,16 @@ class Site:
         spec = FACILITIES[name]
         self.name = name
         self.h, self.r, self.airfield = spec["half"], spec["shaft"], spec["airfield"]
-        if name == "anchorage":
+        if name in PIERS:
             # 泊地は桟橋 1 本(2026-10-15 のご裁定)。係船柱(小屋ブロック)が根元に立ち、桟橋は北へ空中に突き出す。
             # 機体は桟橋の東に、空中で横付け。「台」は大型機の機体ブロックの 1 つ下(床は無い): 小屋から (9, -2, -20)。
             # 設計図の箱は、竪穴(台の中心から半径 17)の東西南北と、根元まで。高さは 4(桟橋の裏・桟橋・係船柱・松明)。
-            self.pad1 = (self.r, 0, self.r)
+            below = ARCH_DEPTH if name == "anchoragestone" else 0
+            # 北の縁は、竪穴(半径 17)と桟橋の先の、遠い方まで
+            self.pad1 = (self.r, below, max(self.r, PIER_BEYOND))
             self.pad2 = self.pad1
-            self.anchor = (self.pad1[0] - 9, 2, self.pad1[2] + 20)
-            self.size = (2 * self.r + 1, 4, self.anchor[2] + 1)
+            self.anchor = (self.pad1[0] - 9, below + 2, self.pad1[2] + 20)
+            self.size = (2 * self.r + 1, below + 4, self.anchor[2] + 1)
             self.north_end = self.anchor[2]
             return
         self.pad1 = (self.r, 0, self.r)
@@ -86,14 +98,15 @@ class Site:
         self.north_end = self.pad1[2] + self.r          # 竪穴の南の端(ここまでが台の側)
 
     def pads(self, level):
-        if self.name == "anchorage":
+        if self.name in PIERS:
             return [self.pad1]
         return [self.pad1] + ([self.pad2] if level >= GUEST_PAD_LEVEL else [])
 
 
-def anchorage_design(mod_id="airline"):
-    """泊地(桟橋 1 本、レベル 1 だけ)。返すのは design() と同じ形(棚と回収箱は無い)。"""
-    site = Site("anchorage")
+def anchorage_design(mod_id="airline", name="anchorage"):
+    """泊地(桟橋 1 本、レベル 1 だけ)。返すのは design() と同じ形(棚と回収箱は無い)。name が anchoragestone なら石の別版。"""
+    site = Site(name)
+    stone = name == "anchoragestone"
     sx, sy, sz = site.size
     b = {}
     px, py, pz = site.pad1
@@ -101,45 +114,94 @@ def anchorage_design(mod_id="airline"):
     deck = py + 1                                                       # 桟橋の床(機体の甲板と同じ高さ)
 
     def put(x, y, z, state):
-        assert 0 <= x < sx and 0 <= y < sy and 0 <= z < sz, ("anchorage", x, y, z)
+        assert 0 <= x < sx and 0 <= y < sy and 0 <= z < sz, (name, x, y, z)
         b[(x, y, z)] = state
 
-    # 桟橋: 幅 3(係船柱の列を中心に)、根元から北へ、大型機の長さと少しを越えるまで
-    tip = pz - 13
-    for z in range(tip, az + 1):
-        for x in range(ax - 1, ax + 2):
-            put(x, deck, z, mb.PLANKS)
-    for z in range(az - 2, az + 1):                                     # 根元の踊り場(島の上)
-        for x in range(ax - 2, ax + 3):
-            put(x, deck, z, mb.COBBLE)
-    for z in range(tip + 2, az - 2, 6):                                 # 桟橋の裏の梁と、吊ったランタン
-        for x in range(ax - 1, ax + 2):
-            put(x, py, z, mb.LOG % "x")
-    for z in range(tip + 5, az - 2, 6):
-        put(ax, py, z, mb.LANTERN % "true")
+    tip = pz - PIER_BEYOND
+    if not stone:
+        # 桟橋: 幅 3(係船柱の列を中心に)、根元から北へ、大型機の長さと少しを越えるまで
+        for z in range(tip, az + 1):
+            for x in range(ax - 1, ax + 2):
+                put(x, deck, z, mb.PLANKS)
+        for z in range(az - 2, az + 1):                                 # 根元の踊り場(島の上)
+            for x in range(ax - 2, ax + 3):
+                put(x, deck, z, mb.COBBLE)
+        for z in range(tip + 2, az - 2, 6):                             # 桟橋の裏の梁と、吊ったランタン
+            for x in range(ax - 1, ax + 2):
+                put(x, py, z, mb.LOG % "x")
+        for z in range(tip + 5, az - 2, 6):
+            put(ax, py, z, mb.LANTERN % "true")
+        for x in (ax - 2, ax + 2):                                      # 踊り場の柵の柱と松明(竪穴の外)
+            put(x, ay, az, mb.FENCE)
+            put(x, ay + 1, az, "minecraft:torch")
+    else:
+        # 石の桟橋: 床は石レンガ。床の下は 4 ブロックおきの柱と、その間の小さな弧。
+        # 柱は根元がいちばん長く、根元のすぐ先で急に短くなり、先のほうはなだらかに床へ寄る。柱の先を結ぶと、
+        # 根元から跳ね上がって桟橋の下に沿っていく 4 分の 1 の楕円になる(2026-10-15 のご意見「根本の足をさらに長く、
+        # 外側に行くにつれて短く…足の先端を取ったときに、それらがちょうど半アーチを描く」「もっと根元の方での減少が急激に」)。
+        # 柱の間の弧は、柱の脇に逆さの階段、真ん中に天井側のパネル(Domum Ornamentum)で、細かい段にする
+        # (同じ日のご意見「Domumのパネル使ったらもっと滑らかなアーチに出来ませんか？」)。
+        # 柱の先は細い塀になり、鎖で吊ったランタンで終わる(下は虚空のまま)。
+        brick, chiseled, wall = mb.STONE_BRICKS, "minecraft:chiseled_stone_bricks", "minecraft:stone_brick_wall"
+        for z in range(tip, az + 1):
+            for x in range(ax - 1, ax + 2):
+                put(x, deck, z, brick)
+        for z in range(az - 2, az + 1):                                 # 根元の踊り場(島の上)、市松
+            for x in range(ax - 2, ax + 3):
+                put(x, deck, z, mb.DEEPSLATE if (x + z) % 2 else brick)
+        pillars = list(range(az - 3, tip, -PIER_SPACING))               # 柱の位置(根元から北へ)
+        span = (az - 3) - tip                                           # 楕円の横の半径: 根元の柱から桟橋の先まで
+        lengths = {}
+        for at in pillars:
+            along = (az - 3) - at
+            # 楕円の中心は (桟橋の先, 根元の柱の先の深さ)。根元では真下へ落ち、先では床と平らに並ぶ。
+            lengths[at] = max(1, int(round(PILLAR_DEEPEST * (1.0 - math.sqrt(max(0.0, 1.0 - (1.0 - along / span) ** 2))))))
+            for x in range(ax - 1, ax + 2):
+                for y in range(deck - lengths[at], deck):
+                    put(x, y, at, chiseled if (deck - y) % 4 == 3 else brick)
+            put(ax, deck - lengths[at] - 1, at, wall)                   # 垂れた先: 塀、鎖、ランタン
+            put(ax, deck - lengths[at] - 2, at, "minecraft:chain[axis=y,waterlogged=false]")
+            put(ax, deck - lengths[at] - 3, at, mb.LANTERN % "true")
+        for south, north in zip(pillars, pillars[1:]):                  # 柱の間: 床のすぐ下の梁と、なめらかな小さな弧
+            deep = min(lengths[south], lengths[north]) >= 2
+            for x in range(ax - 1, ax + 2):
+                for z in range(north + 1, south):
+                    put(x, deck - 1, z, brick)
+                if not deep:
+                    continue
+                put(x, deck - 2, south - 1, mb.stairs("south", "top", "stone_brick"))   # 柱の脇: 逆さの階段(45 度)
+                put(x, deck - 2, north + 1, mb.stairs("north", "top", "stone_brick"))
+                for z in range(north + 2, south - 1):                                   # 真ん中: 天井側のパネル(3/16)
+                    put(x, deck - 2, z, STONE_PANEL)
+            if deep:
+                put(ax, deck - 3, (south + north) // 2, mb.LANTERN % "true")   # 弧の頂から吊ったランタン
+        for x in (ax - 2, ax + 2):                                      # 踊り場の灯籠(竪穴の外): 塀の柱にランタン
+            put(x, ay, az, wall)
+            put(x, ay + 1, az, mb.LANTERN % "false")
     put(ax + 1, deck, pz, CONNECTOR % "east")                          # 横型の連結器(桟橋の東の縁、機体の脇)
     put(ax, ay, az, mod_id + ":blockhutanchorage[facing=north]")       # 係船柱(小屋ブロック)
-    for x in (ax - 2, ax + 2):                                          # 踊り場の柵の柱と松明(竪穴の外)
-        put(x, ay, az, mb.FENCE)
-        put(x, ay + 1, az, "minecraft:torch")
-    # 柵のつながり
+    # 柵と塀のつながり
     for (x, y, z), state in list(b.items()):
+        if state == "minecraft:stone_brick_wall":
+            b[(x, y, z)] = state + "[east=none,north=none,south=none,up=true,waterlogged=false,west=none]"
+            continue
         if state == mb.FENCE:
             sides = {"north": (x, y, z - 1), "south": (x, y, z + 1), "west": (x - 1, y, z), "east": (x + 1, y, z)}
             b[(x, y, z)] = state + "[" + ",".join("%s=%s" % (side, "true" if b.get(spot, "").split("[")[0] in mb.FULL else "false") for side, spot in sorted(sides.items())) + ",waterlogged=false]"
     # 約束: 竪穴(台の中心から半径 17)の中は、桟橋の床より上に何も無い。台の上(機体の居る所)は空。
     for (x, y, z), state in b.items():
-        assert not (y >= py + 2 and math.hypot(x - px, z - pz) <= site.r), ("anchorage: in the shaft", state, (x, y, z))
+        assert not (y >= py + 2 and math.hypot(x - px, z - pz) <= site.r), (name + ": in the shaft", state, (x, y, z))
     for x in range(px - 7, px + 8):
         for z in range(pz - 12, pz + 13):
-            assert (x, deck, z) not in b, ("anchorage: something where the aircraft is held", (x, deck, z))
+            for y in range(deck, sy):
+                assert (x, y, z) not in b, (name + ": something where the aircraft is held", (x, y, z))
     return b, [], None
 
 
 def design(name, level=1, mod_id="airline"):
     """座標 (x, y, z) → ブロックの状態。返すのは (ブロック, 棚の位置, 回収箱の位置か None)。"""
-    if name == "anchorage":
-        return anchorage_design(mod_id)
+    if name in PIERS:
+        return anchorage_design(mod_id, name)
     site = Site(name)
     sx, _, sz = site.size
     east = sx - 1
@@ -316,6 +378,32 @@ def design(name, level=1, mod_id="airline"):
 
     racks, stash = [], None
 
+    def guest_shed(g0, g1, gz0, gz1):
+        """来客の荷置き場(レベル 2 から)。柱と低い屋根、奥の壁。レベル 3 から三方に壁。棚はレベルごとに 2 つずつ。"""
+        box(g0, 0, gz0, g1, 0, gz1, floor)
+        posts((g0, g1), (gz0, gz1), 3)
+        if tiled:
+            walls(g0, gz0, g1, gz1, 3, 3, mb.BEIGE if level >= 5 else planks)
+            for z in range(gz0 + 1, gz1):
+                if (z - gz0) % 2 == 0:
+                    put(g0, 2, z, mb.PANE)
+                    put(g1, 2, z, mb.PANE)
+        else:
+            box(g0 + 1, 1, gz1, g1 - 1, 2, gz1, planks)
+        for x in range(g0 + 1, g1):                                     # 前は、いちばん上の段だけ板を渡す
+            put(x, 3, gz0, planks)
+        hip_roof(g0, gz0, g1, gz1, 4, 2)
+        for i in range(2 * (level - 1)):
+            spot = (g0 + 1 + i, 1, gz1 - 1)
+            put(*spot, mb.RACK % "north")
+            racks.append(spot)
+        cx = (g0 + g1) // 2
+        for x in (cx + 2, cx + 3):                                      # 長いす(北を向いて座る)
+            put(x, 1, gz0 + 2, mb.stairs("south", kind=wood))
+        put(cx, 4, gz0 + 2, mb.LANTERN % "true")                       # 屋根の裏から下げたランタン
+        put(g0, 2, gz0 - 1, torch_on("north"))
+        put(g1, 2, gz0 - 1, torch_on("north"))
+
     # ---- 建物 ----
     if name == "mediumairfield":
         # 管制所(中央。小屋ブロック、飛行士の机、扉)と、両脇の屋根つきの荷置き場(棚と回収箱)。
@@ -364,6 +452,26 @@ def design(name, level=1, mod_id="airline"):
                 put(x, 1, z0 + 2, log % "x")
                 put(x, 1, z0 + 3, log % "x")
             put(p2x, 2, z0 + 2, log % "x")
+        # 棚は、レベルごとに 2 つずつ増える(前のレベルの棚は、同じ場所に残る)
+        more = []
+        if level >= 2:
+            more += [((s0 + 1, 1, z0 + 3), "south"), ((s0 + 2, 1, z0 + 3), "south")]
+        if level >= 3:
+            more += [((s0 + 3, 1, z0 + 3), "south"), ((s0 + 4, 1, z0 + 3), "south")]
+        if level >= 4:
+            more += [((hx1 - 1, 1, z1 - 2), "west"), ((hx1 - 1, 1, z1 - 3), "west")]
+        if level >= 5:
+            more += [((hx1 - 1, 1, z1 - 4), "west"), ((hx1 - 1, 1, z1 - 5), "west")]
+        for spot, facing in more:
+            put(*spot, mb.RACK % facing)
+            racks.append(spot)
+        if improved:
+            # レベル 2 から: 台 2 の南に、来客の荷置き場(レベル 3 から三方に壁)。棚は 2・4・6・8。
+            guest_shed(p2x - 5, p2x + 5, z0 + 1, z1 - 1)
+        if level >= 4:
+            # 管制所と荷置き場の間の、屋根つきの渡り
+            box(hx1 + 1, 0, z0 + 2, s0 - 1, 0, z1 - 2, floor)
+            box(hx1 + 1, 3, z0 + 2, s0 - 1, 3, z1 - 2, "minecraft:%s_slab[type=bottom,waterlogged=false]" % wood)
 
     elif name == "largeairfield":
         # 長い荷役場(寄棟屋根の大きな建物)。中央に小屋ブロック、西に棚、東に回収箱。前は柱だけ。
@@ -406,35 +514,27 @@ def design(name, level=1, mod_id="airline"):
                 put(x, 1, z0 + 3, log % "x")
                 put(x, 1, z0 + 4, log % "x")
             put(p2x, 2, z0 + 3, log % "x")
-
-    else:
-        # 泊地: 台と連結器が主。南に、小屋ブロックを置く小さな詰め所だけ(棚・回収箱・飛行士の場所は無い)。
-        z0, z1 = north + 2, north + 8                                   # 奥行き 7(寄棟の頂が 1 列)
-        hx0, hx1 = ax - 4, ax + 4
-        top = 3
-        box(hx0, 0, z0, hx1, 0, z1, plate)
-        box(hx0 + 1, 0, z0 + 1, hx1 - 1, 0, z1 - 1, floor)
-        walls(hx0, z0, hx1, z1, top, 3, mb.BRICKS if level >= 5 else planks, front=True)
-        posts((hx0, hx1), (z0, z1), top)
-        put(ax, 1, z0, "minecraft:%s_door[facing=north,half=lower,hinge=left,open=false,powered=false]" % wood)
-        put(ax, 2, z0, "minecraft:%s_door[facing=north,half=upper,hinge=left,open=false,powered=false]" % wood)
-        for x in (ax - 2, ax + 2):
-            put(x, 2, z0, mb.PANE if improved else mb.FENCE)
-        for z in (z0 + 2, z0 + 4):
-            put(hx0, 2, z, mb.PANE if improved else mb.FENCE)
-            put(hx1, 2, z, mb.PANE if improved else mb.FENCE)
-        hip_roof(hx0, z0, hx1, z1, top + 1, 3)
-        put(ax, ay, az, mod_id + ":blockhut" + name + "[facing=north]")
-        put(ax + 2, 1, z1 - 1, mb.stairs("north", kind=wood))           # 長いす
-        put(ax + 3, 1, z1 - 1, mb.stairs("north", kind=wood))
-        put(ax - 3, 1, z1 - 1, "minecraft:lectern[facing=east,has_book=false,powered=false]")
-        for x in (hx0, hx1):
-            put(x, 2, z0 - 1, torch_on("north"))
-        # 桟橋の南の縁から詰め所への道(板)と、ベンチ
-        box(ax - 1, 0, north + 1, ax + 1, 0, z0 - 1, planks)
-        for x in range(hx1 + 4, east - 2, 10):                          # 南の通り道のベンチ(北を向く)
-            put(x, 1, north + 3, mb.stairs("south", kind=wood))
-            put(x + 1, 1, north + 3, mb.stairs("south", kind=wood))
+        # 棚は、レベルごとに 2 つずつ増える
+        more = []
+        if level >= 2:
+            more += [(hx0 + 8, 1, z1 - 1), (hx0 + 9, 1, z1 - 1)]
+        for lv, first in ((3, 2), (4, 4), (5, 6)):
+            if level >= lv:
+                more += [(hx0 + first, 1, z1 - 2), (hx0 + first + 1, 1, z1 - 2)]
+        for spot in more:
+            put(*spot, mb.RACK % "north")
+            racks.append(spot)
+        if improved:
+            # レベル 2 から: 台 2 の南に、来客の荷役場。棚は 2・4・6・8。
+            guest_shed(p2x - 7, p2x + 7, z0 + 1, z1 - 1)
+        if level >= 4:
+            # 荷役場と来客の荷役場の間の、屋根つきの渡り(柱は 3 ブロックおき)
+            w0, w1 = hx1 + 1, p2x - 8
+            box(w0, 0, z0 + 3, w1, 0, z0 + 4, floor)
+            for x in range(w0, w1 + 1, 3):
+                for z in (z0 + 2, z0 + 5):
+                    box(x, 1, z, x, 2, z, fence)
+            box(w0, 3, z0 + 2, w1, 3, z0 + 5, "minecraft:%s_slab[type=bottom,waterlogged=false]" % wood)
 
     # ---- 柵とガラス板のつながり(make_blueprint と同じ決まり) ----
     def joins(spot, fences):
@@ -501,7 +601,7 @@ def write(name, level, blocks, stash, mod_id="airline"):
     hut_entity = Compound({
         "id": String(mod_id + ":airfield"),          # ブロックエンティティ型(小屋ブロックはどれも同じ型)
         "x": Short(ax), "y": Short(ay), "z": Short(az),
-        "type": String(mod_id + ":" + name),         # 建物の登録名
+        "type": String(mod_id + ":" + ("anchorage" if name in PIERS else name)),   # 建物の登録名(別版も同じ建物)
         "pack": String(mb.PACK_NAME),
         "path": String("infrastructure/" + schematic + ".blueprint"),
         "mirror": Byte(0),
@@ -562,7 +662,7 @@ def main():
         if a.startswith("--levels="):
             levels = tuple(int(v) for v in a.split("=", 1)[1].split(","))
     for name in names:
-        designs = {level: design(name, level) for level in (levels if name != "anchorage" else (1,))}
+        designs = {level: design(name, level) for level in (levels if name not in PIERS else (1,))}
         levels_here = sorted(designs)
         for lower, upper in zip(levels_here, levels_here[1:]):
             check_levels(name, designs[lower], designs[upper])

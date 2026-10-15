@@ -324,7 +324,7 @@ final class FlightSuite {
             }
             s.check(net.node(hub) != null && net.node(hub).kind() == RouteNetwork.Kind.BUOY, "the buoy is a point of the network");
         });
-        s.until("classes: the lines around the buoy are looked at", () -> {}, () -> net.pending() == 0, 2400);
+        s.until("classes: the lines around the buoy are looked at", () -> {}, () -> net.pending() == 0, 6000);
         s.step("classes: the table, the lines, the ways", () -> {
             for (int i = 0; i < places.length; i++) {
                 final Edge line = net.edge(hub, bare[i]);
@@ -387,6 +387,43 @@ final class FlightSuite {
                     !mediumAtSmall.ok() && !smallAtLarge.ok() && !smallAtAnchorage.ok() && !mediumAtAnchorage.ok() && "flight.no_berth".equals(mediumAtSmall.key()) && "flight.no_berth".equals(smallAtLarge.key())
                             && "flight.anchorage_no_home".equals(smallAtAnchorage.key()) && "flight.anchorage_no_home".equals(mediumAtAnchorage.key()) && Flights.aircraft(level).isEmpty(),
                     mediumAtSmall.key() + " / " + smallAtLarge.key() + " / " + smallAtAnchorage.key() + " / " + mediumAtAnchorage.key() + ", " + Flights.aircraft(level).size() + " aircraft");
+        });
+
+        // ---- 1b. lines are verified for the class they are for (the user's ruling of 2026-10-15); buoys by grade
+        final BlockPos smallBuoy = hub.offset(0, 0, -100);
+        final BlockPos onlyLarge = hub.offset(30, 20, 15), inSmall = hub.offset(30, 20, 0);
+        s.step("classes: the heights of the lines; a grade 1 buoy; something in the large aircraft's tube only", () -> {
+            // Over a pad: 16 (small airfield), 22 (medium), 28 (large airfield, anchorage); over a buoy: 8, 10, 12 by grade.
+            final double[] heights = new double[places.length];
+            for (int i = 0; i < places.length; i++) heights[i] = net.waypoint(bare[i]).y - bare[i].getY() - 0.5;
+            final double overHub = net.waypoint(hub).y - hub.getY() - 0.5;
+            s.soft("classes / the lines pass 16, 22, 28 and 28 above the pads of a small, medium and large airfield and an anchorage, and 12 above a grade 3 buoy",
+                    heights[0] == 16 && heights[1] == 22 && heights[2] == 28 && heights[3] == 28 && overHub == 12,
+                    java.util.Arrays.toString(heights) + ", buoy " + overHub);
+            forceChunks(level, smallBuoy.getX() - 16, smallBuoy.getZ() - 16, smallBuoy.getX() + 16, smallBuoy.getZ() + 16);
+            level.setBlockAndUpdate(smallBuoy, Airline.BUOYS.get(0).get().defaultBlockState());
+            final Edge toMedium = net.edge(smallBuoy, bare[1]);
+            s.soft("classes / a grade 1 buoy's lines are for small aircraft only (its line to the medium airfield too), and it is passed 8 above",
+                    toMedium != null && toMedium.serves() == ShipClass.SMALL && net.waypoint(smallBuoy).y - smallBuoy.getY() - 0.5 == 8,
+                    toMedium == null ? "no line" : toMedium.serves() + ", " + (net.waypoint(smallBuoy).y - smallBuoy.getY() - 0.5));
+            // On the line from the buoy to the large airfield's pad, half way, 15 to the side: in the large aircraft's tube (17), not in the medium one's (12).
+            level.setBlockAndUpdate(onlyLarge, Blocks.STONE.defaultBlockState());
+            final Edge line = net.edge(hub, bare[2]);
+            s.note("OBS classes: the line buoy - large airfield passes " + line.tube().from + " to " + line.tube().to + "; the stone is at " + onlyLarge.toShortString());
+            s.soft("classes / a block in the large aircraft's tube only keeps large aircraft off the line at once; medium ones may still fly it",
+                    line.state() != State.BLOCKED && !line.opens(ShipClass.LARGE) && line.opens(ShipClass.MEDIUM) && line.closedFrom() == ShipClass.LARGE,
+                    line.state() + ", closed from " + line.closedFrom());
+            level.setBlockAndUpdate(inSmall, Blocks.STONE.defaultBlockState());
+            s.soft("classes / a block on the line itself (in the small tube) blocks it for every class", line.state() == State.BLOCKED && !line.opens(ShipClass.MEDIUM),
+                    line.state() + " at " + line.blockedAt());
+            level.removeBlock(inSmall, false);
+            level.removeBlock(onlyLarge, false);
+        });
+        s.until("classes: the line is looked at again", () -> {}, () -> net.pending() == 0, 6000);
+        s.step("classes: the line is open again", () -> {
+            final Edge line = net.edge(hub, bare[2]);
+            s.soft("classes / with the blocks gone and the line looked at again, large aircraft may fly it again", line.state() == State.CLEAR && line.opens(ShipClass.LARGE) && line.closedFrom() == null,
+                    line.state() + ", closed from " + line.closedFrom());
         });
 
         // ---- 2. colonies: M has a medium airfield with its own medium aircraft; N an anchorage, later a small airfield too

@@ -976,7 +976,7 @@ final class FlightController {
                         if (whole.progress(known.getX() + 0.5, known.getZ() + 0.5) > whole.progress(c.pos().x, c.pos().z)) seen = known;
                     }
                     if (seen != null) {
-                        if (edge != null) net.reportBlocked(edge, seen);
+                        if (edge != null) net.reportBlocked(edge, seen, shipClass(be));
                         tell(be, "flight.note.blocked", seen.getX(), seen.getY(), seen.getZ());
                         retreat(be, rt);
                         return;
@@ -1517,7 +1517,7 @@ final class FlightController {
         final double rest = type.stopDistance + type.topSpeed * (type.brakeSeconds > 0 ? type.brakeSeconds : type.coastSeconds);
         final double look = Math.min(dist, Math.max(RouteRules.lookAhead(), 2.0 * rest + 8.0));
         final Vec3 end = dist < 1.0e-6 ? on : new Vec3(on.x + dx / dist * look, on.y + (target.y - on.y) * look / dist, on.z + dz / dist * look);
-        return new Tube(on, end, RouteRules.tubeRadius(), RouteRules.tubeHalfHeight());
+        return new Tube(on, end, RouteRules.tubeRadius(type.shipClass), RouteRules.tubeHalfHeight(type.shipClass));
     }
 
     /** The first solid block in the tube ahead, in chunks that are loaded (the ship's ticket keeps its surroundings loaded). */
@@ -1557,7 +1557,7 @@ final class FlightController {
             final BoundingBox3dc box = other.boundingBox();
             final AircraftBlockEntity standing = LOADED.get(other.getUniqueId());
             if (standing != null && standing.at != null) {
-                if (RouteRules.grazes(tube, standing.at)) return other.getUniqueId();
+                if (RouteRules.grazes(tube, standing.at, AircraftType.of(standing.type).shipClass, c.type.shipClass)) return other.getUniqueId();
                 continue;
             }
             if (box.maxY() < low || box.minY() > high) continue;

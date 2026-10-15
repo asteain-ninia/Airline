@@ -245,11 +245,40 @@ public final class RouteRules {
         return AIRCRAFT_HALF_HEIGHT + TUBE_MARGIN.get();
     }
 
+    /**
+     * The tube for aircraft of a class (the user's ruling of 2026-10-15: lines are verified for the class they are for).
+     * Small aircraft keep the tube there always was (above); the larger classes their outline's half diagonal and the margin.
+     */
+    public static double tubeRadius(ShipClass ship) {
+        return ship == ShipClass.SMALL ? tubeRadius() : Math.ceil(ship.halfDiagonal() + TUBE_MARGIN.get());
+    }
+
+    public static double tubeHalfHeight(ShipClass ship) {
+        return ship.halfHeight() + TUBE_MARGIN.get();
+    }
+
+    /**
+     * How much higher than the settings the lines pass over a point made for a larger class: over a buoy, so far that the
+     * larger tube keeps the same distance from the buoy as the small one; over a pad, so far that its lines still pass
+     * over the pad beside it with an aircraft of that class standing there ({@link #padClearance}). 0 for small.
+     */
+    public static int waypointRaise(RouteNetwork.Kind kind, ShipClass ship) {
+        if (ship == ShipClass.SMALL) return 0;
+        final double more = kind == RouteNetwork.Kind.AIRFIELD ? padClearance(ship, ship) - padClearance(ShipClass.SMALL, ShipClass.SMALL)
+                : tubeHalfHeight(ship) - tubeHalfHeight(ShipClass.SMALL);
+        return (int) Math.ceil(more);
+    }
+
     // ---- rules that are not numbers -----------------------------------------------------------------------
 
     /** Where the line passes for a point whose block (buoy, or the middle of a landing pad's floor) is at {@code anchor}. */
     public static Vec3 waypoint(BlockPos anchor, RouteNetwork.Kind kind) {
-        final int up = kind == RouteNetwork.Kind.AIRFIELD ? airfieldWaypointHeight() : waypointHeight();
+        return waypoint(anchor, kind, ShipClass.SMALL);
+    }
+
+    /** ... for a point made for aircraft up to this class (a pad: its facility's largest; a buoy: by its grade). */
+    public static Vec3 waypoint(BlockPos anchor, RouteNetwork.Kind kind, ShipClass ship) {
+        final int up = (kind == RouteNetwork.Kind.AIRFIELD ? airfieldWaypointHeight() : waypointHeight()) + waypointRaise(kind, ship);
         return new Vec3(anchor.getX() + 0.5, anchor.getY() + 0.5 + up, anchor.getZ() + 0.5);
     }
 
@@ -261,9 +290,14 @@ public final class RouteRules {
      * above the floor to where the lines begin. It belongs to every line of that pad.
      */
     public static Tube shaft(BlockPos pad) {
-        final Vec3 top = waypoint(pad, RouteNetwork.Kind.AIRFIELD);
-        final double bottom = pad.getY() + SHAFT_FREE_FROM + tubeHalfHeight() + 0.5;
-        return new Tube(top, new Vec3(top.x, Math.min(top.y, bottom), top.z), tubeRadius(), tubeHalfHeight());
+        return shaft(pad, ShipClass.SMALL, ShipClass.SMALL);
+    }
+
+    /** ... over a pad made for aircraft up to {@code padClass}, for aircraft of class {@code ship}. */
+    public static Tube shaft(BlockPos pad, ShipClass padClass, ShipClass ship) {
+        final Vec3 top = waypoint(pad, RouteNetwork.Kind.AIRFIELD, padClass);
+        final double bottom = pad.getY() + SHAFT_FREE_FROM + tubeHalfHeight(ship) + 0.5;
+        return new Tube(top, new Vec3(top.x, Math.min(top.y, bottom), top.z), tubeRadius(ship), tubeHalfHeight(ship));
     }
 
     /**
@@ -275,6 +309,11 @@ public final class RouteRules {
         return 2 * WIDEST_HALF_DIAGONAL + 1.0;
     }
 
+    /** ... for an aircraft of class {@code flying} over a pad where one of class {@code parked} may stand. */
+    public static double padReach(ShipClass parked, ShipClass flying) {
+        return parked.halfDiagonal() + flying.halfDiagonal() + 1.0;
+    }
+
     /**
      * ... a line has to pass at least this high above the pad's floor block: the top of the floor, an aircraft standing
      * on it, a block of air, and the lower half of the aircraft that flies. (The lines of a pad itself start a block
@@ -284,9 +323,19 @@ public final class RouteRules {
         return 1.0 + 2 * AIRCRAFT_HALF_HEIGHT + 1.0 + AIRCRAFT_HALF_HEIGHT;
     }
 
+    /** ... for an aircraft of class {@code flying} over a pad where one of class {@code parked} may stand. */
+    public static double padClearance(ShipClass parked, ShipClass flying) {
+        return 1.0 + parked.height + 1.0 + flying.halfHeight();
+    }
+
     /** Whether a line (or a piece of one) comes too low over the landing pad at {@code pad}. The line's own ends are not asked about. */
     public static boolean grazes(Tube line, BlockPos pad) {
         return line.lowestNear(pad.getX() + 0.5, pad.getZ() + 0.5, padReach()) < pad.getY() + padClearance();
+    }
+
+    /** ... for aircraft of class {@code flying}, over a pad where one of class {@code parked} may stand. */
+    public static boolean grazes(Tube line, BlockPos pad, ShipClass parked, ShipClass flying) {
+        return line.lowestNear(pad.getX() + 0.5, pad.getZ() + 0.5, padReach(parked, flying)) < pad.getY() + padClearance(parked, flying);
     }
 
     /** Whether two points connect: their reaches overlap. Whether the line can be flown is a different question (verification). */

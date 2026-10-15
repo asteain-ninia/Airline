@@ -81,13 +81,21 @@ public final class RouteNetwork extends SavedData {
             return kind == Kind.AIRFIELD && facility != null && facility.berths(ship);
         }
 
-        /** The largest class this point is made for: a pad, its facility's; a buoy, any. */
+        /**
+         * The largest class this point is made for: a pad, its facility's; a buoy, by its grade (the user's ruling of
+         * 2026-10-15: grade 1 small, grade 2 medium, grade 3 large).
+         */
         public ShipClass largest() {
-            return kind == Kind.AIRFIELD && facility != null ? facility.largest() : ShipClass.LARGE;
+            if (kind == Kind.AIRFIELD) return facility != null ? facility.largest() : ShipClass.SMALL;
+            return switch (tier) {
+                case 1 -> ShipClass.SMALL;
+                case 2 -> ShipClass.MEDIUM;
+                default -> ShipClass.LARGE;
+            };
         }
 
         public Vec3 waypoint() {
-            return RouteRules.waypoint(pos, kind);
+            return RouteRules.waypoint(pos, kind, largest());
         }
 
         /** How far this point reaches: two points connect when they are closer than the sum of their reaches. */
@@ -102,8 +110,19 @@ public final class RouteNetwork extends SavedData {
         private State state = State.UNVERIFIED;
         @Nullable private BlockPos blockedAt;
         private Tube tube;
-        /** All that has to be free of solid blocks for this line: its tube, and the shaft over each end that is a landing pad. */
+        /**
+         * All that has to be free of solid blocks for this line, for the largest class it is for: its tube, and the shaft over
+         * each end that is a landing pad. {@link #byClass} has the same for each class up to that one (each holds the one before).
+         */
         private List<Tube> spaces = List.of();
+        private List<List<Tube>> byClass = List.of();
+        /**
+         * The smallest class something solid in the line's spaces keeps out, when that is not the small class (then the
+         * line is blocked): a large aircraft may not fly a line a small one may. Null: nothing found. Saved.
+         */
+        @Nullable private ShipClass blockedFrom;
+        /** The smallest class for which the line passes too low over a pad (as {@link #barred} is for the small one). Not saved. */
+        @Nullable private ShipClass barredFrom;
         /** Goes up whenever a scan that is under way has become worthless. */
         private int version;
         private boolean queued;
@@ -121,31 +140,33 @@ public final class RouteNetwork extends SavedData {
          */
         private ShipClass serves = ShipClass.SMALL;
 
-        private Edge(BlockPos a, BlockPos b, Kind kindA, Kind kindB) {
+        private Edge(BlockPos a, BlockPos b) {
             this.a = a;
             this.b = b;
-            rebuild(kindA, kindB);
         }
 
-        private void rebuild(Kind kindA, Kind kindB) {
-            tube = new Tube(RouteRules.waypoint(a, kindA), RouteRules.waypoint(b, kindB), RouteRules.tubeRadius(), RouteRules.tubeHalfHeight());
-            final List<Tube> all = new ArrayList<>();
-            all.add(tube);
-            if (kindA == Kind.AIRFIELD) all.add(RouteRules.shaft(a));
-            if (kindB == Kind.AIRFIELD) all.add(RouteRules.shaft(b));
-            spaces = all;
-        }
-
-        /** Whether a block position lies in the space this line needs. */
+        /** Whether a block position lies in the space this line needs (for the largest class it is for). */
         public boolean needs(int x, int y, int z) {
             for (final Tube space : spaces) if (space.contains(x, y, z)) return true;
             return false;
         }
 
+        /** The smallest class whose spaces hold this block position; null when none does. */
+        @Nullable
+        public ShipClass keepsOut(int x, int y, int z) {
+            for (int c = 0; c < byClass.size(); c++) for (final Tube space : byClass.get(c)) if (space.contains(x, y, z)) return ShipClass.values()[c];
+            return null;
+        }
+
         public State state() { return state; }
         public ShipClass serves() { return serves; }
-        /** Whether an aircraft of this class may fly this line (not blocked, and made for that class). */
-        public boolean opens(ShipClass ship) { return state != State.BLOCKED && serves.atLeast(ship); }
+        /** The smallest class kept off this line although the small one may fly it (something in the way, or too low over a pad); null for none. */
+        @Nullable public ShipClass closedFrom() { return blockedFrom == null ? barredFrom : barredFrom == null ? blockedFrom : ShipClass.smaller(blockedFrom, barredFrom); }
+        /** Whether an aircraft of this class may fly this line (not blocked, made for that class, nothing in that class's way). */
+        public boolean opens(ShipClass ship) {
+            final ShipClass closed = closedFrom();
+            return state != State.BLOCKED && serves.atLeast(ship) && (closed == null || ship.ordinal() < closed.ordinal());
+        }
         @Nullable public BlockPos blockedAt() { return blockedAt; }
         public boolean hasUnseenParts() { return gaps; }
         @Nullable public BlockPos barredBy() { return barred; }
@@ -180,6 +201,8 @@ public final class RouteNetwork extends SavedData {
         int part, chunk, column;
         boolean gaps, done;
         @Nullable BlockPos found;
+        /** The smallest class kept out by what was found that does not keep out the small one. */
+        @Nullable ShipClass blockedFrom;
 
         Scan(Edge edge) {
             this.edge = edge;
@@ -210,9 +233,10 @@ public final class RouteNetwork extends SavedData {
     private boolean sweepDue = true;
     /**
      * What "clear" means has changed over the versions (2: the shaft over a landing pad belongs to its lines, and the
-     * lines of a pad start higher). A network saved by older rules is looked at again from scratch once it is loaded.
+     * lines of a pad start higher; 3: lines are verified for the class they are for, and pass higher over the points made
+     * for larger classes). A network saved by older rules is looked at again from scratch once it is loaded.
      */
-    private static final int RULES = 2;
+    private static final int RULES = 3;
     private boolean recheckDue;
     /** Who set down a buoy and is told what its lines came to once they have been looked at. Not saved. */
     private final Map<BlockPos, UUID> watchers = new HashMap<>();
@@ -264,12 +288,12 @@ public final class RouteNetwork extends SavedData {
      * What the points that left the network were (not saved): an aircraft that was on its way to a landing pad when the
      * pad left still flies over it at the height of a pad's lines, and turns back there.
      */
-    private final Map<BlockPos, Kind> left = new HashMap<>();
+    private final Map<BlockPos, Node> left = new HashMap<>();
 
     /** Where the line passes over a point of the network (for a place that is no point: as over what it was, else a buoy). */
     public Vec3 waypoint(BlockPos pos) {
-        final Node node = nodes.get(pos);
-        return RouteRules.waypoint(pos, node == null ? left.getOrDefault(pos, Kind.BUOY) : node.kind());
+        final Node node = nodes.containsKey(pos) ? nodes.get(pos) : left.get(pos);
+        return node == null ? RouteRules.waypoint(pos, Kind.BUOY) : RouteRules.waypoint(pos, node.kind(), node.largest());
     }
 
     public List<Edge> edgesAt(BlockPos pos) {
@@ -305,10 +329,32 @@ public final class RouteNetwork extends SavedData {
         put(new Node(pad.immutable(), Kind.AIRFIELD, Math.max(1, Math.min(RouteRules.AIRFIELD_LEVELS, level)), Math.floorMod(heading, 360), hut.immutable(), facility));
     }
 
-    /** What a line's two ends are made for decides the largest class it serves ({@link Edge#serves}). */
-    private void serve(Edge edge) {
+    /**
+     * What a line is made for and the spaces it needs, from its two points as they are now: the largest class it serves
+     * is the smaller of what its two ends are made for ({@link Edge#serves}); for each class up to that one, its tube and
+     * the shafts over its pads. True when that changed.
+     */
+    private boolean shape(Edge edge) {
         final Node a = nodes.get(edge.a), b = nodes.get(edge.b);
-        edge.serves = a == null || b == null ? ShipClass.SMALL : ShipClass.smaller(a.largest(), b.largest());
+        final ShipClass serves = a == null || b == null ? ShipClass.SMALL : ShipClass.smaller(a.largest(), b.largest());
+        final Vec3 from = waypoint(edge.a), to = waypoint(edge.b);
+        final List<List<Tube>> byClass = new ArrayList<>();
+        final StringBuilder sign = new StringBuilder();
+        for (final ShipClass ship : ShipClass.values()) {
+            if (!serves.atLeast(ship)) break;
+            final List<Tube> spaces = new ArrayList<>();
+            spaces.add(new Tube(from, to, RouteRules.tubeRadius(ship), RouteRules.tubeHalfHeight(ship)));
+            if (a != null && a.kind() == Kind.AIRFIELD) spaces.add(RouteRules.shaft(edge.a, a.largest(), ship));
+            if (b != null && b.kind() == Kind.AIRFIELD) spaces.add(RouteRules.shaft(edge.b, b.largest(), ship));
+            byClass.add(spaces);
+        }
+        sign.append(serves).append(from).append(to);
+        final String before = edge.tube == null ? "" : String.valueOf(edge.serves) + edge.tube.from + edge.tube.to;
+        edge.serves = serves;
+        edge.byClass = byClass;
+        edge.tube = byClass.get(0).get(0);
+        edge.spaces = byClass.get(byClass.size() - 1);
+        return !sign.toString().equals(before);
     }
 
     private void put(Node node) {
@@ -320,7 +366,17 @@ public final class RouteNetwork extends SavedData {
             // stay as they are, with what is known about them; lines that do not reach any more go, new ones come.
             nodes.put(node.pos(), node);
             linksDue = true;
-            for (final Edge edge : around.getOrDefault(node.pos(), List.of())) serve(edge);
+            for (final Edge edge : around.getOrDefault(node.pos(), List.of())) {
+                index(edge, false);
+                final boolean changed = shape(edge);
+                index(edge, true);
+                if (changed) {
+                    edge.version++;
+                    set(edge, State.UNVERIFIED, null);
+                    enqueue(edge);
+                }
+            }
+            if (node.kind() == Kind.AIRFIELD) rebar();
             for (final Edge edge : new ArrayList<>(around.getOrDefault(node.pos(), List.of()))) {
                 final Node other = nodes.get(edge.other(node.pos()));
                 if (other == null || !RouteRules.connects(node, other)) unlink(edge);
@@ -344,7 +400,7 @@ public final class RouteNetwork extends SavedData {
     public boolean remove(BlockPos pos) {
         final Node gone = nodes.remove(pos);
         if (gone == null) return false;
-        left.put(pos.immutable(), gone.kind());
+        left.put(pos.immutable(), gone);
         linksDue = true;
         watchers.remove(pos);
         for (final Edge edge : new ArrayList<>(around.getOrDefault(pos, List.of()))) unlink(edge);
@@ -354,20 +410,35 @@ public final class RouteNetwork extends SavedData {
         return true;
     }
 
-    /** The landing pad (not one of the line's own ends) that a line passes too low over, if there is one. */
+    /**
+     * The landing pad (not one of the line's own ends) that a line passes too low over for small aircraft, if there is
+     * one; and the smallest class for which it passes too low over any pad (an aircraft of the pad's largest class may
+     * stand there) into {@link Edge#barredFrom}.
+     */
     @Nullable
     private BlockPos bar(Edge edge) {
+        BlockPos small = null;
+        ShipClass from = null;
         for (final Node node : nodes.values()) {
             if (node.kind() != Kind.AIRFIELD || node.pos().equals(edge.a) || node.pos().equals(edge.b)) continue;
-            if (RouteRules.grazes(edge.tube, node.pos())) return node.pos();
+            for (int c = 0; c < edge.byClass.size(); c++) {
+                final ShipClass ship = ShipClass.values()[c];
+                if (!RouteRules.grazes(edge.tube, node.pos(), node.largest(), ship)) continue;
+                if (c == 0 && small == null) small = node.pos();
+                if (from == null || c < from.ordinal()) from = ship;
+                break;
+            }
         }
-        return null;
+        edge.barredFrom = from;
+        return small;
     }
 
     /** Landing pads came or went: which lines pass too low over a pad is worked out again. */
     private void rebar() {
         for (final Edge edge : edges.values()) {
+            final ShipClass fromBefore = edge.barredFrom;
             final BlockPos now = bar(edge);
+            if (fromBefore != edge.barredFrom) linksDue = true;
             if (java.util.Objects.equals(now, edge.barred)) continue;
             edge.barred = now;
             edge.version++;
@@ -384,8 +455,8 @@ public final class RouteNetwork extends SavedData {
         final Pair pair = Pair.of(x, y);
         Edge edge = edges.get(pair);
         if (edge != null) return edge;
-        edge = new Edge(pair.a(), pair.b(), nodes.get(pair.a()).kind(), nodes.get(pair.b()).kind());
-        serve(edge);
+        edge = new Edge(pair.a(), pair.b());
+        shape(edge);
         edges.put(pair, edge);
         around.computeIfAbsent(edge.a, p -> new ArrayList<>()).add(edge);
         around.computeIfAbsent(edge.b, p -> new ArrayList<>()).add(edge);
@@ -463,6 +534,27 @@ public final class RouteNetwork extends SavedData {
         set(edge, State.BLOCKED, at.immutable());
     }
 
+    /**
+     * An aircraft of class {@code ship} met something solid on a line: it blocks the line for the smallest class whose
+     * spaces hold it (for the aircraft's own class when none does: it was seen with the aircraft's own tube).
+     */
+    public void reportBlocked(Edge edge, BlockPos at, ShipClass ship) {
+        final ShipClass from = edge.keepsOut(at.getX(), at.getY(), at.getZ());
+        keepOut(edge, from == null ? ship : from, at);
+    }
+
+    /** Something solid keeps the classes from {@code from} up off a line (all of them: the line is blocked). */
+    private void keepOut(Edge edge, ShipClass from, BlockPos at) {
+        if (from == ShipClass.SMALL) {
+            if (edge.state != State.BLOCKED) reportBlocked(edge, at);
+            return;
+        }
+        if (edge.blockedFrom != null && edge.blockedFrom.ordinal() <= from.ordinal()) return;
+        edge.blockedFrom = from;
+        linksDue = true;
+        setDirty();
+    }
+
     /** The lines of one point go back to "not verified" and are looked at again. */
     public void recheck(BlockPos point) {
         for (final Edge edge : around.getOrDefault(point, List.of())) {
@@ -484,11 +576,11 @@ public final class RouteNetwork extends SavedData {
                 continue;
             }
             index(edge, false);
-            edge.rebuild(a.kind(), b.kind());
-            serve(edge);
+            shape(edge);
             index(edge, true);
             edge.version++;
             edge.gaps = false;
+            edge.blockedFrom = null;
             edge.barred = bar(edge);
             set(edge, State.UNVERIFIED, null);
         }
@@ -591,6 +683,10 @@ public final class RouteNetwork extends SavedData {
             queue.poll();
             edge.queued = false;
             edge.gaps = scan.gaps;
+            if (edge.blockedFrom != scan.blockedFrom) {
+                edge.blockedFrom = scan.blockedFrom;
+                linksDue = true;
+            }
             if (scan.found != null) set(edge, State.BLOCKED, scan.found);
             else if (scan.gaps) set(edge, State.UNVERIFIED, null);
             else set(edge, State.CLEAR, null);
@@ -747,9 +843,14 @@ public final class RouteNetwork extends SavedData {
                     budget--;
                     final BlockState state = chunk.getBlockState(pos.set(x, y, z));
                     if (inTheWay(level, pos, state)) {
-                        scan.found = pos.immutable();
-                        scan.done = true;
-                        return budget;
+                        final ShipClass kept = scan.edge.keepsOut(x, y, z);
+                        if (kept == null || kept == ShipClass.SMALL) {
+                            scan.found = pos.immutable();
+                            scan.done = true;
+                            return budget;
+                        }
+                        // Only the larger classes are kept out: noted, and the scan goes on (the small class may still meet something).
+                        if (scan.blockedFrom == null || kept.ordinal() < scan.blockedFrom.ordinal()) scan.blockedFrom = kept;
                     }
                 }
             }
@@ -795,8 +896,9 @@ public final class RouteNetwork extends SavedData {
         for (final Edge edge : near) {
             if (!edge.needs(pos.getX(), pos.getY(), pos.getZ())) continue;
             if (solid) {
-                if (edge.state != State.BLOCKED) reportBlocked(edge, pos);
-            } else if (edge.state == State.BLOCKED) {
+                final ShipClass from = edge.keepsOut(pos.getX(), pos.getY(), pos.getZ());
+                keepOut(edge, from == null ? ShipClass.SMALL : from, pos);
+            } else if (edge.state == State.BLOCKED || edge.blockedFrom != null) {
                 edge.version++;
                 set(edge, State.UNVERIFIED, null);
                 enqueue(edge);
@@ -884,6 +986,7 @@ public final class RouteNetwork extends SavedData {
             line.putLong("b", edge.b.asLong());
             line.putString("state", edge.state.name());
             if (edge.blockedAt != null) line.putLong("blockedAt", edge.blockedAt.asLong());
+            if (edge.blockedFrom != null) line.putString("blockedFrom", edge.blockedFrom.name());
             lines.add(line);
         }
         tag.put("lines", lines);
@@ -928,6 +1031,8 @@ public final class RouteNetwork extends SavedData {
                 edge.state = State.UNVERIFIED;
             }
             edge.blockedAt = edge.state == State.BLOCKED && line.contains("blockedAt") ? BlockPos.of(line.getLong("blockedAt")) : null;
+            edge.blockedFrom = line.contains("blockedFrom") ? ShipClass.of(line.getString("blockedFrom").toLowerCase(java.util.Locale.ROOT)) : null;
+            if (edge.blockedFrom == ShipClass.SMALL) edge.blockedFrom = null;
         }
         // (Which lines pass too low over a landing pad was worked out by relink(); what was saved does not change that.)
         for (final Edge edge : network.edges.values()) {

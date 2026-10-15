@@ -288,7 +288,9 @@ final class NetworkSuite {
 
         // ---- D: landing pads (rulings of 2026-10-11): higher lines, the shaft over the pad, what a buoy says, links ----
         int z2 = -1200, lift = RouteRules.airfieldWaypointHeight();
-        BlockPos padA = new BlockPos(0, Y, z2), padB = new BlockPos(140, Y, z2), between = new BlockPos(70, Y + 8, z2);
+        // (The grade 2 buoy is passed 10 above since 2026-10-15, 2 more than a grade 1 one: set 2 lower, the lines stay level.)
+        final int overBuoy = RouteRules.waypointHeight() + RouteRules.waypointRaise(RouteNetwork.Kind.BUOY, ShipClass.MEDIUM);
+        BlockPos padA = new BlockPos(0, Y, z2), padB = new BlockPos(140, Y, z2), between = new BlockPos(70, Y + lift - overBuoy, z2);
         BlockPos lonely = new BlockPos(0, Y, z2 - 600);      // a buoy far from everything
         BlockPos inShaft = padA.offset(5, 6, -5), onFloor = padA.offset(7, 1, 0), underLine = padA.offset(20, lift - 7, 0), roof = padA.offset(9, lift - 8, 0);
         s.step("D: two landing pads and a buoy between them", () -> {
@@ -297,8 +299,8 @@ final class NetworkSuite {
             net.setAirfield(padB, 270, 1);
             level.setBlockAndUpdate(between, buoy(2).defaultBlockState());
             level.setBlockAndUpdate(lonely, buoy(1).defaultBlockState());
-            s.soft("D / over a landing pad the line passes " + lift + " blocks up, over a buoy " + RouteRules.waypointHeight(),
-                    net.waypoint(padA).y == padA.getY() + 0.5 + lift && net.waypoint(between).y == between.getY() + 0.5 + RouteRules.waypointHeight(),
+            s.soft("D / over a landing pad the line passes " + lift + " blocks up, over a grade 2 buoy " + overBuoy,
+                    net.waypoint(padA).y == padA.getY() + 0.5 + lift && net.waypoint(between).y == between.getY() + 0.5 + overBuoy,
                     "pad " + net.waypoint(padA) + ", buoy " + net.waypoint(between));
             s.soft("D / the pads join over the buoy (they are too far apart for a line of their own)", net.edge(padA, padB) == null && net.edge(padA, between) != null && net.edge(padB, between) != null,
                     describe(net.edge(padA, between)) + " / " + describe(net.edge(padB, between)));
