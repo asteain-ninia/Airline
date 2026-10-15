@@ -9,8 +9,11 @@ import java.util.Locale;
  * from these numbers.
  */
 public enum ShipClass {
-    /** 9 long, 9 wide, 9 high: kokaze, the first design, the white sail. */
-    SMALL(4, 4, 9),
+    /**
+     * 9 long, 9 wide, 10 high: koeda, the first design, the white sail, kokaze. (9 high until 2026-10-15: the user's ruling
+     * "小型の枠を 10 段に広げる" for koeda, whose envelope reaches the tenth layer.)
+     */
+    SMALL(4, 4, 10),
     /** 15 long, 11 wide, 13 high (STRATUS, 13 x 9 x 12, fits). */
     MEDIUM(7, 5, 13),
     /** 25 long, 15 wide, 17 high. */

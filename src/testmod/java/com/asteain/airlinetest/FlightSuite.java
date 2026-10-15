@@ -55,7 +55,7 @@ final class FlightSuite {
     private static final int Y = 100;
     /** Colony A's hut stands where its landing pad comes to lie at (0, Y - 1, -10), as the scenes were written for. */
     private static final BlockPos HUT_A = new BlockPos(0, Y, 0).subtract(com.asteain.airline.route.RouteRules.PAD_FROM_HUT).offset(0, -1, -10);
-    /** The lowest of three layers of a wall across a line between two landing pads (the line passes 16 above a pad's floor). */
+    /** The lowest of three layers of a wall across a line between two landing pads (the line passes 18 above a pad's floor; the wall is in its tube). */
     private static final int WALL = Y + 13;
     /** The berth (ticks on a pad after every landing) the checks run with, and the longer one of the cargo scene. */
     private static final int BERTH = 300, BERTH_LONG = 1200;
@@ -155,6 +155,18 @@ final class FlightSuite {
             } else if (part.getValue().startsWith("create:cogwheel")) {
                 if (found[1] == null) found[1] = at;
                 else if (found[2] == null) found[2] = at;
+            }
+        }
+        if (found[0] == null) {
+            // A design whose deck has no plank with nothing on it (koeda, 2026-10-15): another deck block with nothing on it.
+            for (final java.util.Map.Entry<BlockPos, String> part : parts.entrySet()) {
+                final BlockPos at = part.getKey();
+                final String name = part.getValue().split("\\[")[0];
+                if (at.getY() == 0 && (name.endsWith("_planks") || name.endsWith("_slab") || name.endsWith("_stairs")) && !parts.containsKey(at.above()) && !at.above().equals(BlockPos.ZERO)) {
+                    found[0] = at;
+                    found[3] = at.above();
+                    break;
+                }
             }
         }
         return found;
@@ -356,8 +368,9 @@ final class FlightSuite {
             return;
         }
         final Field fm = new Field(medium.hut), fl = new Field(large.hut);
-        flyToPier(s, level, medium, wood, fm, "medium");
-        flyToPier(s, level, large, stone, fl, "large");
+        flyToPier(s, level, medium, wood, fm, "medium", design());
+        // From the large airfield the large aircraft (2026-10-15, Codex's design; the medium one where there is none).
+        flyToPier(s, level, large, stone, fl, "large", Flights.designs().contains("oonagi") ? "oonagi" : design());
     }
 
     /** Places the blueprint of that level at the site (Structurize, at once); the first placement registers the building. */
@@ -406,14 +419,14 @@ final class FlightSuite {
     }
 
     /** A pilot and the medium aircraft at the airfield; a round trip by command to the anchorage: held beside the pier, the pilot gets off onto it. */
-    private static void flyToPier(Script s, ServerLevel level, Site home, Site anchorage, Field f, String name) {
-        s.step("facilities: " + name + ": a pilot and the medium aircraft", () -> {
+    private static void flyToPier(Script s, ServerLevel level, Site home, Site anchorage, Field f, String name, String designName) {
+        s.step("facilities: " + name + ": a pilot and the aircraft", () -> {
             f.colony = home.colony;
             f.airfield = home.building();
             f.pad = f.airfield.pad();
             f.pilotData = Fixture.spawn(f.colony, level, home.hut.offset(2, 0, 2));
-            final Flights.Answer made = spawn(level, f.pad);
-            s.soft("facilities / " + name + ": the medium aircraft is made on the airfield's pad", made.ok(), made.text().getString());
+            final Flights.Answer made = Flights.spawn(level, f.pad, designName);
+            s.soft("facilities / " + name + ": the aircraft (" + designName + ", " + Flights.classOf(designName) + ") is made on the airfield's pad", made.ok(), made.text().getString());
             for (AircraftBlockEntity each : Flights.aircraft(level)) if (f.pad.equals(each.home)) f.aircraft = each;
             s.check(f.aircraft != null, name + ": the new aircraft's home is this pad");
         });
@@ -603,18 +616,19 @@ final class FlightSuite {
         final BlockPos smallBuoy = hub.offset(0, 0, -100);
         final BlockPos onlyLarge = hub.offset(30, 20, 15), inSmall = hub.offset(30, 20, 0);
         s.step("classes: the heights of the lines; a grade 1 buoy; something in the large aircraft's tube only", () -> {
-            // Over a pad: 16 (small airfield), 22 (medium), 28 (large airfield, anchorage); over a buoy: 8, 10, 12 by grade.
+            // Over a pad: 18 (small airfield), 23 (medium), 29 (large airfield, anchorage); over a buoy: 9, 11, 13 by grade.
+            // (16, 22, 28 and 8, 10, 12 until the small aircraft became 10 high, 2026-10-15.)
             final double[] heights = new double[places.length];
             for (int i = 0; i < places.length; i++) heights[i] = net.waypoint(bare[i]).y - bare[i].getY() - 0.5;
             final double overHub = net.waypoint(hub).y - hub.getY() - 0.5;
-            s.soft("classes / the lines pass 16, 22, 28 and 28 above the pads of a small, medium and large airfield and an anchorage, and 12 above a grade 3 buoy",
-                    heights[0] == 16 && heights[1] == 22 && heights[2] == 28 && heights[3] == 28 && overHub == 12,
+            s.soft("classes / the lines pass 18, 23, 29 and 29 above the pads of a small, medium and large airfield and an anchorage, and 13 above a grade 3 buoy",
+                    heights[0] == 18 && heights[1] == 23 && heights[2] == 29 && heights[3] == 29 && overHub == 13,
                     java.util.Arrays.toString(heights) + ", buoy " + overHub);
             forceChunks(level, smallBuoy.getX() - 16, smallBuoy.getZ() - 16, smallBuoy.getX() + 16, smallBuoy.getZ() + 16);
             level.setBlockAndUpdate(smallBuoy, Airline.BUOYS.get(0).get().defaultBlockState());
             final Edge toMedium = net.edge(smallBuoy, bare[1]);
-            s.soft("classes / a grade 1 buoy's lines are for small aircraft only (its line to the medium airfield too), and it is passed 8 above",
-                    toMedium != null && toMedium.serves() == ShipClass.SMALL && net.waypoint(smallBuoy).y - smallBuoy.getY() - 0.5 == 8,
+            s.soft("classes / a grade 1 buoy's lines are for small aircraft only (its line to the medium airfield too), and it is passed 9 above (8 until the small aircraft became 10 high)",
+                    toMedium != null && toMedium.serves() == ShipClass.SMALL && net.waypoint(smallBuoy).y - smallBuoy.getY() - 0.5 == 9,
                     toMedium == null ? "no line" : toMedium.serves() + ", " + (net.waypoint(smallBuoy).y - smallBuoy.getY() - 0.5));
             // On the line from the buoy to the large airfield's pad, half way, 15 to the side: in the large aircraft's tube (17), not in the medium one's (12).
             level.setBlockAndUpdate(onlyLarge, Blocks.STONE.defaultBlockState());
@@ -996,14 +1010,18 @@ final class FlightSuite {
         // cogwheels, and the free place over that plank.
         final BlockPos[] found = yardParts(design());
         final BlockPos plank = found[0], cog = found[1], turned = found[2], added = found[3];
+        // (A plank of the deck for the first designs; koeda's deck has none free, so its tail stair: what is taken out and put back.)
+        final String deckKey = plank == null ? "minecraft:oak_planks" : com.asteain.airline.flight.AircraftType.of(design()).parts.get(plank).split("\\[")[0];
+        final net.minecraft.world.level.block.Block deckBlock = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(net.minecraft.resources.ResourceLocation.parse(deckKey));
+        final net.minecraft.world.item.Item deckItem = deckBlock.asItem();
         net.minecraft.world.item.Item cogwheel = net.minecraft.core.registries.BuiltInRegistries.ITEM.get(net.minecraft.resources.ResourceLocation.parse("create:cogwheel"));
         com.minecolonies.api.colony.buildings.IBuilding[] stash = new com.minecolonies.api.colony.buildings.IBuilding[1];
         s.step("yard: a plank and a cogwheel are taken out, a cogwheel is turned, a block is added; the racks have a plank and a cogwheel", () -> {
             stash[0] = Fixture.placeHut(level, a.colony, ModBlocks.blockStash, a.hut.offset(5, 0, 3));
-            Fixture.stock(rack[0], Items.OAK_PLANKS, 1);
+            Fixture.stock(rack[0], deckItem, 1);
             Fixture.stock(rack[0], cogwheel, 1);
             net.minecraft.world.level.block.state.BlockState there = level.getBlockState(Flights.partOf(a.aircraft, turned));
-            s.check(plank != null && cog != null && turned != null && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(Blocks.OAK_PLANKS) && there.getBlock().asItem() == cogwheel
+            s.check(plank != null && cog != null && turned != null && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(deckBlock) && there.getBlock().asItem() == cogwheel
                     && level.getBlockState(Flights.partOf(a.aircraft, added)).isAir(), "the design has a plank with nothing on it and two cogwheels (" + design() + ": " + java.util.Arrays.toString(found) + ")");
             final net.minecraft.core.Direction.Axis asBuilt = there.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.AXIS);
             level.removeBlock(Flights.partOf(a.aircraft, plank), false);
@@ -1014,24 +1032,24 @@ final class FlightSuite {
             int[] done = Flights.maintain(level, a.aircraft);
             net.minecraft.world.level.block.state.BlockState again = level.getBlockState(Flights.partOf(a.aircraft, turned));
             s.soft("yard / standing at home, the aircraft is put back the way its design has it: the plank and the cogwheel are put in again from the airfield's racks, the turned cogwheel is turned back, the added block is taken out",
-                    done[0] == 3 && done[1] == 1 && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(Blocks.OAK_PLANKS) && level.getBlockState(Flights.partOf(a.aircraft, cog)).getBlock().asItem() == cogwheel
+                    done[0] == 3 && done[1] == 1 && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(deckBlock) && level.getBlockState(Flights.partOf(a.aircraft, cog)).getBlock().asItem() == cogwheel
                             && again.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.AXIS) == asBuilt && level.getBlockState(Flights.partOf(a.aircraft, added)).isAir()
                             && a.aircraft.lacks.isEmpty(),
                     "put right " + done[0] + ", taken out " + done[1] + ", lacks " + a.aircraft.lacks);
             s.soft("yard / the plank and the cogwheel came off the racks, and the block that was taken out lies in the airfield's import store",
-                    Fixture.count(a.airfield, Items.OAK_PLANKS) == 0 && Fixture.count(a.airfield, cogwheel) == 0 && Fixture.count(stash[0], Items.DIRT) == 1,
-                    "racks: planks " + Fixture.count(a.airfield, Items.OAK_PLANKS) + ", cogwheels " + Fixture.count(a.airfield, cogwheel) + "; store: dirt " + Fixture.count(stash[0], Items.DIRT));
+                    Fixture.count(a.airfield, deckItem) == 0 && Fixture.count(a.airfield, cogwheel) == 0 && Fixture.count(stash[0], Items.DIRT) == 1,
+                    "racks: planks " + Fixture.count(a.airfield, deckItem) + ", cogwheels " + Fixture.count(a.airfield, cogwheel) + "; store: dirt " + Fixture.count(stash[0], Items.DIRT));
             // A part the racks do not have.
             level.removeBlock(Flights.partOf(a.aircraft, plank), false);
             done = Flights.maintain(level, a.aircraft);
             Flights.Answer refused = Flights.send(level, a.pad, padB, false, a.pilot);
             s.soft("yard / a part the racks do not have is remembered, and the aircraft does not fly until it is put in again; the refusal names the part as players read it",
-                    done[0] == 0 && Integer.valueOf(1).equals(a.aircraft.lacks.get("minecraft:oak_planks")) && !refused.ok() && refused.text().getString().contains(Blocks.OAK_PLANKS.getName().getString())
+                    done[0] == 0 && Integer.valueOf(1).equals(a.aircraft.lacks.get(deckKey)) && !refused.ok() && refused.text().getString().contains(deckBlock.getName().getString())
                             && !refused.text().getString().contains("minecraft:"),
                     "lacks " + a.aircraft.lacks + "; a flight: " + refused.text().getString());
-            Fixture.stock(rack[0], Items.OAK_PLANKS, 1);
+            Fixture.stock(rack[0], deckItem, 1);
             done = Flights.maintain(level, a.aircraft);
-            s.soft("yard / with the part on the racks it is put in at the next look, and nothing is lacking any more", done[0] == 1 && a.aircraft.lacks.isEmpty() && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(Blocks.OAK_PLANKS),
+            s.soft("yard / with the part on the racks it is put in at the next look, and nothing is lacking any more", done[0] == 1 && a.aircraft.lacks.isEmpty() && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(deckBlock),
                     "put right " + done[0] + ", lacks " + a.aircraft.lacks);
             // Self-repair switched off at the airfield: what is changed by hand stays, and a missing part keeps nothing on the ground.
             Flights.selfRepair(level, a.airfield, false);
@@ -1042,9 +1060,9 @@ final class FlightSuite {
                     done[0] == 0 && done[1] == 0 && level.getBlockState(Flights.partOf(a.aircraft, plank)).isAir() && level.getBlockState(Flights.partOf(a.aircraft, added)).is(Blocks.DIRT) && a.aircraft.lacks.isEmpty(),
                     "put right " + done[0] + ", taken out " + done[1] + ", lacks " + a.aircraft.lacks);
             Flights.selfRepair(level, a.airfield, true);
-            Fixture.stock(rack[0], Items.OAK_PLANKS, 1);
+            Fixture.stock(rack[0], deckItem, 1);
             done = Flights.maintain(level, a.aircraft);
-            s.soft("yard / switched on again, the aircraft is put back the way its design has it", done[0] == 1 && done[1] == 1 && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(Blocks.OAK_PLANKS)
+            s.soft("yard / switched on again, the aircraft is put back the way its design has it", done[0] == 1 && done[1] == 1 && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(deckBlock)
                     && level.getBlockState(Flights.partOf(a.aircraft, added)).isAir() && a.aircraft.lacks.isEmpty(), "put right " + done[0] + ", taken out " + done[1] + ", lacks " + a.aircraft.lacks);
             double[] weight = Flights.weight(level, a.aircraft);
             s.note(String.format("OBS yard: after the work the aircraft has mass %.2f", weight[0]));

@@ -239,7 +239,7 @@ public final class AircraftType {
      * This is the outline of a small aircraft; a design of another class stays inside its class's outline ({@link #shipClass},
      * 2026-10-15: until then a medium or large design was still held to this one).
      */
-    public static final int HALF_LENGTH = 4, HALF_WIDTH = 4, HEIGHT = 9;
+    public static final int HALF_LENGTH = 4, HALF_WIDTH = 4, HEIGHT = 10;
     /**
      * For the test bench only: a larger outline for the designs of this run, as "ahead x astern x half width x height"
      * (blocks from the aircraft's own block toward the nose and toward the tail, to either side, and layers; "5x7x4x12").
@@ -417,12 +417,55 @@ public final class AircraftType {
     }
 
     /** The designs that come as files in the jar (airline_aircraft/), in the order they are offered after the first design. */
-    private static final String[] BUNDLED = {"whitesail", "kokaze"};
+    private static final String[] BUNDLED = {"whitesail", "kokaze", "koeda", "stratus", "oonagi"};
     /**
      * The design an airfield gets when nothing else is asked for (the user's ruling of 2026-10-14: the fast one; larger
      * and better ones are to follow it). It is offered first. If its file cannot be read, the first design takes its place.
+     * Koeda since 2026-10-15 (the user's ruling: "こかぜと入れ替える").
      */
-    public static final String STANDARD = "kokaze";
+    public static final String STANDARD = "koeda";
+    /**
+     * Designs that are no longer offered (an airfield does not build them), but are still read, so that the aircraft of
+     * them that stand in a world fly on as they were built. Kokaze since 2026-10-15 (koeda took its place).
+     */
+    public static final java.util.Set<String> RETIRED = java.util.Set.of("kokaze");
+
+    /**
+     * The parts a propeller bearing turns (2026-10-15, the medium aircraft): the hub in front of the bearing and the sails
+     * fastened to it in the same plane. Once the rotation reaches the bearing they are no longer blocks of the ship but a
+     * turning contraption, and their places are empty; keeping the aircraft as it was built leaves those places alone.
+     */
+    @Nullable private java.util.Set<BlockPos> moving;
+
+    public java.util.Set<BlockPos> moving() {
+        if (moving != null) return moving;
+        final java.util.Set<BlockPos> found = new java.util.HashSet<>();
+        for (final Map.Entry<BlockPos, String> part : parts.entrySet()) {
+            final String state = part.getValue();
+            if (!state.startsWith("aeronautics:") || !state.contains("propeller_bearing")) continue;
+            final java.util.regex.Matcher facing = java.util.regex.Pattern.compile("facing=([a-z]+)").matcher(state);
+            final net.minecraft.core.Direction toward = facing.find() ? net.minecraft.core.Direction.byName(facing.group(1)) : null;
+            if (toward == null) continue;
+            final BlockPos hub = part.getKey().relative(toward);
+            if (!parts.containsKey(hub)) continue;
+            final java.util.ArrayDeque<BlockPos> todo = new java.util.ArrayDeque<>(List.of(hub));
+            while (!todo.isEmpty()) {
+                final BlockPos at = todo.poll();
+                if (!found.add(at)) continue;
+                for (final net.minecraft.core.Direction side : net.minecraft.core.Direction.values()) {
+                    if (side.getAxis() == toward.getAxis()) continue;           // the plane the hub turns in
+                    final BlockPos next = at.relative(side);
+                    if (!found.contains(next) && String.valueOf(parts.get(next)).contains("_sail")) todo.add(next);
+                }
+            }
+        }
+        return moving = java.util.Collections.unmodifiableSet(found);
+    }
+
+    /** Whether an airfield offers this design (it is not {@link #RETIRED}). */
+    public boolean offered() {
+        return !RETIRED.contains(name);
+    }
     /** The design that is made in code and always there; an aircraft of a save that does not name its design is one of these. */
     public static final String FIRST = "small";
 

@@ -25,9 +25,9 @@ import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TASKS = {"runAirfield": ("run-airfield", 1500), "runAirfieldReload": ("run-airfield", 900), "runAirfieldRemoved": ("run-airfield", 900), "runNetwork": ("run-network", 900)}
-# 全部の場面(2026-10-15 の c120m の並びに、設計図から建てる場面 facilities を足した)。中型の機体は、まだ MOD に入れていない仮の設計で飛ばす。
-MEDIUM = os.path.join(os.path.dirname(ROOT), "ColonyPatchServer", "design", "classes-2026-10-14", "kokaze_medium.json").replace(os.sep, "/")
-ALL = (["classes@" + MEDIUM, "facilities@" + MEDIUM, "runNetwork", "runAirfield", "runAirfieldReload", "runAirfieldRemoved",
+# 全部の場面(2026-10-15 の c120m の並びに、設計図から建てる場面 facilities を足した)。中型機の場面は、中型機 stratus で飛ばす
+# (それまでは、こかぜに中型の印を付けただけの代役 ColonyPatchServer/design/classes-2026-10-14/kokaze_medium.json)。
+ALL = (["classes@stratus", "facilities@stratus", "runNetwork", "runAirfield", "runAirfieldReload", "runAirfieldRemoved",
         "yard", "trip", "direct", "three", "traffic", "detour", "cargo", "carry", "far", "faults", "crash", "ground", "lost", "hindered", "fuel", "fetch",
         "reopen1", "reopen2", "reopen3", "reopenc1", "reopenc2", "reopenc3", "reopenc4"]
        + [scene + "@small" for scene in ("trip", "far", "fuel", "traffic", "yard", "cargo", "crash")] + ["trip@whitesail"])

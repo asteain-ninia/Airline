@@ -74,13 +74,14 @@ public final class RouteRules {
             .defineInRange("largeMapChunks", 128, 0, 4096);
     /** The line passes this far above the buoy block, so that an aircraft never touches the buoy itself. */
     private static final ModConfigSpec.IntValue WAYPOINT_HEIGHT = BUILDER
-            .comment("The line passes this many blocks above a buoy.")
-            .defineInRange("waypointHeight", 8, 2, 64);
+            .comment("The line passes this many blocks above a buoy (at least so high that the small aircraft's tube stays 2 blocks above the buoy: 9 with the margin as it comes).")
+            .defineInRange("waypointHeight", 9, 2, 64);
     /** Over a landing pad the line passes higher: an aircraft goes straight up to there, clear of the airfield's own roof. */
     private static final ModConfigSpec.IntValue AIRFIELD_WAYPOINT_HEIGHT = BUILDER
             .comment("The line passes this many blocks above an airfield's landing pad. An aircraft goes straight up to there before it leaves,",
-                    "so that the airfield's own building (up to 8 blocks lower than this) is not in its way.")
-            .defineInRange("airfieldWaypointHeight", 16, 2, 64);
+                    "so that the airfield's own building (up to 8 blocks lower than this) is not in its way.",
+                    "At least so high that a line passes a block over a small aircraft standing on another pad (18 with the margin as it comes).")
+            .defineInRange("airfieldWaypointHeight", 18, 2, 64);
     /** Room added around the aircraft's outline to get the tube that has to be free of solid blocks. */
     private static final ModConfigSpec.DoubleValue TUBE_MARGIN = BUILDER
             .comment("Room added around the aircraft's outline, in blocks, to get the tube that must be free of solid blocks.")
@@ -196,12 +197,18 @@ public final class RouteRules {
         return kind == RouteNetwork.Kind.AIRFIELD ? airfieldReach(tier) : reach(tier);
     }
 
+    /**
+     * The settings are taken as they are, but never lower than the small aircraft needs (2026-10-15: it became 10 high, and
+     * a world's settings file still says 8 and 16, the numbers that were right for 9 high): over a buoy, the bottom of the
+     * tube 2 blocks above the buoy's block; over a pad, a block of air between a line and a small aircraft standing on
+     * another pad ({@link #padClearance}).
+     */
     public static int waypointHeight() {
-        return WAYPOINT_HEIGHT.get();
+        return Math.max(WAYPOINT_HEIGHT.get(), (int) Math.ceil(tubeHalfHeight() + 1.5));
     }
 
     public static int airfieldWaypointHeight() {
-        return AIRFIELD_WAYPOINT_HEIGHT.get();
+        return Math.max(AIRFIELD_WAYPOINT_HEIGHT.get(), (int) Math.ceil(padClearance() + 0.5));
     }
 
     public static double arrivalRadius() {
@@ -225,7 +232,7 @@ public final class RouteRules {
      * When aircraft types become data these two numbers come from the type; the network is verified for this one design only.
      */
     private static final double AIRCRAFT_HALF_DIAGONAL = Math.hypot(4.5, 3.5);
-    private static final double AIRCRAFT_HALF_HEIGHT = 4.5;
+    private static final double AIRCRAFT_HALF_HEIGHT = 5.0;     // 10 high since 2026-10-15 (koeda); 4.5 before
     /**
      * The outline as it is since 2026-10-14: 9 long, 9 wide. The tube keeps the radius that was made for 9 x 7 (8 with
      * the margin as it comes): a wider one would take in lanterns and eaves of the airfields as they are built (the

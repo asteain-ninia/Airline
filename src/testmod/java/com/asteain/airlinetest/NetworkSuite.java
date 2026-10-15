@@ -90,8 +90,11 @@ final class NetworkSuite {
         s.step("A: clear again; the edges of the tube", () -> {
             Edge edge = net.edge(a, b);
             s.soft("A / after the stone is gone the line is clear again", edge.state() == State.CLEAR, describe(edge));
-            // The line runs at y = 108.5, z = 0.5. Tube: 8 to the side (+ half a block), 6.5 up and down (+ half a block).
-            BlockPos[] outside = {new BlockPos(40, Y + 8, 9), new BlockPos(40, Y + 8, -9), new BlockPos(40, Y + 16, 0), new BlockPos(40, Y, 0), new BlockPos(-10, Y + 8, 0)};
+            // The line runs the waypoint height above the buoys (9 since the small aircraft is 10 high; 8 before), z = 0.5. Tube: 8 to the
+            // side (+ half a block), its half height up and down (7; 6.5 before) (+ half a block).
+            final int over = RouteRules.waypointHeight(), half = (int) Math.ceil(RouteRules.tubeHalfHeight());
+            BlockPos[] outside = {new BlockPos(40, Y + over, 9), new BlockPos(40, Y + over, -9), new BlockPos(40, Y + over + half + 1, 0), new BlockPos(40, Y + over - half - 1, 0),
+                    new BlockPos(-10, Y + over, 0)};
             for (BlockPos pos : outside) {
                 level.setBlockAndUpdate(pos, Blocks.STONE.defaultBlockState());
                 s.soft("A / a stone just outside the tube does not block (" + pos.toShortString() + ")", edge.state() == State.CLEAR, describe(edge));
@@ -363,7 +366,9 @@ final class NetworkSuite {
 
         // ---- F: no line may come low over a landing pad (an aircraft may stand there) ----
         // Two buoys at the height of the pad's floor, west and east of it: their line would pass 9.5 above the floor.
-        BlockPos lowWest = padA.offset(-14, 1, 0), lowEast = padA.offset(30, 1, 0), highWest = padA.offset(-14, 8, 3), highEast = padA.offset(30, 8, 3);
+        // The high buoys are passed as high as the pad's own lines begin (pad 18 - buoy 9; 16 - 8 before the small aircraft was 10 high).
+        final int highBuoyLift = RouteRules.airfieldWaypointHeight() - RouteRules.waypointHeight();
+        BlockPos lowWest = padA.offset(-14, 1, 0), lowEast = padA.offset(30, 1, 0), highWest = padA.offset(-14, highBuoyLift, 3), highEast = padA.offset(30, highBuoyLift, 3);
         s.step("F: a line low over a pad", () -> {
             level.setBlockAndUpdate(lowWest, buoy(1).defaultBlockState());
             level.setBlockAndUpdate(lowEast, buoy(1).defaultBlockState());

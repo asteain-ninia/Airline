@@ -180,6 +180,8 @@ final class Shipyard {
             final Part wanted = parts.get(part);
             BlockState there = level.getBlockState(at);
             if (wanted != null && wanted.is(there)) continue;
+            // A propeller's hub and sails, while its bearing turns them, are no blocks of the ship: their places stay empty.
+            if (wanted != null && there.isAir() && c.type.moving().contains(part)) continue;
             if (wanted != null && there.getBlock() == wanted.state().getBlock()) {
                 // The right block, turned another way.
                 level.setBlock(at, wanted.state(), 3);

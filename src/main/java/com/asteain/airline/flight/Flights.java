@@ -299,8 +299,8 @@ public final class Flights {
         if (!available()) return List.of();
         final List<Design> all = new java.util.ArrayList<>();
         for (final AircraftType type : AircraftType.ALL.values()) {
-            // Only the classes this airfield builds (a small airfield: small aircraft).
-            if (airfield.facility().builds(type.shipClass)) all.add(new Design(type.name, type.title(), type.parts.size() + 1, type.topSpeed, Fuel.minutes(type, Fuel.capacity())));
+            // Only the classes this airfield builds (a small airfield: small aircraft), and no retired design.
+            if (type.offered() && airfield.facility().builds(type.shipClass)) all.add(new Design(type.name, type.title(), type.parts.size() + 1, type.topSpeed, Fuel.minutes(type, Fuel.capacity())));
         }
         return all;
     }
@@ -311,7 +311,7 @@ public final class Flights {
      * that does not exist.
      */
     public static String requestAircraft(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield, String design, @Nullable net.minecraft.server.level.ServerPlayer player) {
-        if (!available() || !AircraftType.ALL.containsKey(design)) return "";
+        if (!available() || !AircraftType.ALL.containsKey(design) || !AircraftType.ALL.get(design).offered()) return "";
         return lastBuilding = Shipyard.request(level, airfield, AircraftType.ALL.get(design), player);
     }
 
