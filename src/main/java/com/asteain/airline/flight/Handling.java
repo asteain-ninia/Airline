@@ -392,12 +392,15 @@ final class Handling {
             final IBuilding store = Cargo.importBuilding(level, here);
             return Vec3.atBottomCenterOf(store == null ? here.getPosition() : store.getPosition());
         }
-        for (final BlockPos rack : here.getContainers()) {
+        // At an anchorage the racks are those of the colony's airfield.
+        final BuildingAirfield store = Cargo.storeOf(here);
+        final BuildingAirfield shore = store == null ? here : store;
+        for (final BlockPos rack : shore.getContainers()) {
             if (!level.isLoaded(rack)) continue;
             final IItemHandler in = level.getCapability(Capabilities.ItemHandler.BLOCK, rack, null);
             if (in != null && (taking ? Cargo.count(in, item) > 0 : Cargo.room(in, item, 1) > 0)) return Vec3.atBottomCenterOf(rack);
         }
-        return Vec3.atBottomCenterOf(here.getPosition());
+        return Vec3.atBottomCenterOf(shore.getPosition());
     }
 
     /**

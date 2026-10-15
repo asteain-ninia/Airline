@@ -149,11 +149,9 @@ public class ExportStockModule extends MinimumStockModule implements IBuildingEv
         java.util.Set<WantLedger.Key> out = new java.util.HashSet<>();
         if (!(colony.getWorld() instanceof net.minecraft.server.level.ServerLevel level) || !(building instanceof BuildingAirfield home)) return out;
         com.asteain.airline.route.RouteNetwork net = com.asteain.airline.route.RouteNetwork.get(level);
-        // For the class of the airfield's own aircraft (the largest it builds while it has none yet). An anchorage has no
-        // aircraft of its own: what lies there is taken away by the aircraft that call, of every class it takes.
-        java.util.List<com.asteain.airline.route.ShipClass> classes = new java.util.ArrayList<>();
-        if (home.facility().airfield()) classes.add(com.asteain.airline.flight.Flights.ownClass(level, home));
-        else for (com.asteain.airline.route.ShipClass each : com.asteain.airline.route.ShipClass.values()) if (home.facility().berths(each)) classes.add(each);
+        // For the class of the airfield's own aircraft (the largest it builds while it has none yet). (An anchorage has no
+        // export list: it keeps no goods.)
+        com.asteain.airline.route.ShipClass ship = com.asteain.airline.flight.Flights.ownClass(level, home);
         for (WantLedger.Key key : ledger.keys()) {
             if (key.equals(self) || !key.dimension().equals(self.dimension())) continue;
             if (reachAllForChecks) {
@@ -164,11 +162,9 @@ public class ExportStockModule extends MinimumStockModule implements IBuildingEv
             for (BuildingAirfield there : com.asteain.airline.flight.Cargo.facilitiesOf(level, key.colony())) {
                 for (net.minecraft.core.BlockPos pad : there.pads()) {
                     com.asteain.airline.route.RouteNetwork.Node node = net.node(pad);
-                    for (com.asteain.airline.route.ShipClass ship : classes) {
-                        if (node != null && node.berths(ship) && net.route(home.pad(), pad, ship).size() >= 2) {
-                            out.add(key);
-                            break facilities;
-                        }
+                    if (node != null && node.berths(ship) && net.route(home.pad(), pad, ship).size() >= 2) {
+                        out.add(key);
+                        break facilities;
                     }
                 }
             }

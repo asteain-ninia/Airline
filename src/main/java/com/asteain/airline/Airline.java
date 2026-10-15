@@ -214,13 +214,15 @@ public final class Airline {
             .addBuildingModuleProducer(TIMETABLE)
             .addBuildingModuleProducer(AIRCRAFT_TAB)
             .createBuildingEntry());
-    /** The anchorage: no pilot and no aircraft page (it has no aircraft of its own and builds none). */
+    /**
+     * The anchorage: no pilot, no aircraft page (it builds none) and no export list: it has no racks or store of its own,
+     * aircraft load and unload there from and into those of the colony's airfield (the user's ruling of 2026-10-15).
+     */
     public static final DeferredHolder<BuildingEntry, BuildingEntry> ANCHORAGE = BUILDINGS.register(com.asteain.airline.route.Facility.ANCHORAGE.schematic, () -> new BuildingEntry.Builder()
             .setBuildingBlock(ANCHORAGE_HUT.get())
             .setBuildingProducer((colony, pos) -> new BuildingAirfield(colony, pos, com.asteain.airline.route.Facility.ANCHORAGE))
             .setBuildingViewProducer(() -> EmptyView::new)
             .setRegistryName(id(com.asteain.airline.route.Facility.ANCHORAGE.schematic))
-            .addBuildingModuleProducer(EXPORT_STOCK)
             .addBuildingModuleProducer(TIMETABLE)
             .createBuildingEntry());
 

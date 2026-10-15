@@ -266,8 +266,9 @@ final class FlightSuite {
         Fixture.platform(level, hut.offset(1, 0, -(half + 2)), Math.max(half, 8), half + 6);
     }
 
+    /** The place's export list; null for one that keeps none (an anchorage). */
     private static ExportStockModule exportOf(BuildingAirfield place) {
-        return place.getFirstModuleOccurance(ExportStockModule.class);
+        return place.hasModule(ExportStockModule.class) ? place.getFirstModuleOccurance(ExportStockModule.class) : null;
     }
 
     private static void forceChunks(ServerLevel level, int x0, int z0, int x1, int z1) {
@@ -375,6 +376,7 @@ final class FlightSuite {
         final BlockPos hutN = new BlockPos(130, Y, 40), hutS = new BlockPos(100, Y, 40), between = new BlockPos(65, Y, 0);
         final IColony[] colonyN = new IColony[1];
         final BuildingAirfield[] anchorage = new BuildingAirfield[1], smallN = new BuildingAirfield[1];
+        final AbstractBuilding[] stashN = new AbstractBuilding[1];
         final TileEntityRack[] rack = new TileEntityRack[1];
         s.step("classes: colony N with an anchorage and no airfield; a buoy between the colonies", () -> {
             floorFor(level, hutN, Facility.ANCHORAGE);
@@ -417,6 +419,9 @@ final class FlightSuite {
             smallN[0] = (BuildingAirfield) Fixture.placeHut(level, colonyN[0], Airline.AIRFIELD_HUT.get(), hutS);
             smallN[0].setBuildingLevel(1);
             smallN[0].setCorners(hutS.offset(-3, 0, -3), hutS.offset(3, 2, 3));
+            // The airfield's import store (a MineColonies stash near its pad), as the cargo scenes have it.
+            stashN[0] = Fixture.placeHut(level, colonyN[0], ModBlocks.blockStash, hutS.offset(5, 0, 3));
+            stashN[0].setBuildingLevel(1);
             smallN[0].registerPad();
             s.soft("classes / the anchorage comes onto the network as soon as its colony has an airfield", net.node(anchorage[0].pad()) != null, String.valueOf(net.node(anchorage[0].pad())));
         });
@@ -437,14 +442,15 @@ final class FlightSuite {
             ledger.set(keyN, Items.IRON_INGOT, 0);
             s.soft("classes / cargo: goods for colony N go with the medium aircraft to N's anchorage (N's small airfield does not take it)",
                     anchorage[0].pad().equals(choice) && barred.isEmpty(), choice + " | " + barred);
-            final WantLedger.Key keyM = WantLedger.Key.of(m.colony);
             ledger.set(keyN, Items.IRON_INGOT, 1);
-            ledger.set(keyM, Items.IRON_INGOT, 1);
-            final java.util.Set<WantLedger.Key> reachM = exportOf(m.airfield).reachableForChecks(), reachAnchorage = exportOf(anchorage[0]).reachableForChecks();
+            final java.util.Set<WantLedger.Key> reachM = exportOf(m.airfield).reachableForChecks();
             ledger.set(keyN, Items.IRON_INGOT, 0);
-            ledger.set(keyM, Items.IRON_INGOT, 0);
-            s.soft("classes / export collection: now the medium airfield counts colony N (by its anchorage), and the anchorage counts colony M (for the medium aircraft that call)",
-                    reachM.contains(keyN) && reachAnchorage.contains(keyM), reachM + " / " + reachAnchorage);
+            s.soft("classes / export collection: now the medium airfield counts colony N (its aircraft can unload at N's anchorage); the anchorage keeps no export list",
+                    reachM.contains(keyN) && exportOf(anchorage[0]) == null, reachM + " / anchorage's list " + exportOf(anchorage[0]));
+            final BuildingAirfield store = com.asteain.airline.flight.Cargo.storeOf(anchorage[0]);
+            final com.minecolonies.api.colony.buildings.IBuilding importAt = com.asteain.airline.flight.Cargo.importBuilding(level, anchorage[0]);
+            s.soft("classes / the anchorage has no racks or import store of its own: it uses those of N's airfield",
+                    store == smallN[0] && importAt == stashN[0], "racks of " + (store == null ? null : store.getPosition().toShortString()) + ", import store " + (importAt == null ? null : importAt.getPosition().toShortString()));
             final String toSmallN = Flights.landingFor(level, m.pad, smallN[0].pad(), ShipClass.MEDIUM), toAnchorage = Flights.landingFor(level, m.pad, anchorage[0].pad(), ShipClass.MEDIUM);
             s.soft("classes / sent by command from M, the medium aircraft is refused at N's small airfield and may go to the anchorage",
                     "flight.no_berth".equals(toSmallN) && "pad".equals(toAnchorage), toSmallN + " / " + toAnchorage);
@@ -458,20 +464,28 @@ final class FlightSuite {
                     !refused.ok() && "flight.no_berth".equals(refused.key()), refused.key());
         });
         final boolean[] atAnchorage = new boolean[1];
-        s.step("classes: the medium aircraft flies to the anchorage and back", () -> {
+        final int[] ironAtStart = new int[1];
+        s.step("classes: colony N wants the iron on M's racks; the dispatcher sends the medium aircraft to N's anchorage", () -> {
             watch(s, m, "classes");
             s.monitor(() -> {
                 if (m.aircraft.phase == Phase.DISEMBARK && anchorage[0].pad().equals(m.aircraft.at)) atAnchorage[0] = true;
             });
-            final Flights.Answer sent = Flights.send(level, m.pad, anchorage[0].pad(), true, m.pilot);
-            s.soft("classes / the medium aircraft's round trip to the anchorage is ordered", sent.ok(), sent.text().getString());
+            ironAtStart[0] = Fixture.count(m.airfield, Items.IRON_INGOT);
+            ledger.set(WantLedger.Key.of(colonyN[0]), Items.IRON_INGOT, 16);
+            s.note("OBS classes: iron on M's racks " + ironAtStart[0] + ", in N's import store " + Fixture.count(stashN[0], Items.IRON_INGOT));
         });
-        s.until("classes: there and back", () -> {}, () -> m.clock > 100 && m.aircraft.phase == Phase.PARKED && m.pad.equals(m.aircraft.at), 16000);
-        s.step("classes: result of the round trip", () -> {
+        s.until("classes: the cargo flight, there and back", () -> {}, () -> atAnchorage[0] && m.aircraft.phase == Phase.PARKED && m.pad.equals(m.aircraft.at), 20000);
+        s.step("classes: result of the cargo flight", () -> {
             final double[] r = Flights.readings(m.aircraft);
             final long landings = m.log.stream().filter(l -> l.contains("-> DISEMBARK")).count();
+            final WantLedger.Key keyN = WantLedger.Key.of(colonyN[0]);
+            final int there = Fixture.count(stashN[0], Items.IRON_INGOT), left = Fixture.count(m.airfield, Items.IRON_INGOT);
             s.soft("classes / the medium aircraft landed at the anchorage and came home, landing twice", atAnchorage[0] && landings == 2 && m.pad.equals(m.aircraft.at),
                     "at the anchorage " + atAnchorage[0] + ", landings " + landings + ", " + at(r));
+            s.soft("classes / unloaded at the anchorage, the 16 iron went into the import store of N's airfield (the anchorage has none of its own); none is left on M's racks",
+                    there == 16 && left == ironAtStart[0] - 16, "N's import store " + there + ", M's racks " + left + " (at the start " + ironAtStart[0] + ")");
+            s.soft("classes / the ledger counts the iron as delivered: colony N wants no more of it", ledger.net(keyN, Items.IRON_INGOT) == 0 && ledger.covered(keyN, Items.IRON_INGOT) == 0,
+                    "net " + ledger.net(keyN, Items.IRON_INGOT) + ", on the way " + ledger.covered(keyN, Items.IRON_INGOT));
             s.soft("classes / the pilot is alive and off the aircraft", m.pilot.isAlive() && Boarding.state(m.pilot) == Boarding.State.NONE, "state " + Boarding.state(m.pilot));
             for (String l : m.log) if (l.contains("->")) s.note("OBS classes: " + l);
         });

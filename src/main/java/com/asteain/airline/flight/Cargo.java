@@ -196,9 +196,28 @@ public final class Cargo {
     /** A place to land in another colony: the facility and the pad there (null when there is none, with why). */
     record Landing(@Nullable BuildingAirfield there, FlightController.Landing landing) {}
 
-    /** The export racks of an airfield (its hut chest and racks). */
-    public static IItemHandler racks(BuildingAirfield airfield) {
-        return airfield.getItemHandlerCap();
+    /**
+     * Whose racks and import store a place uses: an airfield its own; an anchorage, which has none (the user's ruling of
+     * 2026-10-15), those of the colony's airfield nearest to its pad. Null for an anchorage whose colony has no built airfield.
+     */
+    @Nullable
+    public static BuildingAirfield storeOf(BuildingAirfield place) {
+        if (place.facility().airfield()) return place;
+        BuildingAirfield best = null;
+        for (final IBuilding building : place.getColony().getServerBuildingManager().getBuildings().values()) {
+            if (!(building instanceof BuildingAirfield airfield) || !airfield.facility().airfield() || airfield.getBuildingLevel() < 1) continue;
+            if (best == null || airfield.pad().distSqr(place.pad()) < best.pad().distSqr(place.pad())) best = airfield;
+        }
+        return best;
+    }
+
+    /** Nothing to take from and no room: the racks of an anchorage whose colony has no airfield. */
+    private static final IItemHandler NO_RACKS = new net.neoforged.neoforge.items.ItemStackHandler(0);
+
+    /** The export racks of an airfield (its hut chest and racks); for an anchorage, those of its colony's airfield ({@link #storeOf}). */
+    public static IItemHandler racks(BuildingAirfield place) {
+        final BuildingAirfield airfield = storeOf(place);
+        return airfield == null ? NO_RACKS : airfield.getItemHandlerCap();
     }
 
     /**
@@ -213,7 +232,10 @@ public final class Cargo {
 
     /** The building that is the import store (see {@link #importStore}). */
     @Nullable
-    public static IBuilding importBuilding(ServerLevel level, BuildingAirfield airfield) {
+    public static IBuilding importBuilding(ServerLevel level, BuildingAirfield place) {
+        // An anchorage has no import store of its own: its colony's airfield's.
+        final BuildingAirfield airfield = storeOf(place);
+        if (airfield == null) return null;
         final BlockPos pad = airfield.pad();
         final double range = (double) importRange() * importRange();
         IBuilding best = null;
