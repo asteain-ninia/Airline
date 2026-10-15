@@ -25,16 +25,16 @@ import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TASKS = {"runAirfield": ("run-airfield", 1500), "runAirfieldReload": ("run-airfield", 900), "runAirfieldRemoved": ("run-airfield", 900), "runNetwork": ("run-network", 900)}
-# 全部の場面(2026-10-15 の c120m と同じ並び)。中型の機体は、まだ MOD に入れていない仮の設計で飛ばす。
+# 全部の場面(2026-10-15 の c120m の並びに、設計図から建てる場面 facilities を足した)。中型の機体は、まだ MOD に入れていない仮の設計で飛ばす。
 MEDIUM = os.path.join(os.path.dirname(ROOT), "ColonyPatchServer", "design", "classes-2026-10-14", "kokaze_medium.json").replace(os.sep, "/")
-ALL = (["classes@" + MEDIUM, "runNetwork", "runAirfield", "runAirfieldReload", "runAirfieldRemoved",
+ALL = (["classes@" + MEDIUM, "facilities@" + MEDIUM, "runNetwork", "runAirfield", "runAirfieldReload", "runAirfieldRemoved",
         "yard", "trip", "direct", "three", "traffic", "detour", "cargo", "carry", "far", "faults", "crash", "ground", "lost", "hindered", "fuel", "fetch",
         "reopen1", "reopen2", "reopen3", "reopenc1", "reopenc2", "reopenc3", "reopenc4"]
        + [scene + "@small" for scene in ("trip", "far", "fuel", "traffic", "yard", "cargo", "crash")] + ["trip@whitesail"])
 
 
 # 1 本に掛かる時間の見込み(秒。早回しの札 sp3、reopen は普通の速さの sp5 と c120m から)。分けるときの重さにだけ使う。
-SECONDS = {"classes": 85, "detour": 115, "runAirfield": 55, "reopen1": 100, "reopen2": 115, "reopen3": 50,
+SECONDS = {"classes": 85, "facilities": 80, "detour": 115, "runAirfield": 55, "reopen1": 100, "reopen2": 115, "reopen3": 50,
            "reopenc1": 70, "reopenc2": 80, "reopenc3": 115, "reopenc4": 155}
 
 

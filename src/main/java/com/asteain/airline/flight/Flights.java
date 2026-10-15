@@ -358,6 +358,17 @@ public final class Flights {
         return AircraftType.of(design).title();
     }
 
+    /** For the checks: whether there is nothing to berth at on that pad (no floor; at an anchorage, no pier beside it). False when that is not loaded. */
+    public static boolean berthMissing(ServerLevel level, BlockPos pad) {
+        return available() && FlightController.berthMissing(level, com.asteain.airline.route.RouteNetwork.get(level), pad);
+    }
+
+    /** For the checks: at an anchorage, the side the pier is on ({x, z}, one block) seen from the pad; null when there is none. */
+    @Nullable
+    public static int[] pierSide(ServerLevel level, BlockPos pad) {
+        return available() ? FlightController.pierSide(level, com.asteain.airline.route.RouteNetwork.get(level), pad) : null;
+    }
+
     /** Sends the aircraft that stands on the pad {@code from} to the pad {@code to}, flown by the given pilot; back again when {@code round}. */
     public static Answer send(ServerLevel level, BlockPos from, BlockPos to, boolean round, @Nullable Mob pilot) {
         return available() ? FlightController.send(level, from, to, round, pilot) : OFF;

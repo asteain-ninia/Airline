@@ -236,6 +236,8 @@ public final class AircraftType {
      * until 0.11.0; the user's ruling of 2026-10-14: the propellers of the fast design go one block outward, off the
      * envelope). The pads (13 x 13), the distance between an airfield's two pads (17) and the shafts over the pads take
      * it; what that leaves of the tubes' margin is told at {@link com.asteain.airline.route.RouteRules#tubeRadius}.
+     * This is the outline of a small aircraft; a design of another class stays inside its class's outline ({@link #shipClass},
+     * 2026-10-15: until then a medium or large design was still held to this one).
      */
     public static final int HALF_LENGTH = 4, HALF_WIDTH = 4, HEIGHT = 9;
     /**
@@ -267,7 +269,7 @@ public final class AircraftType {
             if (values == null || values.length != driveLevers.length) return "the manoeuvre " + which + " does not say what every drive lever gets";
             for (final int value : values) if (value < 0 || value > 15) return "a lever value of the manoeuvre " + which + " is not between 0 and 15";
         }
-        int ahead = HALF_LENGTH, astern = HALF_LENGTH, half = HALF_WIDTH, height = HEIGHT;
+        int ahead = shipClass.halfLength, astern = shipClass.halfLength, half = shipClass.halfWidth, height = shipClass.height;
         final String[] wider = System.getProperty(TRIAL_OUTLINE_PROPERTY, "").split("x");
         if (wider.length == 4) {
             try {

@@ -173,7 +173,8 @@ final class Shipyard {
         final net.neoforged.neoforge.items.IItemHandler racks = Cargo.racks(airfield), store = Cargo.importStore(level, airfield);
         final Map<String, Integer> lacks = new java.util.LinkedHashMap<>();
         int restored = 0, removed = 0;
-        for (int y = 0; y < AircraftType.HEIGHT; y++) for (int x = -AircraftType.HALF_LENGTH; x <= AircraftType.HALF_LENGTH; x++) for (int z = -AircraftType.HALF_WIDTH; z <= AircraftType.HALF_WIDTH; z++) {
+        final com.asteain.airline.route.ShipClass outline = c.type.shipClass;
+        for (int y = 0; y < outline.height; y++) for (int x = -outline.halfLength; x <= outline.halfLength; x++) for (int z = -outline.halfWidth; z <= outline.halfWidth; z++) {
             final BlockPos part = new BlockPos(x, y, z), at = c.inShip(part);
             if (part.equals(BlockPos.ZERO)) continue;
             final Part wanted = parts.get(part);
@@ -329,7 +330,7 @@ final class Shipyard {
         be.type = type.name;
         order(airfield, be);
         be.setChanged();
-        standsFor(level, be.getBlockPos(), be.yard);
+        standsFor(level, be.getBlockPos(), be.yard, type.shipClass);
         say(player, "started", Component.translatable(type.title()), missing(level, be.getBlockPos(), type, turn(airfield.padHeading())));
         return "started";
     }
@@ -386,10 +387,12 @@ final class Shipyard {
      * Tells the air network that the outline over this pad holds an aircraft being built (for some seconds more; renewed
      * with every look at the site): its blocks are not in the way of the pad's lines.
      */
-    private static void standsFor(ServerLevel level, BlockPos own, BlockPos pad) {
+    private static void standsFor(ServerLevel level, BlockPos own, BlockPos pad, com.asteain.airline.route.ShipClass outline) {
+        // (The outline's length lies along x or z by the pad's heading; the box takes the longer side both ways.)
+        final int across = Math.max(outline.halfLength, outline.halfWidth);
         final net.minecraft.world.level.levelgen.structure.BoundingBox box = new net.minecraft.world.level.levelgen.structure.BoundingBox(
-                own.getX() - AircraftType.HALF_LENGTH, own.getY(), own.getZ() - AircraftType.HALF_WIDTH,
-                own.getX() + AircraftType.HALF_LENGTH, own.getY() + AircraftType.HEIGHT - 1, own.getZ() + AircraftType.HALF_WIDTH);
+                own.getX() - across, own.getY(), own.getZ() - across,
+                own.getX() + across, own.getY() + outline.height - 1, own.getZ() + across);
         com.asteain.airline.route.RouteNetwork.get(level).building(pad, box, level.getGameTime() + 2L * LOOK_EVERY + 20);
     }
 
@@ -405,8 +408,8 @@ final class Shipyard {
             be.setChanged();
             return;
         }
-        standsFor(level, pos, pad);
         final AircraftType type = AircraftType.of(be.type);
+        standsFor(level, pos, pad, type.shipClass);
         final IServerWorkOrder order = be.workOrder == 0 ? null : airfield.getColony().getWorkManager().getWorkOrder(be.workOrder);
         if (missing(level, pos, type, turn(airfield.padHeading())) != 0) return;
         // A builder who is at it finishes its own work first (it would put the blocks up again if they went away under its hands).

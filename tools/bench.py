@@ -32,6 +32,7 @@ def main():
     ap.add_argument("--leg", type=int, default=80, help="自動操縦の直進の長さ(ブロック)。長い線を保てるかを見るときに延ばす")
     ap.add_argument("--offset", type=float, default=0.0, help="直進の線を、機体の右へこれだけずらして始める(線への乗り方を見る)")
     ap.add_argument("--outline", default="", help="枠(前後 9 × 左右 7 × 高さ 9)より大きい設計を測るときの、試験場だけの枠。「機首側x尾側x片側の幅x高さ」(例 5x7x4x12)。MOD には、そのままでは入れられない")
+    ap.add_argument("--sprint", action="store_true", help="早回し(サーバーが追いつく限り速く刻む。測るのは刻みの数なので、結果は同じはず。2026-10-15)")
     ap.add_argument("--fast", action="store_true", help="遅い機体にも、速い機体の止まり方(制動、終わりぎわの寄せ)を当てる。自動操縦のその部分の確かめ用")
     a = ap.parse_args()
     is_file = a.design.endswith(".json")
@@ -45,6 +46,8 @@ def main():
     args = ["runBench", "-PbenchOut=" + made.replace(os.sep, "/"), "-PbenchMode=" + a.mode]
     if a.fast:
         args.append("-PbenchFast=true")
+    if a.sprint:
+        args.append("-Psprint=on")
     if a.leg != 80:
         args.append("-PbenchLeg=%d" % a.leg)
     if a.offset:

@@ -1,0 +1,20 @@
+{
+  "variants": {
+    "facing=east": {
+      "model": "airline:block/blockhutanchorage",
+      "y": 0
+    },
+    "facing=south": {
+      "model": "airline:block/blockhutanchorage",
+      "y": 90
+    },
+    "facing=west": {
+      "model": "airline:block/blockhutanchorage",
+      "y": 180
+    },
+    "facing=north": {
+      "model": "airline:block/blockhutanchorage",
+      "y": 270
+    }
+  }
+}

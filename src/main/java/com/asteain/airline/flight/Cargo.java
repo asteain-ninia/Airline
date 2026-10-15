@@ -67,7 +67,7 @@ public final class Cargo {
             .comment("After a flight that was called off or delivered nothing, no new flight is prepared for this many seconds.")
             .defineInRange("quietSeconds", 600, 10, 86400);
     private static final ModConfigSpec.IntValue IMPORT_RANGE = BUILDER
-            .comment("A MineColonies stash within this many blocks of an airfield's landing pad is that airfield's import store.")
+            .comment("A MineColonies stash within this many blocks of an airfield's landing pad or its hut is that airfield's import store.")
             .defineInRange("importStoreRange", 24, 4, 64);
 
     static {
@@ -221,7 +221,8 @@ public final class Cargo {
     }
 
     /**
-     * The import store of an airfield: the nearest MineColonies stash of its colony within range of the pad. What is put
+     * The import store of an airfield: the nearest MineColonies stash of its colony within range of the pad or of the hut
+     * (whichever is nearer; 2026-10-15: the large airfield's own stash lies 27 blocks from its pad, 12 from its hut). What is put
      * into a stash is fetched by the colony's couriers and brought to the warehouse. Null when there is none or it is not loaded.
      */
     @Nullable
@@ -236,13 +237,18 @@ public final class Cargo {
         // An anchorage has no import store of its own: its colony's airfield's.
         final BuildingAirfield airfield = storeOf(place);
         if (airfield == null) return null;
-        final BlockPos pad = airfield.pad();
+        final BlockPos pad = airfield.pad(), hut = airfield.getPosition();
         final double range = (double) importRange() * importRange();
         IBuilding best = null;
+        double bestNear = Double.MAX_VALUE;
         for (final IBuilding building : airfield.getColony().getServerBuildingManager().getBuildings().values()) {
-            if (building == airfield || building.getPosition().distSqr(pad) > range) continue;
+            final double near = Math.min(building.getPosition().distSqr(pad), building.getPosition().distSqr(hut));
+            if (building == airfield || near > range) continue;
             if (!level.isLoaded(building.getPosition()) || !(level.getBlockEntity(building.getPosition()) instanceof TileEntityStash)) continue;
-            if (best == null || building.getPosition().distSqr(pad) < best.getPosition().distSqr(pad)) best = building;
+            if (near < bestNear) {
+                best = building;
+                bestNear = near;
+            }
         }
         return best;
     }

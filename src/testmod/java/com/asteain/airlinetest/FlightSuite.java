@@ -246,9 +246,209 @@ final class FlightSuite {
             case "reopen2" -> reopen2(s, level);
             case "reopen3" -> reopen3(s, level);
             case "classes" -> classes(s, level);
+            case "facilities" -> facilities(s, level);
             default -> throw new AssertionError("unknown scene " + scene);
         }
         return s;
+    }
+
+    // ---- the new facilities, built from their blueprints (the user approved the nine designs on 2026-10-15) --------
+
+    /** A facility built from a blueprint, and what the scene learns of it. */
+    private static final class Site {
+        final String name, schematic;
+        final Facility facility;
+        final BlockPos hut;
+        final com.ldtteam.structurize.api.RotationMirror turn;
+        final java.util.concurrent.CompletableFuture<?>[] blueprints = new java.util.concurrent.CompletableFuture<?>[6];
+        final int[] racks = new int[6];
+        IColony colony;
+
+        Site(String name, Facility facility, String schematic, BlockPos hut, com.ldtteam.structurize.api.RotationMirror turn) {
+            this.name = name;
+            this.facility = facility;
+            this.schematic = schematic;
+            this.hut = hut;
+            this.turn = turn;
+        }
+
+        String path(int lv) {
+            return "infrastructure/" + schematic + lv + ".blueprint";
+        }
+
+        BuildingAirfield building() {
+            return colony.getServerBuildingManager().getBuilding(hut) instanceof BuildingAirfield field ? field : null;
+        }
+    }
+
+    /**
+     * The medium and the large airfield are pasted from their level 1 blueprints, then each level over the one before, up
+     * to 5 (Structurize places them at once, as the build tool does for a player in creative). The wooden and the stone
+     * anchorage stand beside them, and a wooden one placed mirrored. Each is checked as the kind of facility it is: the
+     * level of its blueprint, its racks and import stash (the airfields), its pads where the code expects them and on the
+     * network, a floor under each pad or a pier beside the berth. Then the medium aircraft (-Paircraft, a medium design)
+     * flies a round trip from the medium airfield to the wooden anchorage and from the large airfield to the stone one; the
+     * pilot steps onto the pier. (The user saw the small airfield built and working in the game.)
+     */
+    private static void facilities(Script s, ServerLevel level) {
+        final RouteNetwork net = RouteNetwork.get(level);
+        final com.ldtteam.structurize.api.RotationMirror none = com.ldtteam.structurize.api.RotationMirror.NONE;
+        final BlockPos centreM = new BlockPos(-20, Y, 25), centreL = new BlockPos(140, Y, 30);
+        final Site medium = new Site("medium airfield", Facility.MEDIUM_AIRFIELD, "mediumairfield", new BlockPos(0, Y, 0), none);
+        final Site large = new Site("large airfield", Facility.LARGE_AIRFIELD, "largeairfield", new BlockPos(160, Y, 0), none);
+        final Site wood = new Site("wooden anchorage", Facility.ANCHORAGE, "anchorage", new BlockPos(-40, Y, 0), none);
+        final Site mirrored = new Site("mirrored wooden anchorage", Facility.ANCHORAGE, "anchorage", new BlockPos(-40, Y, 75), com.ldtteam.structurize.api.RotationMirror.MIR_NONE);
+        final Site stone = new Site("stone anchorage", Facility.ANCHORAGE, "anchoragestone", new BlockPos(110, Y, 0), none);
+        final List<Site> all = List.of(medium, wood, mirrored, large, stone);
+
+        s.until("facilities: the structure pack is there", () -> {}, () -> com.ldtteam.structurize.storage.StructurePacks.hasPack(Airline.PACK_NAME), 1200);
+        s.step("facilities: two colonies; the blueprints are read", () -> {
+            forceChunks(level, -80, -60, 220, 90);
+            final IColony m = Fixture.create(level, centreM, "Airline facilities M"), l = Fixture.create(level, centreL, "Airline facilities L");
+            Fixture.townHall(m, centreM);
+            Fixture.townHall(l, centreL);
+            for (Site site : all) {
+                site.colony = site == large || site == stone ? l : m;
+                for (int lv = 1; lv <= site.facility.maxLevel(); lv++)
+                    site.blueprints[lv] = com.ldtteam.structurize.storage.StructurePacks.getBlueprintFuture(Airline.PACK_NAME, site.path(lv), level.registryAccess());
+            }
+        });
+        s.until("facilities: the blueprints are read", () -> {}, () -> {
+            for (Site site : all) for (int lv = 1; lv <= site.facility.maxLevel(); lv++) if (!site.blueprints[lv].isDone()) return false;
+            return true;
+        }, 1200);
+        s.step("facilities: what the blueprints hold", () -> {
+            for (Site site : all) {
+                for (int lv = 1; lv <= site.facility.maxLevel(); lv++) {
+                    final com.ldtteam.structurize.blueprints.v1.Blueprint bp = (com.ldtteam.structurize.blueprints.v1.Blueprint) site.blueprints[lv].get();
+                    s.check(bp != null, site.name + ": the level " + lv + " blueprint " + site.path(lv) + " is read from the pack");
+                    final net.minecraft.world.level.block.state.BlockState anchor = bp.getBlockState(bp.getPrimaryBlockOffset());
+                    s.check(anchor.getBlock() == hutOf(site.facility), site.name + " level " + lv + ": its anchor is the facility's hut block (" + anchor + ")");
+                    for (var info : bp.getBlockInfoAsList()) if (info.getState() != null && info.getState().getBlock() == ModBlocks.blockRack) site.racks[lv]++;
+                }
+                s.note("OBS facilities: " + site.name + " racks by level " + java.util.Arrays.toString(java.util.Arrays.copyOfRange(site.racks, 1, site.facility.maxLevel() + 1)));
+            }
+        });
+        for (Site site : all) {
+            s.step("facilities: " + site.name + ": level 1 is placed", () -> pasteBlueprint(s, level, site, 1, true));
+            s.attempt("facilities: " + site.name + ": level 1 stands", () -> {}, () -> site.building() != null && site.building().getBuildingLevel() == 1
+                    && site.building().getContainers().size() >= site.racks[1], 1200, () -> {});
+            s.settle("facilities: " + site.name + ": a moment", 20);
+            s.step("facilities: " + site.name + ": level 1", () -> checkSite(s, level, net, site, 1));
+            for (int lv = 2; lv <= site.facility.maxLevel(); lv++) {
+                final int target = lv;
+                s.step("facilities: " + site.name + ": level " + target + " is placed over it", () -> {
+                    final BuildingAirfield field = site.building();
+                    final String asked = com.minecolonies.core.colony.workorders.WorkOrderBuilding.create(com.minecolonies.api.colony.workorders.WorkOrderType.UPGRADE, field).getStructurePath();
+                    s.soft(site.name + " / at level " + (target - 1) + " an upgrade asks for the level " + target + " blueprint", asked.endsWith(site.schematic + target + ".blueprint"), asked);
+                    pasteBlueprint(s, level, site, target, false);
+                });
+                s.attempt("facilities: " + site.name + ": level " + target + " stands", () -> {}, () -> site.building().getBuildingLevel() == target
+                        && site.building().getContainers().size() >= site.racks[target], 1200, () -> {});
+                s.settle("facilities: " + site.name + ": a moment at level " + target, 20);
+                s.step("facilities: " + site.name + ": level " + target, () -> checkSite(s, level, net, site, target));
+            }
+        }
+
+        // ---- flights: the medium aircraft to the anchorages; the pilot steps onto the pier
+        if (Flights.classOf(design()) != ShipClass.MEDIUM) {
+            s.step("facilities: no flights", () -> s.note("OBS facilities: the design " + design() + " is not a medium aircraft (-Paircraft): the flights to the anchorages are left out"));
+            return;
+        }
+        final Field fm = new Field(medium.hut), fl = new Field(large.hut);
+        flyToPier(s, level, medium, wood, fm, "medium");
+        flyToPier(s, level, large, stone, fl, "large");
+    }
+
+    /** Places the blueprint of that level at the site (Structurize, at once); the first placement registers the building. */
+    private static void pasteBlueprint(Script s, ServerLevel level, Site site, int lv, boolean first) throws Exception {
+        final com.ldtteam.structurize.blueprints.v1.Blueprint bp = (com.ldtteam.structurize.blueprints.v1.Blueprint) site.blueprints[lv].get();
+        bp.setRotationMirror(site.turn, level);
+        final com.minecolonies.api.blocks.AbstractBlockHut<?> hut = (com.minecolonies.api.blocks.AbstractBlockHut<?>) hutOf(site.facility);
+        final net.minecraft.server.level.ServerPlayer owner = (net.minecraft.server.level.ServerPlayer) Fixture.owner(level);
+        if (first) {
+            owner.setPos(site.hut.getX() + 0.5, site.hut.getY(), site.hut.getZ() + 0.5);
+            s.check(hut.setup(owner, level, site.hut, bp, site.turn, true, Airline.PACK_NAME, site.path(lv)), site.name + ": the hut accepts the placement (permission, colony, building registered)");
+        }
+        com.ldtteam.structurize.management.Manager.addToQueue(new com.ldtteam.structurize.operations.PlaceStructureOperation(
+                new com.ldtteam.structurize.placement.StructurePlacer(hut.getStructureHandler(level, site.hut, bp, site.turn, true)), owner));
+    }
+
+    /** What a placed facility has to be at that level. */
+    private static void checkSite(Script s, ServerLevel level, RouteNetwork net, Site site, int lv) {
+        final BuildingAirfield field = site.building();
+        s.check(field != null, site.name + ": the building is an airfield building");
+        field.registerPad();
+        final String name = site.name + " level " + lv;
+        int racks = 0;
+        for (BlockPos spot : field.getContainers()) if (level.getBlockState(spot).getBlock() == ModBlocks.blockRack) racks++;
+        s.soft(name + " / it is the facility it was built as, at the level of its blueprint, with the racks of its blueprint as its containers",
+                field.facility() == site.facility && field.getBuildingLevel() == lv && field.getMaxBuildingLevel() == site.facility.maxLevel() && racks == site.racks[lv]
+                        && level.getBlockEntity(site.hut) instanceof com.asteain.airline.block.AirfieldBlockEntity,
+                field.facility() + " level " + field.getBuildingLevel() + " of " + field.getMaxBuildingLevel() + ", racks " + racks + " of " + site.racks[lv]);
+        final StringBuilder pads = new StringBuilder();
+        boolean good = field.pads().size() == (site.facility.airfield() && lv >= com.asteain.airline.route.RouteRules.GUEST_PAD_LEVEL ? 2 : 1);
+        for (BlockPos pad : field.pads()) {
+            final RouteNetwork.Node node = net.node(pad);
+            good &= node != null && node.facility() == site.facility && !Flights.berthMissing(level, pad);
+            pads.append(pad.toShortString()).append(node == null ? " not on the network" : " " + node.facility()).append(Flights.berthMissing(level, pad) ? " NOTHING TO BERTH AT" : "").append("; ");
+        }
+        s.soft(name + " / its pads are where the code expects them, on the network as this facility, each with a floor (an anchorage: a pier beside its berth)", good, pads.toString());
+        if (site.facility.airfield()) {
+            s.soft(name + " / it has an import stash", com.asteain.airline.flight.Cargo.importStore(level, field) != null, "stash " + (com.asteain.airline.flight.Cargo.importStore(level, field) != null));
+        } else {
+            final int[] side = Flights.pierSide(level, field.pad());
+            // The hut's own direction to the pier: west of the berth as built (x -1), east when mirrored.
+            final int expected = site.turn == com.ldtteam.structurize.api.RotationMirror.NONE ? -1 : 1;
+            s.soft(name + " / the pier is found on the side the building has it" + (site.turn == com.ldtteam.structurize.api.RotationMirror.NONE ? "" : " (mirrored: the other side)"),
+                    side != null && side[0] == expected && side[1] == 0, side == null ? "no pier" : side[0] + ", " + side[1]);
+        }
+    }
+
+    /** A pilot and the medium aircraft at the airfield; a round trip by command to the anchorage: held beside the pier, the pilot gets off onto it. */
+    private static void flyToPier(Script s, ServerLevel level, Site home, Site anchorage, Field f, String name) {
+        s.step("facilities: " + name + ": a pilot and the medium aircraft", () -> {
+            f.colony = home.colony;
+            f.airfield = home.building();
+            f.pad = f.airfield.pad();
+            f.pilotData = Fixture.spawn(f.colony, level, home.hut.offset(2, 0, 2));
+            final Flights.Answer made = spawn(level, f.pad);
+            s.soft("facilities / " + name + ": the medium aircraft is made on the airfield's pad", made.ok(), made.text().getString());
+            for (AircraftBlockEntity each : Flights.aircraft(level)) if (f.pad.equals(each.home)) f.aircraft = each;
+            s.check(f.aircraft != null, name + ": the new aircraft's home is this pad");
+        });
+        s.until("facilities: " + name + ": pilot entity", () -> {}, () -> (f.pilot = Fixture.entity(f.pilotData)) != null, 200);
+        s.step("facilities: " + name + ": hire the pilot", () -> s.check(f.airfield.getFirstModuleOccurance(WorkerBuildingModule.class).assignCitizen(f.pilotData), "the pilot is hired"));
+        loaded(s, "facilities " + name, () -> f.aircraft);
+        s.settle("facilities: " + name + ": the balloon fills", 320);
+        final double[] onPier = {Double.NaN, Double.NaN, Double.NaN};
+        final boolean[] fixedThere = new boolean[1];
+        s.step("facilities: " + name + ": a round trip to the anchorage", () -> {
+            watch(s, f, "facilities " + name);
+            s.monitor(() -> {
+                if (Double.isNaN(onPier[0]) && f.aircraft.phase == Phase.WAIT && anchorage.building().pad().equals(f.aircraft.at)) {
+                    onPier[0] = f.pilot.getX();
+                    onPier[1] = f.pilot.getY();
+                    onPier[2] = f.pilot.getZ();
+                    final double[] r = Flights.readings(f.aircraft);
+                    fixedThere[0] = r != null && r[4] > 0;
+                }
+            });
+            final Flights.Answer sent = Flights.send(level, f.pad, anchorage.building().pad(), true, f.pilot);
+            s.soft("facilities / " + name + ": a round trip to the " + anchorage.name + " is ordered", sent.ok(), sent.text().getString());
+        });
+        s.until("facilities: " + name + ": there, the pilot off and on again, and back", () -> {}, () -> f.clock > 100 && !Double.isNaN(onPier[0]) && f.aircraft.phase == Phase.PARKED && f.pad.equals(f.aircraft.at), 16000);
+        s.step("facilities: " + name + ": result", () -> {
+            final BlockPos pad = anchorage.building().pad();
+            final double across = Math.hypot(onPier[0] - (pad.getX() + 0.5), onPier[2] - (pad.getZ() + 0.5));
+            final boolean onTheDeck = onPier[1] > pad.getY() + 1.9 && onPier[1] < pad.getY() + 2.6 && across > 6.5 && across < 12;
+            s.soft("facilities / " + name + ": at the " + anchorage.name + " the aircraft was held fixed in the air beside the pier, and the pilot got off onto the pier",
+                    fixedThere[0] && onTheDeck && f.pilot.isAlive(), String.format("fixed %s; the pilot stood at (%.1f, %.1f, %.1f), %.1f across from the berth %s",
+                            fixedThere[0], onPier[0], onPier[1], onPier[2], across, pad.toShortString()));
+            s.soft("facilities / " + name + ": then it came home with its pilot", f.pad.equals(f.aircraft.at) && f.pilot.isAlive(), "at " + f.aircraft.at);
+            for (String l : f.log) if (l.contains("->")) s.note("OBS facilities " + name + ": " + l);
+            s.clearMonitors();
+        });
     }
 
     // ---- size classes: which aircraft may berth where (the user's ruling of 2026-10-14) ---------------------------

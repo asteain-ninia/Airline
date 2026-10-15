@@ -123,8 +123,18 @@ final class BenchSuite {
                 fail("no design of the name '" + name + "' (there are: " + String.join(", ", Flights.designs()) + ")");
                 return;
             }
-            Fixture.platform(level, PAD.above(), 10, 10);
-            RouteNetwork.get(level).setAirfield(PAD, 0, 1);
+            // The pad of the design's class (2026-10-15): a medium or large aircraft is refused on a small airfield's pad, and
+            // overhangs its floor. The small one keeps the pad it always had.
+            final com.asteain.airline.route.ShipClass shipClass = AircraftType.of(name).shipClass;
+            final com.asteain.airline.route.Facility facility = switch (shipClass) {
+                case SMALL -> com.asteain.airline.route.Facility.SMALL_AIRFIELD;
+                case MEDIUM -> com.asteain.airline.route.Facility.MEDIUM_AIRFIELD;
+                case LARGE -> com.asteain.airline.route.Facility.LARGE_AIRFIELD;
+            };
+            final int floor = Math.max(10, shipClass.halfLength + 4);
+            report.addProperty("class", shipClass.key());
+            Fixture.platform(level, PAD.above(), floor, floor);
+            RouteNetwork.get(level).setAirfield(PAD, 0, 1, PAD, facility);
             Flights.Answer made = Flights.spawn(level, PAD, name);
             if (!made.ok()) fail("the aircraft could not be made (" + made.key() + "): " + Flights.lastSpawnFault());
         }
