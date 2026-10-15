@@ -54,7 +54,14 @@ final class ReloadSuite {
             s.check(colony[0].getRequestManager().getResolverForRequest(open.get(0).getId()) instanceof com.minecolonies.core.colony.requestsystem.resolvers.core.AbstractWarehouseRequestResolver,
                     "and still held by the warehouse");
         });
-        s.settle("let block entities link to their buildings", 40);
+        // Until the racks are read back (under -Psprint=on the land and its block entities come back beside the ticks: 40 ticks
+        // were sometimes not enough, and the racks read as empty). If the iron is really gone, the check below says so.
+        s.attempt("let block entities link to their buildings", () -> {}, () -> {
+            IBuilding building = colony[0].getServerBuildingManager().getBuilding(airfieldPos);
+            if (building == null || building.getItemHandlerCap() == null) return false;
+            int racks = InventoryUtils.getItemCountInItemHandler(building.getItemHandlerCap(), stack -> stack.is(Items.IRON_INGOT));
+            return racks == onRacks || racks == onRacks + 20;
+        }, 200, () -> {});
         s.step("after the reload", () -> {
             level.getChunk(airfieldPos);
             IBuilding building = colony[0].getServerBuildingManager().getBuilding(airfieldPos);
