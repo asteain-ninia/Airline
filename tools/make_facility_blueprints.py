@@ -215,11 +215,22 @@ def anchorage_design(mod_id="airline", name="anchorage"):
             d = min(max(z - tip, 0.0), span) / span
             return PILLAR_DEEPEST * (1.0 - math.sqrt(max(0.0, 1.0 - d * d)))
 
-        # 柱 k は z = tip + 7k と その南(k = 0 は先端)。根元の柱がいちばん長い(14)。どの柱も最低 2
+        # 柱 k は z = tip + 7k と その南(k = 0 は先端)。根元の柱がいちばん長い(14)。どの柱も最低 2、ただし先端の柱だけは 0
+        # (同じ日の最後のご意見「最後の柱だけ長さ0にしてください」)
         pillars = [tip + PIER_SPACING * k for k in range(0, STONE_PIER_BAYS + 1)]
         assert pillars[-1] + PILLAR_THICK - 1 == root_end, (pillars, root_end)
         lengths = {at: max(PILLAR_SHORTEST, int(round(reach(at + PILLAR_THICK / 2.0)))) for at in pillars}
         lengths[pillars[-1]] = PILLAR_DEEPEST
+        lengths[pillars[0]] = 0
+
+        def floor_of(z):
+            """弧の下側を切る深さ: 大きな楕円か柱の最低の長さの、深い方。ただし先端の柱から次の柱までは、次の柱の長さ 2 から
+            先端の 0 へ上がる小さな 4 分の 1 の楕円(先端で床と平らに並ぶ = 頂点。弧の北の足が宙に浮かないように)。"""
+            d = z - tip
+            if d < PIER_SPACING:
+                t = min(max(d, 0.0), PIER_SPACING) / PIER_SPACING
+                return max(reach(z), PILLAR_SHORTEST * (1.0 - math.sqrt(max(0.0, 1.0 - t * t))))
+            return max(reach(z), PILLAR_SHORTEST)
         bays = [tip + PIER_SPACING * k + PILLAR_THICK for k in range(STONE_PIER_BAYS)]   # 弧の北の端
         spring = deck - ARCH_SPAN / 2.0                                 # 弧の立ち上がり(床の下面から半径ぶん下。マスの途中)
 
@@ -230,7 +241,7 @@ def anchorage_design(mod_id="airline", name="anchorage"):
                     return y >= deck - lengths[at]
             for b0 in bays:
                 if b0 <= z < b0 + ARCH_SPAN:
-                    if y < deck - max(reach(z), PILLAR_SHORTEST):
+                    if y < deck - floor_of(z):
                         return False
                     c = b0 + ARCH_SPAN / 2.0
                     return y >= spring and (z - c) ** 2 + (y - spring) ** 2 >= (ARCH_SPAN / 2.0) ** 2
