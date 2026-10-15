@@ -55,12 +55,62 @@ FACILITIES = {
     # 同じ小屋ブロック・同じ建物で、設計図の名前だけが違う(MineColonies の別版)。
     "anchoragestone": {"half": 15, "shaft": 17, "airfield": False, "title": "泊地(石)"},
 }
-PILLAR_DEEPEST = 14                             # 石の桟橋の、根元の柱の長さ(床の下から)。先へ行くほど短い
-ARCH_DEPTH = PILLAR_DEEPEST + 3                 # 石の桟橋の、床より下の深さ(柱と、垂れた先の塀・鎖・ランタン)
 PIER_BEYOND = 21                                # 桟橋の先は、台(機体の真ん中)からこれだけ先まで(大型機の半分の長さ 12 と、8 余分に)
-PIER_SPACING = 4                                # 石の桟橋の柱の間
-# Domum Ornamentum のパネル(厚さ 3/16 の板)。天井側(half=top、閉じた形)に置いて、弧の細かい段にする。材料は石レンガ。
-STONE_PANEL = "domum_ornamentum:panel[facing=north,half=top,open=false,type=full,waterlogged=false]|minecraft:block/oak_planks=minecraft:stone_bricks"
+# 石の桟橋(2026-10-15 夕のご指示「アーチは幅5で、なおかつ桟橋自体の幅は4に…柱の幅は従来通り2で。アーチ脚の長さはそれ自体がアーチ状に
+# 短くなっていき、桟橋先端でちょうど0になる＝頂点になるように」、柱は 横 2・厚み 2 と選んでいただいた):
+# 床は幅 4(機体が東に横付けするので、木の桟橋より西へ 1 列広い)。床の下の真ん中 2 列に、梁と、2 × 2 の柱と、柱の間の幅 5 の弧。
+PILLAR_DEEPEST = 14                             # 根元の柱の長さ(梁の段を含めて、床の下から)。先へ行くほど短く、先端で 0
+ARCH_DEPTH = PILLAR_DEEPEST                     # 石の桟橋の、床より下の深さ
+PILLAR_THICK = 2                                # 柱の厚み(南北)。横(東西)も 2
+ARCH_SPAN = 5                                   # 柱の間の弧の幅
+PIER_SPACING = PILLAR_THICK + ARCH_SPAN         # 柱の間隔
+STONE_PIER_BAYS = 6                             # 先端(長さ 0 の柱 = 大きな弧の頂点)から根元の柱まで、柱の間隔がいくつ並ぶか
+# 桟橋の先が台からどれだけ先か: 先端から根元の柱の南の端まで (柱の間隔 × 数 + 柱の厚み)、その南に踊り場 3、小屋は台から南へ 20。= 26
+STONE_PIER_BEYOND = STONE_PIER_BAYS * PIER_SPACING + PILLAR_THICK + 3 - 1 - 20
+assert STONE_PIER_BEYOND >= PIER_BEYOND
+
+
+def do_panel(facing, half, opened):
+    """Domum Ornamentum のパネル(厚さ 3/16 の板。材料は石レンガ)。開いた板は、向きの反対側の壁に付く(バニラの落とし戸と同じ)。"""
+    return "domum_ornamentum:panel[facing=%s,half=%s,open=%s,type=full,waterlogged=false]|minecraft:block/oak_planks=minecraft:stone_bricks" % (
+        facing, half, opened)
+
+
+# 石の桟橋の弧の切り口に使う形(南北の縦の切り口。u は北 → 南、v は下 → 上。0〜1)。
+# ColonyPatchServer/design/arch-gate-2026-10-15 のアーチ門の「パネルも使う」版と同じ形と選び方(ご判断「瓦なしパネルのみが一番いい」)。
+# 形はそこで本物のモデルを切って確かめたもの: 階段は「向いた側に、もう半分の段」、開いたパネルは向きの反対側の壁。
+P3 = 3.0 / 16.0
+PIER_SHAPES = {
+    "full": (mb.STONE_BRICKS, lambda u, v: True, 0.0),
+    "slab_top": ("minecraft:stone_brick_slab[type=top,waterlogged=false]", lambda u, v: v >= 0.5, 0.005),
+    "slab_bottom": ("minecraft:stone_brick_slab[type=bottom,waterlogged=false]", lambda u, v: v < 0.5, 0.005),
+    "stairs_top_south": (mb.stairs("south", "top", "stone_brick"), lambda u, v: v >= 0.5 or u >= 0.5, 0.008),
+    "stairs_top_north": (mb.stairs("north", "top", "stone_brick"), lambda u, v: v >= 0.5 or u < 0.5, 0.008),
+    "stairs_bottom_south": (mb.stairs("south", "bottom", "stone_brick"), lambda u, v: v < 0.5 or u >= 0.5, 0.008),
+    "stairs_bottom_north": (mb.stairs("north", "bottom", "stone_brick"), lambda u, v: v < 0.5 or u < 0.5, 0.008),
+    "panel_top": (do_panel("north", "top", "false"), lambda u, v: v >= 1 - P3, 0.012),
+    "panel_bottom": (do_panel("north", "bottom", "false"), lambda u, v: v < P3, 0.012),
+    "panel_north": (do_panel("south", "bottom", "true"), lambda u, v: u < P3, 0.012),
+    "panel_south": (do_panel("north", "bottom", "true"), lambda u, v: u >= 1 - P3, 0.012),
+}
+PROFILE_SAMPLES = 32
+
+
+def choose_shape(solid, z, y):
+    """マス (z, y) の形: 理想の形(solid(z, y) → 石か)と食い違う点の割合 + 割り増し が一番小さいもの。空なら None。"""
+    n = PROFILE_SAMPLES
+    pts = [((i + 0.5) / n, (j + 0.5) / n) for i in range(n) for j in range(n)]
+    ideal = [solid(z + u, y + v) for u, v in pts]
+    if all(ideal):
+        return "full"
+    if not any(ideal):
+        return None
+    best, best_cost = None, sum(ideal) / float(len(pts))                 # 空のときの食い違い
+    for name, (_, inside, extra) in PIER_SHAPES.items():
+        cost = sum(1 for (u, v), want in zip(pts, ideal) if inside(u, v) != want) / float(len(pts)) + extra
+        if cost < best_cost - 1e-9:
+            best, best_cost = name, cost
+    return best
 PIERS = ("anchorage", "anchoragestone")
 # 連結器の位置(台の中心から)。床置き: 上向き、台の中心から南へ 3(機体の下部連結器の位置が決まったら直す)。
 # 横型: 台の床の 1 段上、台の中心から東西へ 8(大型機の胴の幅 15 のすぐ外。中心を向く)。
@@ -84,8 +134,10 @@ class Site:
             # 機体は桟橋の東に、空中で横付け。「台」は大型機の機体ブロックの 1 つ下(床は無い): 小屋から (9, -2, -20)。
             # 設計図の箱は、竪穴(台の中心から半径 17)の東西南北と、根元まで。高さは 4(桟橋の裏・桟橋・係船柱・松明)。
             below = ARCH_DEPTH if name == "anchoragestone" else 0
+            beyond = STONE_PIER_BEYOND if name == "anchoragestone" else PIER_BEYOND
             # 北の縁は、竪穴(半径 17)と桟橋の先の、遠い方まで
-            self.pad1 = (self.r, below, max(self.r, PIER_BEYOND))
+            self.pad1 = (self.r, below, max(self.r, beyond))
+            self.beyond = beyond
             self.pad2 = self.pad1
             self.anchor = (self.pad1[0] - 9, below + 2, self.pad1[2] + 20)
             self.size = (2 * self.r + 1, below + 4, self.anchor[2] + 1)
@@ -117,7 +169,7 @@ def anchorage_design(mod_id="airline", name="anchorage"):
         assert 0 <= x < sx and 0 <= y < sy and 0 <= z < sz, (name, x, y, z)
         b[(x, y, z)] = state
 
-    tip = pz - PIER_BEYOND
+    tip = pz - site.beyond
     if not stone:
         # 桟橋: 幅 3(係船柱の列を中心に)、根元から北へ、大型機の長さと少しを越えるまで
         for z in range(tip, az + 1):
@@ -135,49 +187,78 @@ def anchorage_design(mod_id="airline", name="anchorage"):
             put(x, ay, az, mb.FENCE)
             put(x, ay + 1, az, "minecraft:torch")
     else:
-        # 石の桟橋: 床は石レンガ。床の下は 4 ブロックおきの柱と、その間の小さな弧。
-        # 柱は根元がいちばん長く、根元のすぐ先で急に短くなり、先のほうはなだらかに床へ寄る。柱の先を結ぶと、
-        # 根元から跳ね上がって桟橋の下に沿っていく 4 分の 1 の楕円になる(2026-10-15 のご意見「根本の足をさらに長く、
-        # 外側に行くにつれて短く…足の先端を取ったときに、それらがちょうど半アーチを描く」「もっと根元の方での減少が急激に」)。
-        # 柱の間の弧は、柱の脇に逆さの階段、真ん中に天井側のパネル(Domum Ornamentum)で、細かい段にする
-        # (同じ日のご意見「Domumのパネル使ったらもっと滑らかなアーチに出来ませんか？」)。
-        # 柱の先は細い塀になり、鎖で吊ったランタンで終わる(下は虚空のまま)。
+        # 石の桟橋(2026-10-15 夕のご指示。定数の所の説明を参照): 床は幅 4 の石レンガ。床の下の真ん中 2 列に、
+        # 梁(床のすぐ下)、2 × 2 の柱(7 おき)、柱の間の幅 5 の半円の弧(天辺が梁の下面)。床の東西の縁の下は、逆さの階段の持ち送り。
+        # 柱の長さは、先端(長さ 0 = 大きな弧の頂点)から根元(14)へ、4 分の 1 の楕円に沿って伸びる。根元では真下へ落ち、先では床と平らに並ぶ
+        # (それまでのご意見「根本の足をさらに長く、外側に行くにつれて短く…ちょうど半アーチを描く」「もっと根元の方での減少が急激に」も、この形)。
+        # 弧が柱より深くなる所(先端の側)は、弧の下側を、その大きな楕円で切る。弧の形の選び方は choose_shape()。
         brick, chiseled, wall = mb.STONE_BRICKS, "minecraft:chiseled_stone_bricks", "minecraft:stone_brick_wall"
+        west, east = ax - 2, ax + 1                                     # 床の西と東の縁(東の縁は機体の脇。連結器もここ)
+        core = (ax - 1, ax)                                             # 梁・柱・弧の 2 列
+        root_end = az - 3                                               # 根元の柱の南の端(その南は、島の上の踊り場)
         for z in range(tip, az + 1):
-            for x in range(ax - 1, ax + 2):
+            for x in range(west, east + 1):
                 put(x, deck, z, brick)
-        for z in range(az - 2, az + 1):                                 # 根元の踊り場(島の上)、市松
-            for x in range(ax - 2, ax + 3):
+        for z in range(az - 2, az + 1):                                 # 根元の踊り場(島の上)、市松。床より東西に 1 ずつ広い
+            for x in range(west - 1, east + 2):
                 put(x, deck, z, mb.DEEPSLATE if (x + z) % 2 else brick)
-        pillars = list(range(az - 3, tip, -PIER_SPACING))               # 柱の位置(根元から北へ)
-        span = (az - 3) - tip                                           # 楕円の横の半径: 根元の柱から桟橋の先まで
-        lengths = {}
-        for at in pillars:
-            along = (az - 3) - at
-            # 楕円の中心は (桟橋の先, 根元の柱の先の深さ)。根元では真下へ落ち、先では床と平らに並ぶ。
-            lengths[at] = max(1, int(round(PILLAR_DEEPEST * (1.0 - math.sqrt(max(0.0, 1.0 - (1.0 - along / span) ** 2))))))
-            for x in range(ax - 1, ax + 2):
-                for y in range(deck - lengths[at], deck):
-                    put(x, y, at, chiseled if (deck - y) % 4 == 3 else brick)
-            put(ax, deck - lengths[at] - 1, at, wall)                   # 垂れた先: 塀、鎖、ランタン
-            put(ax, deck - lengths[at] - 2, at, "minecraft:chain[axis=y,waterlogged=false]")
-            put(ax, deck - lengths[at] - 3, at, mb.LANTERN % "true")
-        for south, north in zip(pillars, pillars[1:]):                  # 柱の間: 床のすぐ下の梁と、なめらかな小さな弧
-            deep = min(lengths[south], lengths[north]) >= 2
-            for x in range(ax - 1, ax + 2):
-                for z in range(north + 1, south):
-                    put(x, deck - 1, z, brick)
-                if not deep:
+        span = root_end + 1 - tip
+
+        def reach(z):
+            """床の下から大きな楕円までの深さ(梁の段を含む)。z はブロックの境目で測る、連続の値。先端で 0、根元の柱の南の端で 14。"""
+            d = min(max(z - tip, 0.0), span) / span
+            return PILLAR_DEEPEST * (1.0 - math.sqrt(max(0.0, 1.0 - d * d)))
+
+        # 柱 k は z = tip + 7k と その南。k = 0(先端)は長さ 0 なので置かない。根元の柱がいちばん長い(14)
+        pillars = [tip + PIER_SPACING * k for k in range(1, STONE_PIER_BAYS + 1)]
+        assert pillars[-1] + PILLAR_THICK - 1 == root_end, (pillars, root_end)
+        lengths = {at: int(round(reach(at + PILLAR_THICK / 2.0))) for at in pillars}
+        lengths[pillars[-1]] = PILLAR_DEEPEST
+        bays = [tip + PIER_SPACING * k + PILLAR_THICK for k in range(STONE_PIER_BAYS)]   # 弧の北の端
+        spring = deck - 1 - ARCH_SPAN / 2.0                             # 弧の立ち上がり(梁の下面から半径ぶん下。マスの途中)
+
+        def solid(z, y):
+            """南北の縦の切り口(真ん中 2 列)の、理想の形。梁より下だけを聞く。"""
+            for at in pillars:
+                if at <= z < at + PILLAR_THICK:
+                    return y >= deck - lengths[at]
+            for b0 in bays:
+                if b0 <= z < b0 + ARCH_SPAN:
+                    if y < deck - reach(z):
+                        return False
+                    c = b0 + ARCH_SPAN / 2.0
+                    return y >= spring and (z - c) ** 2 + (y - spring) ** 2 >= (ARCH_SPAN / 2.0) ** 2
+            return False
+
+        for z in range(tip, root_end + 1):
+            for x in core:
+                put(x, deck - 1, z, brick)                              # 梁
+            for x, facing in ((west, "east"), (east, "west")):          # 床の縁の下の持ち送り(逆さの階段、内向き)
+                put(x, deck - 1, z, mb.stairs(facing, "top", "stone_brick"))
+            for y in range(deck - PILLAR_DEEPEST, deck - 1):
+                shape = choose_shape(solid, z, y)
+                if shape is None:
                     continue
-                put(x, deck - 2, south - 1, mb.stairs("south", "top", "stone_brick"))   # 柱の脇: 逆さの階段(45 度)
-                put(x, deck - 2, north + 1, mb.stairs("north", "top", "stone_brick"))
-                for z in range(north + 2, south - 1):                                   # 真ん中: 天井側のパネル(3/16)
-                    put(x, deck - 2, z, STONE_PANEL)
-            if deep:
-                put(ax, deck - 3, (south + north) // 2, mb.LANTERN % "true")   # 弧の頂から吊ったランタン
-        for x in (ax - 2, ax + 2):                                      # 踊り場の灯籠(竪穴の外): 塀の柱にランタン
+                state = PIER_SHAPES[shape][0]
+                if state == brick and any(at <= z < at + PILLAR_THICK for at in pillars) and (deck - y) % 4 == 3:
+                    state = chiseled                                    # 柱の帯
+                for x in core:
+                    put(x, y, z, state)
+        for b0 in bays:                                                 # 弧の天辺(梁の下)に吊ったランタン。先端の側の、弧の無い所も同じ
+            spot = (ax, deck - 2, b0 + ARCH_SPAN // 2)
+            if spot not in b:
+                put(spot[0], spot[1], spot[2], mb.LANTERN % "true")
+        for x in (west - 1, east + 1):                                  # 踊り場の灯籠(竪穴の外): 塀の柱にランタン
             put(x, ay, az, wall)
             put(x, ay + 1, az, mb.LANTERN % "false")
+        # 約束: ランタンは支えがあること(吊り下げは真上、置いたものは真下が、丸ブロックか塀か鎖。2026-10-15 のご指摘
+        # 「今度はランタンがつかなくなるはず」: 天井側のパネルの下には吊れない)
+        holders = (brick, chiseled, wall, "minecraft:chain")
+        for (x, y, z), state in b.items():
+            if state.startswith("minecraft:lantern"):
+                above = "hanging=true" in state
+                held = b.get((x, y + 1, z) if above else (x, y - 1, z), "").split("[")[0]
+                assert held in holders, (name + ": lantern without support", (x, y, z), held)
     put(ax + 1, deck, pz, CONNECTOR % "east")                          # 横型の連結器(桟橋の東の縁、機体の脇)
     put(ax, ay, az, mod_id + ":blockhutanchorage[facing=north]")       # 係船柱(小屋ブロック)
     # 柵と塀のつながり
