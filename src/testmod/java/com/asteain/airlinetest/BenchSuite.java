@@ -83,6 +83,7 @@ final class BenchSuite {
         AircraftType type;
         Stage stage = Stage.WEIGH;
         int age;
+        final long made = System.nanoTime();
         boolean over;
 
         // what the stages keep between ticks
@@ -301,7 +302,7 @@ final class BenchSuite {
                 if (aircraft != null) trial = Trial.of(aircraft);
                 craftBlock = aircraft;
                 if (trial == null) {
-                    if (age > 100) fail("the aircraft was made but did not come to stand parked on its pad");
+                    if (age > 100 && Script.pastInRealTime(made, 100)) fail("the aircraft was made but did not come to stand parked on its pad");
                     return over;
                 }
                 type = trial.type();

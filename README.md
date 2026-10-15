@@ -154,10 +154,13 @@ python tools/run_gradle.py run-logs/build.log build
 python tools/run_gradle.py run-logs/airfield.log --timeout 1500 runAirfield
 python tools/run_gradle.py run-logs/cargo.log --timeout 1800 runFlight -Pscene=cargo
 python tools/run_batch.py <札> runAirfield runAirfieldReload runAirfieldRemoved runNetwork trip far cargo carry traffic three detour
+python tools/run_batch.py <札> --sprint all
+python tools/run_batch.py <札> --sprint --part 2/3 all
 ```
 
 - **サーバーを起動するタスク(名前が `run` で始まるもの)は、必ず `tools/run_gradle.py` を通す。** 同時に 1 つだけ動くように、順番待ちの札を ColonyPatchServer と共有している(札の場所は `..\ColonyPatchServer\run-logs\server-slot.lock`)。
-- `tools/run_batch.py` は、何本かを続けて回し、結果を `run-logs\<札>-<名前>-result.txt` と `<札>-summary.txt` に残す。場面の名前のあとに `@<型>` を付けると、その型の機体で飛ばす(`trip@kokaze`)。
+- `tools/run_batch.py` は、何本かを続けて回し、結果を `run-logs\<札>-<名前>-result.txt` と `<札>-summary.txt` に残す。場面の名前のあとに `@<型>` を付けると、その型の機体で飛ばす(`trip@kokaze`)。項目に `all` と書くと全部の場面(36 本)。`--part 2/3` で、全体を 3 つに分けた 2 つめだけを回す(続きの reopen は分けない)。最後に合計の行を書く。
+- **早回し `--sprint`**(2026-10-15): サーバーが刻みを追いつく限り速く進める(Minecraft の tick sprint)。全部の場面が、普通の速さで 3 時間あまりのところ、40 分ほどで終わる(2026-10-15 に確かめた。項目数は同じ。うち 9 分ほどは、1 本ごとに順番待ちの札を譲る 15 秒)。場面の中で起きることは刻みの数で決まるので同じだが、地形の読み込みや MineColonies の道探しは刻みと別に進むので、早回しではそれを待つ刻みが増える。そのため試験の待ち(`until`、`attempt`、見張り)は、刻みの数に加えて、普通の速さなら掛かる時間も過ぎるまで諦めない。新しく作った機体は、読み込まれてから先へ進む。reopen の場面は、早回しでも普通の速さで回る(早回しのまま止めると、止める途中で回り続けて終わらないことがあった)。
 - `tools/sync_copy.py <写しのフォルダ> ...` は、ソースと道具を、試験用の写しへ写す。サーバーの順番待ちの札を取ってから写すので、その写しで試験が走り始める瞬間に、ソースが入れ替わることがない。
 - **試験が走っている間に、同じフォルダでビルドしない**(走っているサーバーが読むクラスを書き換えてしまう)。長い試験は、プロジェクトの写し(`src`、`tools`、Gradle のファイルだけを隣のフォルダへ写したもの)で回すと、本体で作業を続けられる。
 - 試験用 MOD(`src/testmod`、ID `airlinetest`)を専用サーバーで動かす。プレイヤーはいない。結果は各実行フォルダの `airline-result.txt`(`PASS <項目数> ...` か `FAIL ...`)。

@@ -82,6 +82,7 @@ neoForge {
             sourceSet = sourceSets.testmod
             loadedMods = [neoForge.mods.named(mod_id).get(), neoForge.mods.named('airlinetest').get()]
             systemProperty 'airlinetest.suite', 'airfield'
+            systemProperty 'airlinetest.sprint', providers.gradleProperty('sprint').getOrElse('off')
             systemProperty 'airlinetest.courier', providers.gradleProperty('courier').getOrElse('true')
             systemProperty 'airlinetest.watchdogTicks', providers.gradleProperty('watchdogTicks').getOrElse('12000')
             systemProperty 'airlinetest.timeoutSeconds', providers.gradleProperty('timeoutSeconds').getOrElse('900')
@@ -95,6 +96,7 @@ neoForge {
             sourceSet = sourceSets.testmod
             loadedMods = [neoForge.mods.named(mod_id).get(), neoForge.mods.named('airlinetest').get()]
             systemProperty 'airlinetest.suite', 'reload'
+            systemProperty 'airlinetest.sprint', providers.gradleProperty('sprint').getOrElse('off')
             jvmArgument '-Xmx3G'
         }
         // Third start on the same world WITHOUT the mod (only the checks are loaded): does the world open, is the colony usable?
@@ -105,6 +107,7 @@ neoForge {
             sourceSet = sourceSets.testmod
             loadedMods = [neoForge.mods.named('airlinetest').get()]
             systemProperty 'airlinetest.suite', 'removed'
+            systemProperty 'airlinetest.sprint', providers.gradleProperty('sprint').getOrElse('off')
             jvmArgument '-Xmx3G'
         }
         // Stage 4, second half: aircraft fly. Sable, Create, Create Aeronautics and ColonyPatchServer are added to the server.
@@ -117,6 +120,7 @@ neoForge {
             sourceSet = sourceSets.testmod
             loadedMods = [neoForge.mods.named(mod_id).get(), neoForge.mods.named('airlinetest').get()]
             systemProperty 'airlinetest.suite', 'flight'
+            systemProperty 'airlinetest.sprint', providers.gradleProperty('sprint').getOrElse('off')
             systemProperty 'airlinetest.scene', providers.gradleProperty('scene').getOrElse('trip')
             systemProperty 'airlinetest.aircraft', providers.gradleProperty('aircraft').getOrElse('')
             // -Pdesign=<file, seen from this project's folder>: a design that is not in the mod yet (it is offered under the file's
@@ -136,6 +140,7 @@ neoForge {
             sourceSet = sourceSets.testmod
             loadedMods = [neoForge.mods.named(mod_id).get(), neoForge.mods.named('airlinetest').get()]
             systemProperty 'airlinetest.suite', 'bench'
+            systemProperty 'airlinetest.sprint', providers.gradleProperty('sprint').getOrElse('off')
             systemProperty 'airlinetest.aircraft', providers.gradleProperty('aircraft').getOrElse('small')
             systemProperty 'airline.design', providers.gradleProperty('design').map { project.file(it).absolutePath }.getOrElse('')
             systemProperty 'airlinetest.benchOut', project.file(providers.gradleProperty('benchOut').getOrElse('run-bench/bench-report.json')).absolutePath
@@ -157,6 +162,7 @@ neoForge {
             sourceSet = sourceSets.testmod
             loadedMods = [neoForge.mods.named(mod_id).get(), neoForge.mods.named('airlinetest').get()]
             systemProperty 'airlinetest.suite', 'network'
+            systemProperty 'airlinetest.sprint', providers.gradleProperty('sprint').getOrElse('off')
             systemProperty 'airlinetest.timeoutSeconds', providers.gradleProperty('timeoutSeconds').getOrElse('600')
             jvmArgument '-Xmx3G'
         }

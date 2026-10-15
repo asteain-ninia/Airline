@@ -49,6 +49,9 @@ public final class AirlineTest {
                 case "bench" -> BenchSuite.build(server);
                 default -> throw new AssertionError("unknown airlinetest.suite '" + suite + "'");
             };
+            // Faster than real time (2026-10-15): the checks count ticks, not seconds. With -Psprint=on the server ticks
+            // as fast as it can (Minecraft's own "tick sprint"); what happens in each tick is the same.
+            if (Script.SPRINT) server.tickRateManager().requestGameToSprint(100_000_000);
         } catch (Throwable failure) {
             LogUtils.getLogger().error("[AIRTEST] start-up failure", failure);
             end(server, "FAIL " + failure);

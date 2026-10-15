@@ -13,11 +13,27 @@ final class Script {
 
     private static final class Step {
         final String name; final Action action; final Cond until; final int limit;
-        boolean started; int age;
+        boolean started; int age; long since;
         Step(String name, Action action, Cond until, int limit) { this.name = name; this.action = action; this.until = until; this.limit = limit; }
     }
 
     static final int WATCHDOG_TICKS = Integer.getInteger("airlinetest.watchdogTicks", 6000);
+
+    /** -Psprint=on (2026-10-15): the server ticks as fast as it can. What the server does beside its ticks (loading land, MineColonies'
+     * path finding) then takes more ticks than at the normal 20 a second, so under sprint a wait gives up only when its ticks are up and
+     * as much real time has gone by as those ticks take at the normal speed. Fixed waits (settle) still count ticks only.
+     * The reopen scenes, which stop the server, run at the normal speed all the same: stopped about a second after the world opened,
+     * with land still loading beside the ticks, the server sprinted into its shutdown and never got through it (reopenc1, twice). */
+    static final boolean SPRINT = "on".equals(System.getProperty("airlinetest.sprint", "off")) && !System.getProperty("airlinetest.scene", "").startsWith("reopen");
+
+    /** Whether as much real time has gone by since {@code since} (System.nanoTime) as {@code ticks} take at 20 a second; always true without sprint. */
+    static boolean pastInRealTime(long since, int ticks) {
+        return !SPRINT || System.nanoTime() - since >= ticks * 50_000_000L;
+    }
+
+    private static String seconds(long since) {
+        return String.format(" (%.1f s)", (System.nanoTime() - since) / 1e9);
+    }
 
     private final ArrayDeque<Step> steps = new ArrayDeque<>();
     private final List<Runnable> monitors = new ArrayList<>();
@@ -28,6 +44,7 @@ final class Script {
     String label = "";
     int checks;
     private int ticks;
+    private long started;
     String current = "start";
 
     void step(String name, Action action) { steps.add(new Step(name, action, null, 0)); }
@@ -36,9 +53,11 @@ final class Script {
     /** Waits for cond up to maxTicks; on time-out runs onTimeout and goes on (no failure). */
     void attempt(String name, Action action, Cond cond, int maxTicks, Action onTimeout) {
         int[] age = new int[1];
+        long[] since = new long[1];
         steps.add(new Step(name, action, () -> {
             if (cond.ok()) return true;
-            if (++age[0] >= maxTicks) { onTimeout.run(); return true; }
+            if (age[0] == 0) since[0] = System.nanoTime();
+            if (++age[0] >= maxTicks && pastInRealTime(since[0], maxTicks)) { onTimeout.run(); return true; }
             return false;
         }, maxTicks + 5));
     }
@@ -79,19 +98,22 @@ final class Script {
     /** @return the final result text when finished, else null. */
     String tick() {
         try {
-            if (++ticks > WATCHDOG_TICKS) throw new AssertionError("watchdog: no result after " + WATCHDOG_TICKS + " ticks; stuck in step '" + current + "'");
+            if (ticks == 0) started = System.nanoTime();
+            if (++ticks > WATCHDOG_TICKS && pastInRealTime(started, WATCHDOG_TICKS))
+                throw new AssertionError("watchdog: no result after " + ticks + " ticks" + seconds(started) + "; stuck in step '" + current + "'");
             for (Runnable m : new ArrayList<>(monitors)) m.run();
             while (!steps.isEmpty()) {
                 Step s = steps.peek();
                 current = s.name;
-                if (!s.started) { s.started = true; s.action.run(); }
+                if (!s.started) { s.started = true; s.since = System.nanoTime(); s.action.run(); }
                 if (s.until == null) {
                     if (s.age >= s.limit) { steps.poll(); continue; }
                     s.age++;
                     return null;
                 }
                 if (s.until.ok()) { steps.poll(); continue; }
-                if (++s.age > s.limit) throw new AssertionError("timed out after " + s.limit + " ticks waiting in step '" + s.name + "'");
+                if (++s.age > s.limit && pastInRealTime(s.since, s.limit))
+                    throw new AssertionError("timed out after " + s.age + " ticks" + seconds(s.since) + " waiting in step '" + s.name + "'");
                 return null;
             }
             current = "finish";

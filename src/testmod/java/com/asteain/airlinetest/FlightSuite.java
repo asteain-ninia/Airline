@@ -134,6 +134,7 @@ final class FlightSuite {
             s.soft(name + " / a second aircraft on the same pad is refused", !again.ok(), again.text().getString());
         });
         if (f.noAircraft) return;
+        loaded(s, name, () -> f.aircraft);
         s.settle(name + ": the balloon fills while the aircraft stands fixed", 320);
         s.step(name + ": parked", () -> {
             double[] r = Flights.readings(f.aircraft);
@@ -168,6 +169,15 @@ final class FlightSuite {
     /** A new aircraft of this run's design on a pad. */
     private static Flights.Answer spawn(ServerLevel level, BlockPos pad) {
         return Flights.spawn(level, pad, design());
+    }
+
+    /** Waits until a newly made aircraft has been loaded and has ticked (it has its runtime). Its ship's land loads beside the ticks: at the
+     * normal speed within a tick or two, under -Psprint=on it can take hundreds of ticks (2026-10-15). */
+    private static void loaded(Script s, String name, java.util.function.Supplier<AircraftBlockEntity> aircraft) {
+        s.until(name + ": the new aircraft is loaded", () -> {}, () -> {
+            final AircraftBlockEntity a = aircraft.get();
+            return a != null && Flights.readings(a) != null;
+        }, 100);
     }
 
     private static double wrap(double d) {
@@ -512,6 +522,10 @@ final class FlightSuite {
                     "flight.no_berth".equals(toSmallN) && "pad".equals(toAnchorage), toSmallN + " / " + toAnchorage);
             final Flights.Answer made = Flights.spawn(level, smallN[0].pad(), small);
             s.soft("classes / a small aircraft is made on N's small airfield", made.ok(), made.key());
+        });
+        loaded(s, "classes", () -> {
+            for (AircraftBlockEntity each : Flights.aircraft(level)) if (smallN[0].pad().equals(each.home)) return each;
+            return null;
         });
         s.settle("classes: the small aircraft settles on its pad", 60);
         s.step("classes: the small aircraft is sent to the anchorage", () -> {
@@ -1381,6 +1395,7 @@ final class FlightSuite {
             s.check(b.aircraft != null, "the second aircraft is found on pad A");
             watch(s, b, "second");
         });
+        loaded(s, "detour", () -> b.aircraft);
         s.settle("detour: the second aircraft's balloon fills", 320);
         s.step("detour: the second aircraft is sent the same way", () -> {
             Flights.Answer sent = Flights.send(level, a.pad, padB, false, b.pilot);
@@ -2122,6 +2137,7 @@ final class FlightSuite {
             a.seen = null;
             a.log.clear();
         });
+        loaded(s, "lost", () -> a.aircraft);
         s.settle("lost: the second aircraft's balloon fills", 320);
 
         // ---- (b) the pilot is gone for good in the air, with cargo aboard
@@ -2160,6 +2176,7 @@ final class FlightSuite {
             a.seen = null;
             a.log.clear();
         });
+        loaded(s, "lost", () -> a.aircraft);
         s.settle("lost: the third aircraft's balloon fills", 320);
 
         // ---- (c) the aircraft's own block is broken, with cargo aboard
@@ -2615,6 +2632,7 @@ final class FlightSuite {
             a.pilot = other[0];
             a.seen = null;
         });
+        loaded(s, "faults", () -> a.aircraft);
         s.settle("faults: the second aircraft's balloon fills", 320);
 
         // ---- 1-2: the pilot is gone for good in the air
