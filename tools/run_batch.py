@@ -9,7 +9,8 @@ runFlight の場面の名前(trip、far、cargo など。reopen で始まる場�
 途中で 1 本が落ちても、次へ進む(reopen の続きの場面だけは、前が落ちたら飛ばす)。
 
 項目に all と書くと、全部の場面(ALL の並び。普通の速さで 3 時間あまり)。
---part 2/3 を付けると、並びを 3 つに分けた 2 つめだけを回す(reopen の続きの場面は分けない)。分けて別の時に回すときに。
+--part 2/3 を付けると、並びを 3 つに分けた 2 つめだけを回す(掛かる時間の見込みが釣り合うように分ける。reopen の続きの場面と、runAirfield の続きの 2 つは分けない)。
+分けて別の時に回すときや、2 つの写しで同時に回すとき(tools/run_split.py)に。
 
 --sprint を付けると、サーバーが刻みを追いつく限り速く進める(早回し。2026-10-15)。場面の中で起きることは刻みの数で決まるので
 同じだが、地形の読み込みや MineColonies の道探しは刻みと別に進むので、早回しではそれを待つ刻みが増える。
@@ -32,17 +33,36 @@ ALL = (["classes@" + MEDIUM, "runNetwork", "runAirfield", "runAirfieldReload", "
        + [scene + "@small" for scene in ("trip", "far", "fuel", "traffic", "yard", "cargo", "crash")] + ["trip@whitesail"])
 
 
+# 1 本に掛かる時間の見込み(秒。早回しの札 sp3、reopen は普通の速さの sp5 と c120m から)。分けるときの重さにだけ使う。
+SECONDS = {"classes": 85, "detour": 115, "runAirfield": 55, "reopen1": 100, "reopen2": 115, "reopen3": 50,
+           "reopenc1": 70, "reopenc2": 80, "reopenc3": 115, "reopenc4": 155}
+
+
+def weight(item):
+    return SECONDS.get(item.partition("@")[0], 45) + 15
+
+
+def follows(item):
+    """続きの場面(前の場面のワールドを使う): reopen の 2 つめから先、runAirfield のあとの 2 つ。"""
+    return (item.startswith("reopen") and item not in ("reopen1", "reopenc1")) or item in ("runAirfieldReload", "runAirfieldRemoved")
+
+
 def part_of(items, which, parts):
-    """items を parts 個の続いた組に分けた which 番め(1 から)。reopen の続きの場面は、前の場面と同じ組に入れる。"""
+    """items を parts 個の組に分けた which 番め(1 から)。組は、掛かる時間の見込みが釣り合うように、重い順に軽い組へ入れて作る。
+    続きの場面(follows)は、前の場面と同じ組に入れる。組の中は、元の並びの順。"""
     units = []
-    for item in items:
-        if item.startswith("reopen") and item not in ("reopen1", "reopenc1") and units:
-            units[-1].append(item)
+    for at, item in enumerate(items):
+        if follows(item) and units:
+            units[-1][1].append(item)
         else:
-            units.append([item])
-    per = len(units) / float(parts)
-    chosen = units[int(round(per * (which - 1))):int(round(per * which))]
-    return [item for unit in chosen for item in unit]
+            units.append((at, [item]))
+    loads = [0] * parts
+    groups = [[] for _ in range(parts)]
+    for at, unit in sorted(units, key=lambda u: (-sum(weight(i) for i in u[1]), u[0])):
+        lightest = loads.index(min(loads))
+        groups[lightest].append((at, unit))
+        loads[lightest] += sum(weight(i) for i in unit)
+    return [item for at, unit in sorted(groups[which - 1]) for item in unit]
 
 
 def main():

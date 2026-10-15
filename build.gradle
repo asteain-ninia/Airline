@@ -181,7 +181,9 @@ def mineColoniesJars = ['blockui-1.0.209-1.21.1.jar', 'domum-ornamentum-1.0.231-
                         'multipiston-1.2.58-1.21.1.jar', 'structurize-1.0.832-1.21.1.jar']
 
 // Only the allowed jars may sit in mods/; jars come from the shared test-jars folder and are checked against its MANIFEST.sha256.
-def prepareRun = { String dirName, List<String> allowed, int port, String motd, List<File> extra = [] ->
+def prepareRun = { String dirName, List<String> allowed, int basePort, String motd, List<File> extra = [] ->
+    // The second server slot (tools/run_gradle.py) listens 100 higher, so the same kind of run may go in two copies at once.
+    int port = basePort + (providers.gradleProperty('portOffset').getOrElse('0') as int)
     def dir = file(dirName)
     def mods = new File(dir, 'mods')
     mods.mkdirs()
@@ -210,6 +212,8 @@ def prepareRun = { String dirName, List<String> allowed, int port, String motd, 
                       'generator-settings={"layers":[{"block":"minecraft:air","height":1}],"biome":"minecraft:the_void","features":false,"lakes":false,"structure_overrides":[]}',
                       'spawn-monsters=false', 'spawn-animals=false', 'generate-structures=false', 'view-distance=4', 'simulation-distance=4',
                       'enable-status=false'].join(System.lineSeparator()) + System.lineSeparator()
+    } else {
+        props.text = props.text.replaceAll(/(?m)^server-port=\d+/, 'server-port=' + port).replaceAll(/(?m)^query\.port=\d+/, 'query.port=' + port)
     }
 }
 
