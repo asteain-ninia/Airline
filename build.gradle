@@ -263,6 +263,9 @@ def verifyResult = { String dirName, String label ->
 tasks.named('runAirfield').configure {
     doFirst {
         delete file('run-airfield/airline-result.txt')
+        // A fresh world: the reload checks that follow go on with the one this run leaves (a chain broken half way left
+        // its world behind, and the next airfield run counted the old stock too: 2026-10-17).
+        delete file('run-airfield/world')
         prepareRun('run-airfield', mineColoniesJars, 25630, 'Airline airfield')
     }
     doLast { verifyResult('run-airfield', 'airfield') }
