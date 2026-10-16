@@ -439,6 +439,9 @@ final class FlightController {
      * throws, to see what the catch above does.
      */
     static boolean failNext, failNextOnPad;
+    /** For the checks: the next placing over a pad (not at an anchorage) goes across again once; how often it went across again. */
+    static boolean redoAcrossNext;
+    static int acrossRedone;
 
     private static void step(ServerLevel level, AircraftBlockEntity be, Runtime rt) {
         if (be.phase == Phase.TRIAL) {
@@ -1054,8 +1057,11 @@ final class FlightController {
                 ap.tick();
                 if (ap.placed || ++be.timer > 900) {
                     final Vec3 middle = Vec3.atBottomCenterOf(berthBlock(c.level, net, be.destination, c.type).below());
-                    final double off = across(c, rt.heading, middle);
+                    final boolean forced = redoAcrossNext && rt.placeStep == 1 && ap.placed && !airborne(net, be.destination);
+                    if (forced) redoAcrossNext = false;
+                    final double off = forced ? 0.5 : across(c, rt.heading, middle);
                     if (rt.placeStep == 1 && ap.placed && Math.abs(off) > c.type.placeWithin && rt.alignRounds < 2 && !airborne(net, be.destination)) {
+                        acrossRedone++;
                         // Turning from across onto the pad's heading carries a ship sideways (koeda, 2026-10-16: 0.3 to 0.4 of a
                         // block at full turning speed, up to 0.2 with the slow turn), and going along the heading cannot take it
                         // back; the centre of mass stays where it is across while the ship goes down. Across again, aimed to the

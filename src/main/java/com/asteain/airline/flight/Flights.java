@@ -52,6 +52,16 @@ public final class Flights {
         if (available()) FlightController.failNext = true;
     }
 
+    /** For the development checks only: the next placing over a pad goes across again once (as if it were 0.5 off). */
+    public static void redoAcrossOnceForChecks() {
+        if (available()) FlightController.redoAcrossNext = true;
+    }
+
+    /** For the development checks only: how often an aircraft went across a pad again since the server started. */
+    public static int acrossRedoneForChecks() {
+        return available() ? FlightController.acrossRedone : 0;
+    }
+
     /** For the development checks only: the controller of the next aircraft that is busy on a pad throws once. */
     public static void failOnPadOnceForChecks() {
         if (available()) FlightController.failNextOnPad = true;

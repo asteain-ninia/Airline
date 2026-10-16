@@ -283,6 +283,7 @@ final class FlightSuite {
             case "reopen3" -> reopen3(s, level);
             case "classes" -> classes(s, level);
             case "facilities" -> facilities(s, level);
+            case "items" -> items(s, level);
             default -> throw new AssertionError("unknown scene " + scene);
         }
         return s;
@@ -326,6 +327,72 @@ final class FlightSuite {
      * flies a round trip from the medium airfield to the wooden anchorage and from the large airfield to the stone one; the
      * pilot steps onto the pier. (The user saw the small airfield built and working in the game.)
      */
+    /**
+     * What the colony's builders are asked for, for the blocks of each design (2026-10-17: a belt has no item of its own;
+     * is a mechanical belt asked for, and is any block put up for nothing?). Structurize's own reckoning, the one that a
+     * builder's work order goes by (MineColonies' placement handlers are in it).
+     */
+    private static void items(Script s, ServerLevel level) {
+        s.step("items: what each design's blocks cost a builder", () -> {
+            final com.ldtteam.structurize.placement.IPlacementContext context = new com.ldtteam.structurize.placement.IPlacementContext() {
+                @Override
+                public com.ldtteam.structurize.api.RotationMirror getRotationMirror() {
+                    return com.ldtteam.structurize.api.RotationMirror.NONE;
+                }
+
+                @Override
+                public boolean fancyPlacement() {
+                    return true;
+                }
+
+                @Override
+                public net.minecraft.world.level.block.state.BlockState getSolidBlockForPos(BlockPos pos, java.util.function.Function<BlockPos, net.minecraft.world.level.block.state.BlockState> world) {
+                    return Blocks.STONE.defaultBlockState();
+                }
+
+                @Override
+                public BlockPos getCenterPos() {
+                    return BlockPos.ZERO;
+                }
+
+                @Override
+                public com.ldtteam.structurize.blueprints.v1.Blueprint getBluePrint() {
+                    return null;
+                }
+            };
+            final BlockPos at = new BlockPos(0, 250, 0);
+            for (final String name : Flights.designs()) {
+                final com.asteain.airline.flight.AircraftType type = com.asteain.airline.flight.AircraftType.of(name);
+                final java.util.Map<String, String> asked = new java.util.TreeMap<>();
+                final java.util.List<String> free = new java.util.ArrayList<>(), belts = new java.util.ArrayList<>(), failed = new java.util.ArrayList<>();
+                for (final String text : new java.util.TreeSet<>(type.parts.values())) {
+                    final net.minecraft.world.level.block.state.BlockState state;
+                    try {
+                        state = net.minecraft.commands.arguments.blocks.BlockStateParser.parseForBlock(level.holderLookup(net.minecraft.core.registries.Registries.BLOCK), text, false).blockState();
+                    } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+                        failed.add(text);
+                        continue;
+                    }
+                    final java.util.List<ItemStack> items;
+                    try {
+                        items = com.ldtteam.structurize.placement.handlers.placement.PlacementHandlers.getRequiredItemsForState(level, at, state, null, context);
+                    } catch (RuntimeException e) {
+                        failed.add(text + " (" + e + ")");
+                        continue;
+                    }
+                    final String block = text.split("\\[")[0];
+                    final String what = items.stream().filter(i -> !i.isEmpty()).map(i -> net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(i.getItem()) + " x" + i.getCount()).collect(java.util.stream.Collectors.joining(", "));
+                    asked.merge(block, what.isEmpty() ? "(nothing)" : what, (a, b) -> a.equals(b) ? a : a + " | " + b);
+                    if (what.isEmpty()) free.add(text);
+                    if (block.equals("create:belt") && !what.contains("create:belt_connector")) belts.add(text + " -> " + (what.isEmpty() ? "(nothing)" : what));
+                }
+                s.note("OBS items " + name + ": " + asked);
+                s.soft("items / " + name + ": every belt is asked for as a mechanical belt", belts.isEmpty() && failed.isEmpty(), "belts not asked as belts: " + belts + "; not read: " + failed);
+                s.soft("items / " + name + ": no block is put up for nothing (each asks for an item)", free.isEmpty(), "asked for nothing: " + free);
+            }
+        });
+    }
+
     private static void facilities(Script s, ServerLevel level) {
         final RouteNetwork net = RouteNetwork.get(level);
         final com.ldtteam.structurize.api.RotationMirror none = com.ldtteam.structurize.api.RotationMirror.NONE;
@@ -460,6 +527,7 @@ final class FlightSuite {
         s.settle("facilities: " + name + ": the balloon fills", 320);
         final double[] onPier = {Double.NaN, Double.NaN, Double.NaN};
         final boolean[] fixedThere = new boolean[1];
+        final int[] redoneBefore = new int[1];
         s.step("facilities: " + name + ": a round trip to the anchorage", () -> {
             watch(s, f, "facilities " + name);
             s.monitor(() -> {
@@ -478,6 +546,11 @@ final class FlightSuite {
                     + routes.route(f.pad, anchorage.building().pad(), Flights.classOf(designName)));
             final Flights.Answer sent = Flights.send(level, f.pad, anchorage.building().pad(), true, f.pilot);
             s.soft("facilities / " + name + ": a round trip to the " + anchorage.name + " is ordered", sent.ok(), sent.text().getString());
+            // The large aircraft is made to go across its home pad again once (2026-10-17: never seen over a large pad yet).
+            if (name.equals("large")) {
+                redoneBefore[0] = Flights.acrossRedoneForChecks();
+                Flights.redoAcrossOnceForChecks();
+            }
         });
         s.until("facilities: " + name + ": there, the pilot off and on again, and back", () -> {}, () -> f.clock > 100 && !Double.isNaN(onPier[0]) && f.aircraft.phase == Phase.PARKED && f.pad.equals(f.aircraft.at), 16000);
         s.step("facilities: " + name + ": result", () -> {
@@ -488,6 +561,13 @@ final class FlightSuite {
                     fixedThere[0] && onTheDeck && f.pilot.isAlive(), String.format("fixed %s; the pilot stood at (%.1f, %.1f, %.1f), %.1f across from the berth %s",
                             fixedThere[0], onPier[0], onPier[1], onPier[2], across, pad.toShortString()));
             s.soft("facilities / " + name + ": then it came home with its pilot", f.pad.equals(f.aircraft.at) && f.pilot.isAlive(), "at " + f.aircraft.at);
+            if (name.equals("large")) {
+                final double[] r = Flights.readings(f.aircraft);
+                final int redone = Flights.acrossRedoneForChecks() - redoneBefore[0];
+                s.soft("facilities / large: over its home pad (a large airfield's) it went across again (made to, for the check), still came down within 0.5 of the middle, and its pilot got off",
+                        redone >= 1 && r != null && r[6] <= 0.5 && Boarding.state(f.pilot) == Boarding.State.NONE,
+                        "went across again " + redone + " times; " + (r == null ? "?" : String.format("landed %.2f from the middle", r[6])) + "; pilot " + Boarding.state(f.pilot));
+            }
             for (String l : f.log) if (l.contains("->")) s.note("OBS facilities " + name + ": " + l);
             s.clearMonitors();
         });
