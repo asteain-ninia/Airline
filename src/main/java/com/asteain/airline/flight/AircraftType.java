@@ -417,18 +417,14 @@ public final class AircraftType {
     }
 
     /** The designs that come as files in the jar (airline_aircraft/), in the order they are offered after the first design. */
-    private static final String[] BUNDLED = {"whitesail", "kokaze", "koeda", "stratus", "oonagi"};
+    private static final String[] BUNDLED = {"whitesail", "koeda", "stratus", "oonagi"};
     /**
      * The design an airfield gets when nothing else is asked for (the user's ruling of 2026-10-14: the fast one; larger
      * and better ones are to follow it). It is offered first. If its file cannot be read, the first design takes its place.
-     * Koeda since 2026-10-15 (the user's ruling: "こかぜと入れ替える").
+     * Koeda since 2026-10-15 (the user's ruling: "こかぜと入れ替える"; kokaze itself is gone from 0.12.0: no backward
+     * compatibility before 1.0.0, the user's ruling of 2026-10-16).
      */
     public static final String STANDARD = "koeda";
-    /**
-     * Designs that are no longer offered (an airfield does not build them), but are still read, so that the aircraft of
-     * them that stand in a world fly on as they were built. Kokaze since 2026-10-15 (koeda took its place).
-     */
-    public static final java.util.Set<String> RETIRED = java.util.Set.of("kokaze");
 
     /**
      * The parts a propeller bearing turns (2026-10-15, the medium aircraft): the hub in front of the bearing and the sails
@@ -462,10 +458,6 @@ public final class AircraftType {
         return moving = java.util.Collections.unmodifiableSet(found);
     }
 
-    /** Whether an airfield offers this design (it is not {@link #RETIRED}). */
-    public boolean offered() {
-        return !RETIRED.contains(name);
-    }
     /** The design that is made in code and always there; an aircraft of a save that does not name its design is one of these. */
     public static final String FIRST = "small";
 

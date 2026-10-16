@@ -6,6 +6,15 @@ plugins {
 }
 
 version = mod_version
+
+// "No backward compatibility before 1.0.0" (the user's ruling of 2026-10-16) has to be taken out when the version gets there:
+// the build stops until gradle.properties no longer has no_backcompat_before (see the comment there).
+if (project.hasProperty('no_backcompat_before')) {
+    def parts = { String v -> v.tokenize('.-').take(3).collect { it.isInteger() ? it.toInteger() : 0 } }
+    def (now, until) = [parts(mod_version), parts(no_backcompat_before)]
+    def order = [now, until].transpose().collect { pair -> pair[0] <=> pair[1] }.find { it != 0 } ?: 0
+    if (order >= 0) throw new GradleException("mod_version ${mod_version} has reached ${no_backcompat_before}: remove the rule \"no backward compatibility before 1.0.0\" first (gradle.properties no_backcompat_before, ../CLAUDE.md, the assistant's memory no-backcompat-before-1.0)")
+}
 group = mod_group_id
 
 base {

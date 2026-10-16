@@ -1018,7 +1018,7 @@ public final class RouteNetwork extends SavedData {
             final CompoundTag point = points.getCompound(i);
             try {
                 final BlockPos pos = BlockPos.of(point.getLong("pos"));
-                // (A save of before 0.11.1 does not say where the airfield stands: the pad itself, until the airfield puts its pads on again.)
+                // ("home" is written only where it is not the point itself.)
                 final BlockPos home = point.contains("home") ? BlockPos.of(point.getLong("home")) : pos;
                 final Kind kind = Kind.valueOf(point.getString("kind"));
                 network.nodes.put(pos, new Node(pos, kind, point.getInt("tier"), point.getInt("heading"), home,

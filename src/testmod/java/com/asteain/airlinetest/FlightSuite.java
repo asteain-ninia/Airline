@@ -1115,7 +1115,7 @@ final class FlightSuite {
         BlockPos padB = new BlockPos(80, Y - 1, -10);
         TileEntityRack[] rack = new TileEntityRack[1];
         long[] tank = new long[1];
-        // How many engines the design has (the first design two, kokaze one): the tank is counted in ticks of one engine.
+        // How many engines the design has (the first design two, koeda one): the tank is counted in ticks of one engine.
         int[] engines = {2};
         com.google.common.reflect.TypeToken<com.minecolonies.api.colony.requestsystem.requestable.StackList> asked = com.google.common.reflect.TypeToken.of(com.minecolonies.api.colony.requestsystem.requestable.StackList.class);
         s.step("fuel: a pad to fly to; the tank is emptied", () -> {
@@ -1674,7 +1674,7 @@ final class FlightSuite {
     /**
      * A direct flight between two airfields on different large maps, with no buoy anywhere: the line is 1800 blocks long,
      * runs through country that is not loaded and is flown while it is "not verified" (ruling of 2026-10-13: airfields
-     * reach each other by large maps). Meant for a fast design (direct@kokaze: about six minutes); the first design
+     * reach each other by large maps). Meant for a fast design (direct@koeda); the first design
      * needs twenty.
      */
     private static void direct(Script s, ServerLevel level) {
