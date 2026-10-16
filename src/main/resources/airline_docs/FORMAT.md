@@ -26,6 +26,7 @@
   "seat": [x, y, z],
   "cargo": [[x, y, z], [x, y, z]],
   "access": [[x, y, z], ...],
+  "passengers": [[x, y, z], ...],
   "burners": [{"at": [x, y, z], "lever": [x, y, z], "value": 80}],
   "engines": [[x, y, z], ...],
   "levers": {"好きな名前": [x, y, z], ...},
@@ -53,6 +54,7 @@
 | `seat` | 飛行士の席(`create:<色>_seat`)の位置。1 つ |
 | `cargo` | 荷室の樽(`minecraft:barrel`)の位置。**2 つ以上** |
 | `access` | 樽の荷を出し入れするときに、人が立つマス(足のあるマス)。樽ごとに、同じ高さの隣に 1 つ要る |
+| `passengers` | 任意。客の席(`create:<色>_seat`)の位置。プレイヤーが台の上で座って乗る(便は客を待たない)。**飛行士の歩く所(登り口・席・`access` を結ぶ道)から離して置く**: Create の席は、上を歩いた村人を座らせる(飛行士が座らされたら、MOD が降ろす)。小枝号は機首の両脇に 2 席(2026-10-17) |
 | `burners` | 熱気バーナー(`aeronautics:adjustable_burner`)と、その隣のスロットルレバー、バーナーの出力の設定値(5〜500。`value`)。1 つ以上 |
 | `engines` | 携帯エンジン(`simulated:<色>_portable_engine`)の位置。**1〜4 台**。ここに書いたエンジンにだけ、燃料が配られる |
 | `levers` | 推進を操るスロットルレバー(`simulated:throttle_lever`)。数は自由。名前は自由 |

@@ -2222,6 +2222,14 @@ final class FlightSuite {
                     a.cargoTakeoffs + " take-offs, shortest stay " + a.shortestBerth);
             s.soft("tour / the pilot is alive and off the aircraft at home", a.pilot.isAlive() && Boarding.state(a.pilot) == Boarding.State.NONE, "pilot at " + a.pilot.position());
             for (String line : ledger.history()) s.note("OBS tour history: " + line);
+            // A tavern's visitor in a colony joined to others by air arrives at its airfield (2026-10-17, 旅客 3 first version).
+            final AbstractBuilding tavern = Fixture.placeHut(level, a.colony, ModBlocks.blockHutTavern, a.hut.offset(-12, 0, 8));
+            tavern.setBuildingLevel(1);
+            final com.minecolonies.api.colony.IVisitorData visitor = tavern.getFirstModuleOccurance(com.minecolonies.core.colony.buildings.modules.TavernBuildingModule.class).spawnVisitor();
+            final Entity seen = visitor == null || visitor.getEntity().isEmpty() ? null : visitor.getEntity().get();
+            final double fromPad = seen == null ? -1 : Math.hypot(seen.getX() - (a.pad.getX() + 0.5), seen.getZ() - (a.pad.getZ() + 0.5));
+            s.soft("tour / a tavern's visitor in a colony joined to others by air arrives at the edge of its airfield's pad", seen != null && fromPad <= 7.5 && Math.abs(seen.getY() - (a.pad.getY() + 1)) < 2.5,
+                    seen == null ? "no visitor entity" : String.format("visitor at (%.1f, %.1f, %.1f), %.1f from the middle of the pad %s", seen.getX(), seen.getY(), seen.getZ(), fromPad, a.pad.toShortString()));
             s.note("OBS tour: lines " + net.route(a.pad, b.pad, ShipClass.SMALL).size() + "/" + net.route(b.pad, c.pad, ShipClass.SMALL).size() + "/" + net.route(c.pad, d.pad, ShipClass.SMALL).size()
                     + "/" + net.route(d.pad, a.pad, ShipClass.SMALL).size() + "; " + a.clock + " ticks");
             s.clearMonitors();

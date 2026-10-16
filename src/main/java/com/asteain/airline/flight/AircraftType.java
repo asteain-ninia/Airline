@@ -72,6 +72,12 @@ public final class AircraftType {
     public final List<BlockPos> cargo = new ArrayList<>();
     /** Places on the deck where somebody can stand to work the hold (the block the feet are in). */
     public final List<BlockPos> access = new ArrayList<>();
+    /**
+     * Seats for passengers (2026-10-17, the user's ruling "判断は一旦全部推奨で": 旅客 1): players sit down on them while the
+     * aircraft stands on a pad and ride along; flights do not wait for them. Kept away from where the pilot walks (a pilot
+     * that is sat down on one is taken off it again). Optional; none for most designs.
+     */
+    public final List<BlockPos> passengers = new ArrayList<>();
     /** The engines: they burn out of the aircraft's tank. */
     public BlockPos[] engines = {};
     /** The levers of the drives, and for every manoeuvre the value (0 to 15) each of them gets. */
@@ -342,6 +348,7 @@ public final class AircraftType {
                 t.seat = pos(file.get("seat"));
                 for (final JsonElement each : file.getAsJsonArray("cargo")) t.cargo.add(pos(each));
                 for (final JsonElement each : file.getAsJsonArray("access")) t.access.add(pos(each));
+                if (file.has("passengers")) for (final JsonElement each : file.getAsJsonArray("passengers")) t.passengers.add(pos(each));
                 final JsonArray burners = file.getAsJsonArray("burners");
                 t.burners = new BlockPos[burners.size()];
                 t.burnerLevers = new BlockPos[burners.size()];

@@ -501,6 +501,12 @@ final class FlightController {
         }
         if (rt.age % 20 == 5) publish(level, be, rt, net);
         final Mob pilot = pilot(level, be);
+        if (pilot != null && rt.age % 20 == 7 && pilot.isPassenger() && Boarding.state(pilot) == Boarding.State.NONE && isSeat(pilot.getVehicle())) {
+            // Create's seats sit down any creature that steps onto them: a pilot that walked over a seat (one for passengers,
+            // 2026-10-17) is taken off it again; the boarding puts it on its own seat when it is wanted there.
+            pilot.stopRiding();
+            LOGGER.info("[Airline/flight] the pilot of the aircraft at {} sat down on a seat it was not sent to; it is taken off it.", c.pos());
+        }
         switch (be.phase) {
             case PARKED -> {
                 if (be.homeward && be.at != null && !be.at.equals(be.home)) goHome(level, be, rt, net);
@@ -879,6 +885,11 @@ final class FlightController {
         be.homeward = true;
         note(be, "a new aircraft: its home is the anchorage at " + best.toShortString() + " (the airfield's pad is free for the next one)");
         be.setChanged();
+    }
+
+    /** Whether a creature rides a seat (Create's, or another mod's seat entity). */
+    private static boolean isSeat(@Nullable Entity vehicle) {
+        return vehicle != null && net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(vehicle.getType()).getPath().contains("seat");
     }
 
     private static void takeOff(AircraftBlockEntity be, Runtime rt) {

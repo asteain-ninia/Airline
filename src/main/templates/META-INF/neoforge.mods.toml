@@ -11,6 +11,10 @@ description='''
 ${mod_description}
 '''
 
+# A tavern's visitor arrives at an airfield of a colony joined to others by air (2026-10-17).
+[[mixins]]
+config="${mod_id}.mixins.json"
+
 [[dependencies.${mod_id}]]
 modId="neoforge"
 type="required"
