@@ -111,6 +111,8 @@ final class FlightController {
         boolean fresh = true, faulted, toldWaiting, paused;
         int pausedFor, rest;
         int age, still, tries, placeStep;
+        /** Loading for a round: the colonies looked at in a row with nothing (more) to load for them. */
+        int idleStops;
         /** Placing over a pad: the heading at a right angle to the pad's that is gone across in, how far to the right of the middle the centre of mass is put then, and how often that was done again. */
         double acrossHeading, acrossAim;
         int alignRounds;
@@ -267,6 +269,13 @@ final class FlightController {
             ledger.cover(home, Cargo.item(line.getKey()), -line.getValue());
             left += line.getValue();
         }
+        for (int i = be.stopAt + 1; i < be.stops.size(); i++) {
+            for (final Map.Entry<String, Integer> line : be.stops.get(i).goods.entrySet()) {
+                ledger.cover(key(level, be.stops.get(i).colony), Cargo.item(line.getKey()), -line.getValue());
+                left += line.getValue();
+            }
+        }
+        be.forgetStops();
         be.cargo = false;
         be.settled = false;
         if (left > 0) ledger.log(String.format("colony %d -> colony %d: the flight ended on the way; %d items stay in the aircraft's hold", be.homeColony, be.freightColony, left));
@@ -823,6 +832,7 @@ final class FlightController {
         be.returning = true;
         be.cancelled = false;
         be.cargo = false;
+        be.forgetStops();
         be.timer = 0;
         be.phase = Phase.BOARDING;
         be.note = "flying home";
@@ -1296,6 +1306,9 @@ final class FlightController {
         // or has it on the seat, it must not set out for its own airfield, a flight away.
         final Mob pilot = pilot(c.level, be);
         if (pilot != null && be.cargo && !be.at.equals(be.home)) post(pilot, leaveSpot(c.level, net, be, be.at, false));
+        // A round called off on its way to one of its later colonies came back to the one before: the rest of the round is
+        // given up (its goods no longer count as on their way and go home in the hold); from here it flies home.
+        if (be.cargo && be.cancelled && be.stopAt > 0 && !be.stops.isEmpty() && !be.at.equals(be.home)) giveUpRound(c.level, be);
         // A cargo flight unloads first; otherwise the pilot gets off.
         be.phase = be.cargo ? Phase.UNLOAD : Phase.DISEMBARK;
         be.timer = 0;
@@ -1352,6 +1365,154 @@ final class FlightController {
         return key.substring(key.lastIndexOf('.') + 1);
     }
 
+    /** How many colonies a round calls at, at most (2026-10-17, the recommended answer: three). */
+    static final int ROUND = 3;
+
+    /** The colonies of a round in the order of the shortest way round, from home and back; when no order has ways all round, the last-ranked colony is left out. */
+    private static List<Cargo.Order> shortestRound(RouteNetwork net, BlockPos home, List<Cargo.Order> all, com.asteain.airline.route.ShipClass cls) {
+        for (int n = all.size(); n > 1; n--) {
+            List<Cargo.Order> best = null;
+            double shortest = Double.POSITIVE_INFINITY;
+            for (final List<Cargo.Order> order : orders(all.subList(0, n))) {
+                double length = leg(net, home, order.get(0).pad(), cls) + leg(net, order.get(order.size() - 1).pad(), home, cls);
+                for (int i = 0; i + 1 < order.size(); i++) length += leg(net, order.get(i).pad(), order.get(i + 1).pad(), cls);
+                if (length < shortest) {
+                    shortest = length;
+                    best = order;
+                }
+            }
+            if (best != null) return best;
+        }
+        return List.of(all.get(0));
+    }
+
+    /** All the orders of a few things. */
+    private static List<List<Cargo.Order>> orders(List<Cargo.Order> things) {
+        if (things.size() <= 1) return List.of(new ArrayList<>(things));
+        final List<List<Cargo.Order>> all = new ArrayList<>();
+        for (int i = 0; i < things.size(); i++) {
+            final List<Cargo.Order> rest = new ArrayList<>(things);
+            final Cargo.Order head = rest.remove(i);
+            for (final List<Cargo.Order> tail : orders(rest)) {
+                final List<Cargo.Order> one = new ArrayList<>();
+                one.add(head);
+                one.addAll(tail);
+                all.add(one);
+            }
+        }
+        return all;
+    }
+
+    private static double leg(RouteNetwork net, BlockPos from, BlockPos to, com.asteain.airline.route.ShipClass cls) {
+        final List<BlockPos> way = net.route(from, to, cls);
+        return way.size() < 2 ? Double.POSITIVE_INFINITY : net.length(way);
+    }
+
+    private static String roundText(AircraftBlockEntity be) {
+        final StringBuilder text = new StringBuilder();
+        for (int i = 0; i < be.stops.size(); i++) text.append(i == 0 ? "" : ", ").append("colony ").append(be.stops.get(i).colony);
+        return text.toString();
+    }
+
+    /**
+     * The loading for a round is over: back to the first colony; colonies nothing could be loaded for are not called at;
+     * a round of one colony is a plain flight. The pad of the (new) first colony is looked for again.
+     */
+    private static void startRound(ServerLevel level, AircraftBlockEntity be, Runtime rt) {
+        be.select(0);
+        final List<AircraftBlockEntity.Stop> kept = new ArrayList<>();
+        for (int i = 0; i < be.stops.size(); i++) {
+            final AircraftBlockEntity.Stop stop = be.stops.get(i);
+            if (!(i == 0 ? be.manifest : stop.goods).isEmpty()) kept.add(stop);
+        }
+        if (kept.size() == be.stops.size() && kept.size() > 1) return;
+        final AircraftBlockEntity.Stop firstWas = be.stops.get(0);
+        firstWas.goods.clear();
+        firstWas.goods.putAll(be.manifest);
+        be.forgetStops();
+        if (kept.isEmpty()) {
+            be.manifest.clear();
+            return;
+        }
+        if (kept.size() > 1) be.stops.addAll(kept);
+        final AircraftBlockEntity.Stop first = kept.get(0);
+        be.manifest.clear();
+        be.manifest.putAll(first.goods);
+        be.freightColony = first.colony;
+        if (first != firstWas) {
+            final RouteNetwork net = RouteNetwork.get(level);
+            final Cargo.Landing place = Cargo.landingIn(level, net, be.at, first.colony, rt.craft.id(), shipClass(be));
+            if (place.there() != null) be.destination = place.landing().pad();
+        }
+    }
+
+    /**
+     * Ticks a round takes from {@code from}: to {@code to} (the place of the colony at {@link AircraftBlockEntity#stopAt}),
+     * on to each later colony of the round (its first place that takes the aircraft) and home. Legs with no way are left out.
+     */
+    private static long roundTicks(ServerLevel level, RouteNetwork net, AircraftBlockEntity be, BlockPos from, BlockPos to, java.util.UUID ship) {
+        final AircraftType type = AircraftType.of(be.type);
+        long ticks = flightTicks(net, net.route(from, to, shipClass(be)), type);
+        BlockPos at = to;
+        for (int i = be.stopAt + 1; i < be.stops.size(); i++) {
+            final Cargo.Landing place = Cargo.landingIn(level, net, at, be.stops.get(i).colony, ship, shipClass(be));
+            if (place.there() == null) continue;
+            ticks += flightTicks(net, net.route(at, place.landing().pad(), shipClass(be)), type);
+            at = place.landing().pad();
+        }
+        return ticks + (be.home == null ? 0 : flightTicks(net, net.route(at, be.home, shipClass(be)), type));
+    }
+
+    /**
+     * Away, the berth over: on to the next colony of a round, if there is one with a way, a place to land and fuel enough
+     * for the rest of the round. Colonies that cannot be got to are given up (their goods come home in the hold).
+     * @return true when it flies on (false: it flies home)
+     */
+    private static boolean nextStop(ServerLevel level, AircraftBlockEntity be, Runtime rt, RouteNetwork net) {
+        while (be.stopAt + 1 < be.stops.size()) {
+            be.select(be.stopAt + 1);
+            final Cargo.Landing place = Cargo.landingIn(level, net, be.at, be.freightColony, rt.craft.id(), shipClass(be));
+            final List<BlockPos> way = place.there() == null ? List.of() : net.route(be.at, place.landing().pad(), shipClass(be));
+            if (way.size() >= 2 && Fuel.total(be) >= Fuel.need(rt.craft.type, roundTicks(level, net, be, be.at, place.landing().pad(), rt.craft.id()))) {
+                be.settled = false;
+                be.origin = be.at;
+                be.destination = place.landing().pad();
+                be.route = new ArrayList<>(way);
+                be.leg = 0;
+                be.timer = 0;
+                be.phase = Phase.BOARDING;      // the pilot sits already: this takes off at once
+                note(be, "on to colony " + be.freightColony + " (a round: " + roundText(be) + ")");
+                be.setChanged();
+                return true;
+            }
+            note(be, "colony " + be.freightColony + " of the round is left out: " + (place.there() == null ? place.landing().why() : way.size() < 2 ? "no way there" : "not fuel enough for the rest of the round"));
+            leaveOut(level, be);
+        }
+        return false;
+    }
+
+    /** The colony at {@link AircraftBlockEntity#stopAt} is not called at: its goods no longer count as on their way (they stay in the hold). */
+    private static void leaveOut(ServerLevel level, AircraftBlockEntity be) {
+        final WantLedger ledger = WantLedger.get(level.getServer());
+        for (final Map.Entry<String, Integer> line : be.manifest.entrySet()) ledger.cover(key(level, be.freightColony), Cargo.item(line.getKey()), -line.getValue());
+        if (!be.manifest.isEmpty()) ledger.log(String.format("colony %d -> colony %d: left out of the round; %d items come back in the hold", be.homeColony, be.freightColony, be.manifest.values().stream().mapToInt(Integer::intValue).sum()));
+        be.manifest.clear();
+        be.settled = true;
+        be.setChanged();
+    }
+
+    /** The rest of a round is given up where the aircraft stands (it came back here, its way on called off). */
+    private static void giveUpRound(ServerLevel level, AircraftBlockEntity be) {
+        leaveOut(level, be);
+        while (be.stopAt + 1 < be.stops.size()) {
+            be.select(be.stopAt + 1);
+            leaveOut(level, be);
+        }
+        be.cancelled = false;
+        be.forgetStops();
+        be.note = "the rest of the round was given up";
+    }
+
     private static void dispatch(ServerLevel level, AircraftBlockEntity be, Runtime rt, RouteNetwork net) {
         final long now = level.getGameTime();
         if (be.home == null || !be.home.equals(be.at)) return;
@@ -1364,6 +1525,7 @@ final class FlightController {
             be.cancelled = false;
             be.manifest.clear();
             be.returnManifest.clear();
+            be.forgetStops();
             be.timer = 0;
             be.phase = Phase.UNLOAD;
             be.note = "clearing out the hold";
@@ -1377,6 +1539,20 @@ final class FlightController {
         if (!barred.isEmpty() && !rt.toldNoPad) note(be, "goods lie ready, but the aircraft cannot land there now: " + String.join("; ", barred));
         rt.toldNoPad = !barred.isEmpty();
         if (order == null) return;
+        be.forgetStops();
+        Cargo.Order first = order;
+        if (!order.fetch()) {
+            // A round (2026-10-17): up to three colonies, called at the shortest way round from home and back.
+            final List<Cargo.Order> all = new ArrayList<>(List.of(order));
+            all.addAll(Cargo.moreStops(level, be, net, rt.craft.id(), order, ROUND - 1));
+            if (all.size() > 1) {
+                final List<Cargo.Order> round = shortestRound(net, be.home, all, shipClass(be));
+                if (round.size() > 1) {
+                    for (final Cargo.Order stop : round) be.stops.add(new AircraftBlockEntity.Stop(stop.to().getColony().getID()));
+                    first = round.get(0);
+                }
+            }
+        }
         be.cargo = true;
         be.fetch = order.fetch();
         be.settled = false;
@@ -1384,18 +1560,19 @@ final class FlightController {
         be.returning = false;
         be.cancelled = false;
         be.origin = be.home;
-        be.destination = order.pad();
+        be.destination = first.pad();
         be.route = new ArrayList<>(net.route(be.origin, be.destination, shipClass(be)));
         be.leg = 0;
-        be.freightColony = order.to().getColony().getID();
+        be.freightColony = first.to().getColony().getID();
         be.homeColony = order.from().getColony().getID();
         be.manifest.clear();
         be.returnManifest.clear();
         setPilot(be, order.pilot());
         be.timer = 0;
         be.phase = Phase.LOAD;
-        be.note = order.fetch() ? "going to fetch goods from colony " + be.freightColony : "loading for colony " + be.freightColony;
-        LOGGER.info("[Airline/flight] cargo flight to colony {}: {} wanted items lie ready {}.", be.freightColony, order.ready(), order.fetch() ? "there; the flight goes out empty to fetch them" : "here; loading");
+        be.note = order.fetch() ? "going to fetch goods from colony " + be.freightColony : "loading for colony " + be.freightColony + (be.stops.isEmpty() ? "" : " (a round: " + roundText(be) + ")");
+        LOGGER.info("[Airline/flight] cargo flight to colony {}: {} wanted items lie ready {}.", be.freightColony, order.ready(), order.fetch() ? "there; the flight goes out empty to fetch them"
+                : be.stops.isEmpty() ? "here; loading" : "here; loading for a round: " + roundText(be));
         be.setChanged();
         // At once, not with the next second: the pad it will land on counts as taken from now on.
         publish(level, be, rt, net);
@@ -1409,8 +1586,18 @@ final class FlightController {
         be.timer++;
         if (Handling.between(be)) return;
         if (fuelling(be) && Handling.move(level, be, rt, Handling.Flow.FUEL)) return;
-        if (Handling.move(level, be, rt, Handling.Flow.LOAD_OUT)) return;
+        if (Handling.move(level, be, rt, Handling.Flow.LOAD_OUT)) {
+            rt.idleStops = 0;
+            return;
+        }
+        if (be.stops.size() > 1 && be.carryCount == 0 && ++rt.idleStops < be.stops.size()) {
+            // A round: the next colony's goods are looked for (one colony at a time: the ledger is told for whom).
+            be.select((be.stopAt + 1) % be.stops.size());
+            return;
+        }
+        rt.idleStops = 0;
         if (level.getGameTime() < be.landed + Cargo.berthTicks()) return;      // more may be brought while it waits
+        if (!be.stops.isEmpty()) startRound(level, be, rt);
         if (be.manifest.isEmpty() && !be.fetch) {
             // Nothing could be loaded after all (taken away meanwhile, or the hold is full of something else).
             be.cargo = false;
@@ -1429,8 +1616,8 @@ final class FlightController {
         }
         be.destination = landing.pad();
         final List<BlockPos> way = net.route(be.at, be.destination, shipClass(be));
-        // Out and back, with what the tank holds now (the racks had their chance above).
-        final long fuelNeeded = Fuel.need(rt.craft.type, flightTicks(net, way, rt.craft.type) * 2);
+        // Out and back (or round), with what the tank holds now (the racks had their chance above).
+        final long fuelNeeded = Fuel.need(rt.craft.type, be.stops.isEmpty() ? flightTicks(net, way, rt.craft.type) * 2 : roundTicks(level, net, be, be.at, be.destination, rt.craft.id()));
         if (Fuel.total(be) < fuelNeeded) {
             // (More than the tank holds: no fuel on the racks will help. It is said as what it is.)
             if (!rt.toldNoFuel) tellColony(level, be, fuelNeeded > Fuel.capacity() ? "flight.note.too_far" : "flight.note.waiting_for_fuel",
@@ -1504,6 +1691,7 @@ final class FlightController {
                 if (carried) Handling.rest(level, be, rt);
                 return;
             }
+            if (nextStop(level, be, rt, net)) return;
             final List<BlockPos> back = be.home == null || !free(level, be.home, c.id()) ? List.of() : net.route(be.at, be.home, shipClass(be));
             if (back.size() < 2) {
                 if (!rt.toldWaiting) tell(be, "flight.note.no_way_back");
@@ -1547,6 +1735,14 @@ final class FlightController {
             if (!be.settled) ledger.cover(there, Cargo.item(line.getKey()), -line.getValue());
             returned += line.getValue();
         }
+        // The colonies of a round it never got to: their goods no longer count as on their way (they go onto the racks with the rest).
+        for (int i = be.stopAt + 1; i < be.stops.size(); i++) {
+            for (final Map.Entry<String, Integer> line : be.stops.get(i).goods.entrySet()) {
+                ledger.cover(key(level, be.stops.get(i).colony), Cargo.item(line.getKey()), -line.getValue());
+                returned += line.getValue();
+            }
+        }
+        be.forgetStops();
         if (brought > 0 || returned > 0) ledger.log(String.format("colony %d <- colony %d: brought %d, put back on the export racks %d", be.homeColony, be.freightColony, brought, returned));
         be.manifest.clear();
         be.returnManifest.clear();

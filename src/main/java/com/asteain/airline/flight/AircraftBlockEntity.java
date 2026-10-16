@@ -85,6 +85,50 @@ public final class AircraftBlockEntity extends BlockEntity {
     public boolean fetch;
     public int freightColony, homeColony;
     public final java.util.Map<String, Integer> manifest = new java.util.LinkedHashMap<>(), returnManifest = new java.util.LinkedHashMap<>();
+    /**
+     * A cargo flight that calls at more than one colony (2026-10-17, the user's ruling "判断は一旦全部推奨で": up to three,
+     * the shortest way round, a whole berth at each): the colonies in the order they are called at, each with the goods for
+     * it. The one at {@link #stopAt} is the one being loaded for or flown to; while it is, its goods are {@link #manifest}
+     * and its colony is {@link #freightColony} (the rest of the cargo code knows only those). Empty for a flight to one
+     * colony. One kind of goods goes to one colony only on a round (the hold unloads by kinds).
+     */
+    public final java.util.List<Stop> stops = new java.util.ArrayList<>();
+    public int stopAt;
+
+    /** A colony a round calls at, and the goods for it (while it is not the one at {@link #stopAt}). */
+    public static final class Stop {
+        public final int colony;
+        public final java.util.Map<String, Integer> goods = new java.util.LinkedHashMap<>();
+
+        public Stop(int colony) {
+            this.colony = colony;
+        }
+    }
+
+    /** The round turns to another of its colonies: what is listed for the one before is kept with it. */
+    public void select(int index) {
+        if (stops.isEmpty()) return;
+        final Stop was = stops.get(stopAt);
+        was.goods.clear();
+        was.goods.putAll(manifest);
+        stopAt = index;
+        final Stop now = stops.get(index);
+        manifest.clear();
+        manifest.putAll(now.goods);
+        freightColony = now.colony;
+    }
+
+    /** Whether this kind of goods is listed for another colony of the round than the one at {@link #stopAt}. */
+    public boolean listedElsewhere(String item) {
+        for (int i = 0; i < stops.size(); i++) if (i != stopAt && stops.get(i).goods.containsKey(item)) return true;
+        return false;
+    }
+
+    /** No round any more (a flight to one colony, or none). */
+    public void forgetStops() {
+        stops.clear();
+        stopAt = 0;
+    }
     /** Game time until when no flight is prepared, after one that was called off or delivered nothing. */
     public long quietUntil;
     /** Game time when it came to rest on the pad it stands on: the berth (a day, by the rules) is counted from here. */
@@ -161,6 +205,17 @@ public final class AircraftBlockEntity extends BlockEntity {
         tag.putInt("homeColony", homeColony);
         tag.put("manifest", list(manifest));
         tag.put("returnManifest", list(returnManifest));
+        if (!stops.isEmpty()) {
+            final net.minecraft.nbt.ListTag round = new net.minecraft.nbt.ListTag();
+            for (int i = 0; i < stops.size(); i++) {
+                final CompoundTag stop = new CompoundTag();
+                stop.putInt("colony", stops.get(i).colony);
+                stop.put("goods", list(i == stopAt ? manifest : stops.get(i).goods));
+                round.add(stop);
+            }
+            tag.put("stops", round);
+            tag.putInt("stopAt", stopAt);
+        }
         tag.putLong("quietUntil", quietUntil);
         tag.putLong("landed", landed);
         tag.putString("carryFlow", carryFlow);
@@ -220,6 +275,14 @@ public final class AircraftBlockEntity extends BlockEntity {
         homeColony = tag.getInt("homeColony");
         read(tag.getCompound("manifest"), manifest);
         read(tag.getCompound("returnManifest"), returnManifest);
+        stops.clear();
+        final net.minecraft.nbt.ListTag round = tag.getList("stops", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        for (int i = 0; i < round.size(); i++) {
+            final Stop stop = new Stop(round.getCompound(i).getInt("colony"));
+            read(round.getCompound(i).getCompound("goods"), stop.goods);
+            stops.add(stop);
+        }
+        stopAt = stops.isEmpty() ? 0 : Math.min(tag.getInt("stopAt"), stops.size() - 1);
         quietUntil = tag.getLong("quietUntil");
         landed = tag.getLong("landed");
         carryFlow = tag.getString("carryFlow");

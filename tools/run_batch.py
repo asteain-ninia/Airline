@@ -28,13 +28,13 @@ TASKS = {"runAirfield": ("run-airfield", 1500), "runAirfieldReload": ("run-airfi
 # 全部の場面(2026-10-15 の c120m の並びに、設計図から建てる場面 facilities を足した)。中型機の場面は、中型機 stratus で飛ばす
 # (それまでは、こかぜに中型の印を付けただけの代役 ColonyPatchServer/design/classes-2026-10-14/kokaze_medium.json)。
 ALL = (["classes@stratus", "facilities@stratus", "items", "runNetwork", "runAirfield", "runAirfieldReload", "runAirfieldRemoved",
-        "yard", "trip", "direct", "three", "traffic", "detour", "cargo", "carry", "far", "faults", "crash", "ground", "lost", "hindered", "fuel", "fetch",
+        "yard", "trip", "direct", "three", "traffic", "detour", "cargo", "carry", "tour", "far", "faults", "crash", "ground", "lost", "hindered", "fuel", "fetch",
         "reopen1", "reopen2", "reopen3", "reopenc1", "reopenc2", "reopenc3", "reopenc4"]
        + [scene + "@small" for scene in ("trip", "far", "fuel", "traffic", "yard", "cargo", "crash")] + ["trip@whitesail"])
 
 
 # 1 本に掛かる時間の見込み(秒。早回しの札 sp3、reopen は普通の速さの sp5 と c120m から)。分けるときの重さにだけ使う。
-SECONDS = {"classes": 85, "facilities": 80, "detour": 115, "runAirfield": 55, "reopen1": 100, "reopen2": 115, "reopen3": 50,
+SECONDS = {"tour": 150, "classes": 85, "facilities": 80, "detour": 115, "runAirfield": 55, "reopen1": 100, "reopen2": 115, "reopen3": 50,
            "reopenc1": 70, "reopenc2": 80, "reopenc3": 115, "reopenc4": 155}
 
 

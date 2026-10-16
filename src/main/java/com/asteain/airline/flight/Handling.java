@@ -282,6 +282,8 @@ final class Handling {
             final WantLedger.Key wants = forColony(level, be, flow);
             for (final Map.Entry<Item, Integer> stock : Cargo.contents(Cargo.racks(here)).entrySet()) {
                 final Item item = stock.getKey();
+                // On a round, a kind of goods listed for another of its colonies is left alone (the hold unloads by kinds).
+                if (be.listedElsewhere(Cargo.name(item))) continue;
                 int n = Math.min(Math.min(stock.getValue(), ledger.net(wants, item)), stacks * item.getDefaultMaxStackSize());
                 if (n > 0) n = Math.min(n, Cargo.room(hold, item, n));
                 if (n > 0) return new Take(item, n);

@@ -342,6 +342,33 @@ public final class Cargo {
     record Order(BuildingAirfield from, BuildingAirfield to, int ready, Mob pilot, BlockPos pad, boolean fetch) {}
 
     /**
+     * A round (2026-10-17): other colonies the same flight may carry goods to, besides the one chosen first: those with
+     * wanted goods ready on home's export racks and a place to land with a way from home or from the first colony, the
+     * ones with the most ready first.
+     */
+    static List<Order> moreStops(ServerLevel level, AircraftBlockEntity be, RouteNetwork net, UUID ship, Order first, int more) {
+        final List<Order> found = new java.util.ArrayList<>();
+        if (more <= 0) return found;
+        final WantLedger ledger = WantLedger.get(level.getServer());
+        final WantLedger.Key self = WantLedger.Key.of(first.from().getColony());
+        final Map<Item, Integer> onRacks = contents(racks(first.from()));
+        final com.asteain.airline.route.ShipClass cls = FlightController.shipClass(be);
+        for (final WantLedger.Key other : ledger.keys()) {
+            if (other.equals(self) || other.colony() == first.to().getColony().getID() || !other.dimension().equals(self.dimension())) continue;
+            int ready = 0;
+            for (final Map.Entry<Item, Integer> stock : onRacks.entrySet()) ready += Math.min(stock.getValue(), ledger.net(other, stock.getKey()));
+            if (ready <= 0 || facilitiesOf(level, other.colony()).isEmpty()) continue;
+            // A colony of a round need not be reached from home directly: by way of the first colony is as good (the
+            // order of the round is checked for ways all round afterwards).
+            Landing place = landingIn(level, net, be.home, other.colony(), ship, cls);
+            if (place.there() == null) place = landingIn(level, net, first.pad(), other.colony(), ship, cls);
+            if (place.there() != null) found.add(new Order(first.from(), place.there(), ready, first.pilot(), place.landing().pad(), false));
+        }
+        found.sort((a, b) -> Integer.compare(b.ready(), a.ready()));
+        return found.size() > more ? new java.util.ArrayList<>(found.subList(0, more)) : found;
+    }
+
+    /**
      * Looks whether the aircraft that stands at home should fly: the colony with the most wanted items ready on the
      * export racks that it can fly to and land at, with a pilot present at home. Null when there is nothing to do.
      * Colonies it has goods for and a way to, but no pad to land on right now, are named in {@code barred}.
@@ -402,7 +429,7 @@ public final class Cargo {
         final IItemHandler hold = hold(c);
         for (final Map.Entry<Item, Integer> stock : contents(racks).entrySet()) {
             final int want = Math.min(Math.min(stock.getValue(), ledger.net(forColony, stock.getKey())), stock.getKey().getDefaultMaxStackSize());
-            if (want <= 0) continue;
+            if (want <= 0 || be.listedElsewhere(name(stock.getKey()))) continue;
             final int moved = move(racks, hold, stock.getKey(), want);
             if (moved <= 0) continue;
             ledger.cover(forColony, stock.getKey(), moved);

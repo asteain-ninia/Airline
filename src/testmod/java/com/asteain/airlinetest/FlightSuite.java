@@ -267,6 +267,7 @@ final class FlightSuite {
             case "crash" -> crash(s, level);
             case "cargo" -> cargo(s, level);
             case "carry" -> carry(s, level);
+            case "tour" -> tour(s, level);
             case "traffic" -> traffic(s, level);
             case "three" -> three(s, level);
             case "detour" -> detour(s, level);
@@ -2117,6 +2118,80 @@ final class FlightSuite {
 
     private static int hands(Field a) {
         return a.pilot instanceof com.minecolonies.api.entity.citizen.AbstractEntityCitizen citizen ? iron(citizen.getInventoryCitizen()) : 0;
+    }
+
+    /**
+     * A round (2026-10-17, the user's ruling "判断は一旦全部推奨で": up to three colonies, the shortest way round, a whole
+     * berth at each, one kind of goods to one colony): A's export racks hold iron, gold and copper; B wants the iron, C
+     * the gold, D the copper. B, C and D stand at three corners of a square with A at the fourth. One flight loads for all
+     * three, calls at them in the order of the shortest way round, unloads at each only what is for it, and flies home.
+     */
+    private static void tour(Script s, ServerLevel level) {
+        final WantLedger ledger = WantLedger.get(level.getServer());
+        final Field a = new Field(HUT_A);
+        addField(s, level, a, "tour A");
+        // 88 apart: two airfields of the checks reach each other when nearer than 96 (3 chunks each); the diagonals are not joined.
+        final Port b = new Port(HUT_A.offset(88, 0, 0)), c = new Port(HUT_A.offset(88, 0, 88)), d = new Port(HUT_A.offset(0, 0, 88));
+        addPort(s, level, b, "tour B", true);
+        addPort(s, level, c, "tour C", true);
+        addPort(s, level, d, "tour D", true);
+        final net.minecraft.world.item.Item[] goods = {Items.IRON_INGOT, Items.GOLD_INGOT, Items.COPPER_INGOT};
+        final Port[] ports = {b, c, d};
+        final List<BlockPos> calledAt = new ArrayList<>();
+        s.step("tour: the square kept loaded; 64 iron, 64 gold, 64 copper on A's export racks; B wants the iron, C the gold, D the copper", () -> {
+            for (int cx = (HUT_A.getX() - 24) >> 4; cx <= (HUT_A.getX() + 128) >> 4; cx++)
+                for (int cz = (HUT_A.getZ() - 40) >> 4; cz <= (HUT_A.getZ() + 128) >> 4; cz++) { level.setChunkForced(cx, cz, true); level.getChunk(cx, cz); }
+            final TileEntityRack rack = equip(level, a);
+            for (final net.minecraft.world.item.Item item : goods) Fixture.stock(rack, item, 64);
+            for (int i = 0; i < 3; i++) ledger.set(WantLedger.Key.of(ports[i].colony), goods[i], 64);
+            watch(s, a, "tour");
+            s.monitor(() -> {
+                if (a.aircraft.phase == Phase.UNLOAD && a.aircraft.at != null && !a.aircraft.at.equals(a.pad) && (calledAt.isEmpty() || !calledAt.get(calledAt.size() - 1).equals(a.aircraft.at)))
+                    calledAt.add(a.aircraft.at);
+            });
+        });
+        s.settle("tour: the lines are looked at", 600);
+        s.step("tour: what the network and the ledger say", () -> {
+            final RouteNetwork net = RouteNetwork.get(level);
+            final BlockPos[] pads = {a.pad, b.pad, c.pad, d.pad};
+            final StringBuilder lines = new StringBuilder();
+            for (int i = 0; i < 4; i++) for (int j = i + 1; j < 4; j++) {
+                final Edge edge = net.edge(pads[i], pads[j]);
+                lines.append("ABCD".charAt(i)).append("ABCD".charAt(j)).append('=').append(edge == null ? "none" : edge.state() + "/" + edge.serves()).append(' ');
+            }
+            s.note("OBS tour: lines " + lines + "; ledger net B iron " + ledger.net(WantLedger.Key.of(b.colony), Items.IRON_INGOT) + ", C gold " + ledger.net(WantLedger.Key.of(c.colony), Items.GOLD_INGOT)
+                    + ", D copper " + ledger.net(WantLedger.Key.of(d.colony), Items.COPPER_INGOT) + "; racks iron " + iron(a.airfield.getItemHandlerCap()) + "; aircraft " + a.aircraft.phase + " | " + a.aircraft.note);
+        });
+        s.until("tour: out, three colonies, home again", () -> {}, () -> calledAt.size() >= 3 && a.aircraft.phase == Phase.PARKED && a.pad.equals(a.aircraft.at) && !a.aircraft.cargo, 40000);
+        s.step("tour: result", () -> {
+            final RouteNetwork net = RouteNetwork.get(level);
+            final int[] stash = new int[3], wanted = new int[3], covered = new int[3], others = new int[3];
+            for (int i = 0; i < 3; i++) {
+                stash[i] = com.asteain.airline.flight.Cargo.count(ports[i].stash.getItemHandlerCap(), goods[i]);
+                for (int j = 0; j < 3; j++) if (j != i) others[i] += com.asteain.airline.flight.Cargo.count(ports[i].stash.getItemHandlerCap(), goods[j]);
+                wanted[i] = ledger.wanted(WantLedger.Key.of(ports[i].colony), goods[i]);
+                covered[i] = ledger.covered(WantLedger.Key.of(ports[i].colony), goods[i]);
+            }
+            s.soft("tour / B got the 64 iron, C the 64 gold, D the 64 copper, and none of them anything meant for another",
+                    stash[0] == 64 && stash[1] == 64 && stash[2] == 64 && others[0] + others[1] + others[2] == 0,
+                    "B " + stash[0] + " iron, C " + stash[1] + " gold, D " + stash[2] + " copper; goods of others " + java.util.Arrays.toString(others));
+            s.soft("tour / the ledger knows: nothing more is wanted, nothing is on its way", wanted[0] + wanted[1] + wanted[2] == 0 && covered[0] + covered[1] + covered[2] == 0,
+                    "wanted " + java.util.Arrays.toString(wanted) + ", on the way " + java.util.Arrays.toString(covered));
+            final java.util.Map<net.minecraft.world.item.Item, Integer> hold = Flights.holdContents(a.aircraft);
+            s.soft("tour / home again with an empty hold and the export racks empty of the three", hold.values().stream().mapToInt(Integer::intValue).sum() == 0
+                    && com.asteain.airline.flight.Cargo.count(a.airfield.getItemHandlerCap(), Items.IRON_INGOT) + com.asteain.airline.flight.Cargo.count(a.airfield.getItemHandlerCap(), Items.GOLD_INGOT)
+                    + com.asteain.airline.flight.Cargo.count(a.airfield.getItemHandlerCap(), Items.COPPER_INGOT) == 0, "hold " + hold);
+            final List<BlockPos> loop = List.of(b.pad, c.pad, d.pad), back = List.of(d.pad, c.pad, b.pad);
+            s.soft("tour / one flight called at the three in the order of the shortest way round (B, C, D or D, C, B)", calledAt.equals(loop) || calledAt.equals(back),
+                    "called at " + calledAt + "; B " + b.pad.toShortString() + ", C " + c.pad.toShortString() + ", D " + d.pad.toShortString());
+            s.soft("tour / four take-offs (out, on twice, home), none before a whole berth on the pad", a.cargoTakeoffs == 4 && a.shortestBerth >= BERTH,
+                    a.cargoTakeoffs + " take-offs, shortest stay " + a.shortestBerth);
+            s.soft("tour / the pilot is alive and off the aircraft at home", a.pilot.isAlive() && Boarding.state(a.pilot) == Boarding.State.NONE, "pilot at " + a.pilot.position());
+            for (String line : ledger.history()) s.note("OBS tour history: " + line);
+            s.note("OBS tour: lines " + net.route(a.pad, b.pad, ShipClass.SMALL).size() + "/" + net.route(b.pad, c.pad, ShipClass.SMALL).size() + "/" + net.route(c.pad, d.pad, ShipClass.SMALL).size()
+                    + "/" + net.route(d.pad, a.pad, ShipClass.SMALL).size() + "; " + a.clock + " ticks");
+            s.clearMonitors();
+        });
     }
 
     private static void carry(Script s, ServerLevel level) {
