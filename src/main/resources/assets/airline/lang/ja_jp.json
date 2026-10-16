@@ -53,7 +53,7 @@
   "aircraft.airline.whitesail": "定期船 白帆型",
   "aircraft.airline.koeda": "定期船 小枝号",
   "aircraft.airline.stratus": "中型定期船 層雲号",
-  "aircraft.airline.oonagi": "大型定期船 大凪号(仮の名)",
+  "aircraft.airline.oonagi": "大型定期船 大凪号",
   "message.airline.yard.started": "ここで機体を建造します:%s(あと %s ブロック)。村の建築家が設計図どおりに組み立て、材料は飾りを建てるときと同じように求めてきます。自分の手で組んでもかまいません。型を替えるには、このブロックを素手で使います。",
   "message.airline.yard.design": "建造する型を替えました:%s(あと %s ブロック)。",
   "message.airline.yard.done": "機体ができました:%s(%s %s %s の台)。",
