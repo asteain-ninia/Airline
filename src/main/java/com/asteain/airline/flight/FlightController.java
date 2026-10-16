@@ -111,6 +111,9 @@ final class FlightController {
         boolean fresh = true, faulted, toldWaiting, paused;
         int pausedFor, rest;
         int age, still, tries, placeStep;
+        /** Placing over a pad: the heading at a right angle to the pad's that is gone across in, how far to the right of the middle the centre of mass is put then, and how often that was done again. */
+        double acrossHeading, acrossAim;
+        int alignRounds;
         Vec3 from = Vec3.ZERO, to = Vec3.ZERO;
         double heading;
         Phase resume = Phase.RETREAT;
@@ -168,12 +171,22 @@ final class FlightController {
             Shipyard.tick(level, be);
             return;
         }
+        // An aircraft block set down by hand in a ship (no airfield made that ship, so it has no home) is just a block: the
+        // mod flies only the aircraft it made (the user's ruling of 2026-10-16; such a ship was flown as the first design
+        // before, and its controller failed again and again on levers that were not there).
+        if (be.home == null) return;
         Runtime rt = runtime(be);
         if (rt == null || rt.craft.ship != ship) {
             rt = new Runtime(new Craft(level, ship, AircraftType.ALL.getOrDefault(be.type, AircraftType.DEFAULT), be.getBlockPos()));
             be.runtime = rt;
         }
         LOADED.put(ship.getUniqueId(), be);
+        if (be.modifying) {
+            // Being changed by hand (the design tools): it stands fixed, and nothing else happens to it.
+            final Craft c = rt.craft;
+            if (!c.locked()) safely(() -> c.lock(true));
+            return;
+        }
         // A flight under way goes on with nobody in the dimension. Minecraft stops ticking block entities and entities
         // 300 ticks after the last player left a dimension that has no force-loaded chunk, while Sable keeps moving the
         // ship: it would fly on with its levers as they were, with nobody at the controls. (Seen in the reopen checks.)
@@ -1041,7 +1054,23 @@ final class FlightController {
                 ap.tick();
                 if (ap.placed || ++be.timer > 900) {
                     final Vec3 middle = Vec3.atBottomCenterOf(berthBlock(c.level, net, be.destination, c.type).below());
-                    if (rt.placeStep++ == 0) {
+                    final double off = across(c, rt.heading, middle);
+                    if (rt.placeStep == 1 && ap.placed && Math.abs(off) > c.type.placeWithin && rt.alignRounds < 2 && !airborne(net, be.destination)) {
+                        // Turning from across onto the pad's heading carries a ship sideways (koeda, 2026-10-16: 0.3 to 0.4 of a
+                        // block at full turning speed, up to 0.2 with the slow turn), and going along the heading cannot take it
+                        // back; the centre of mass stays where it is across while the ship goes down. Across again, aimed to the
+                        // other side by what was left over, then the same turn onto the heading. Not beside a pier: aimed toward
+                        // it, the large aircraft touched the pier on the way down and was pushed two blocks off (2026-10-16).
+                        rt.alignRounds++;
+                        rt.acrossAim -= off;
+                        LOGGER.info("[Airline/flight] {} across the middle of the pad after turning onto its heading: placed across again (round {})", String.format("%.2f", Math.abs(off)), rt.alignRounds);
+                        placeAcross(rt, middle);
+                        rt.placeStep = 0;
+                        be.timer = 0;
+                        // It stays over the pad longer than planned: the others are told (one seated on its pad waits for it,
+                        // instead of leaving by the old plan and stopping in the air: c139 traffic).
+                        replan(be, rt, 0);
+                    } else if (rt.placeStep++ == 0) {
                         // Along the pad's heading it is the aircraft's own block (the middle of the hull's floor) that is put
                         // over the middle of the pad, not the centre of mass: a design whose centre of mass lies ahead of
                         // its lift hangs with its nose down, its floor behind its centre of mass, and came down a third of
@@ -1213,14 +1242,28 @@ final class FlightController {
         final RouteNetwork.Node node = be.destination == null ? null : net.node(be.destination);
         rt.heading = node == null ? rt.craft.yaw() : node.heading();
         // Across first: the heading at a right angle to the pad's that is nearer to where the nose points now.
-        final double across = Math.abs(Autopilot.wrap(rt.heading + 90 - rt.craft.yaw())) <= 90 ? rt.heading + 90 : rt.heading - 90;
-        final Vec3 middle = Vec3.atBottomCenterOf(be.destination == null ? BlockPos.containing(rt.craft.pos()) : berthBlock(level, net, be.destination, AircraftType.of(be.type)).below());
-        rt.pilot.placeAt(across, middle.x, middle.z);
+        rt.acrossHeading = Math.abs(Autopilot.wrap(rt.heading + 90 - rt.craft.yaw())) <= 90 ? rt.heading + 90 : rt.heading - 90;
+        rt.acrossAim = 0;
+        rt.alignRounds = 0;
+        placeAcross(rt, Vec3.atBottomCenterOf(be.destination == null ? BlockPos.containing(rt.craft.pos()) : berthBlock(level, net, be.destination, AircraftType.of(be.type)).below()));
         rt.placeStep = 0;
         be.phase = Phase.ALIGN;
         be.timer = 0;
         be.setChanged();
         replan(be, rt, 0);
+    }
+
+    /** Across the pad: the centre of mass is put {@code acrossAim} to the right of the middle (looking along the pad's heading). */
+    private static void placeAcross(Runtime rt, Vec3 middle) {
+        final double h = Math.toRadians(rt.heading);
+        rt.pilot.placeAt(rt.acrossHeading, middle.x - Math.sin(h) * rt.acrossAim, middle.z + Math.cos(h) * rt.acrossAim);
+    }
+
+    /** How far the ship's centre of mass lies to the right of the middle, across the pad's heading (degrees in the sense of {@link Craft#yaw()}). */
+    private static double across(Craft c, double heading, Vec3 middle) {
+        final double h = Math.toRadians(heading);
+        final Vec3 p = c.pos();
+        return (p.x - middle.x) * -Math.sin(h) + (p.z - middle.z) * Math.cos(h);
     }
 
     private static void landed(AircraftBlockEntity be, Runtime rt, RouteNetwork net) {
@@ -1238,7 +1281,9 @@ final class FlightController {
         // (How far the aircraft's own block lies from the middle of the pad: that is what says whether its blocks sit on the world's grid.)
         final Vec3 centre = Vec3.atBottomCenterOf(berthBlock(c.level, net, be.at, c.type)), at = c.ownBlock();
         rt.lastMiss = Math.hypot(at.x - centre.x, at.z - centre.z);
-        be.note = String.format("landed %.2f from the middle of the pad, heading off by %.2f degrees", rt.lastMiss, rt.lastHeadingError);
+        final double h = Math.toRadians(rt.heading);
+        be.note = String.format("landed %.2f from the middle of the pad (ahead %+.2f, to the right %+.2f), heading off by %.2f degrees", rt.lastMiss,
+                (at.x - centre.x) * Math.cos(h) + (at.z - centre.z) * Math.sin(h), (at.x - centre.x) * -Math.sin(h) + (at.z - centre.z) * Math.cos(h), rt.lastHeadingError);
         LOGGER.info("[Airline/flight] aircraft {}", be.note);
         if (be.at.equals(be.home)) be.homeward = false;
         // Away from home with cargo the pilot's own job is told to stay by the aircraft: whenever nobody holds the pilot
@@ -1286,6 +1331,7 @@ final class FlightController {
             be.quietUntil = 0;
             be.setChanged();
             if (be.phase == Phase.PARKED && be.at.equals(be.home)) {
+                if (be.modifying) return said(player, "message." + Airline.MOD_ID + ".yard.modifying");
                 if (!be.lacks.isEmpty()) return said(player, "message." + Airline.MOD_ID + ".yard.lacks", Shipyard.partNames(be.lacks));
                 if (be.carryCount == 0) dispatch(level, be, rt, net);
                 return said(player, be.phase == Phase.PARKED ? "message." + Airline.MOD_ID + ".depart.nothing" : "message." + Airline.MOD_ID + ".depart.going");
@@ -1764,6 +1810,7 @@ final class FlightController {
         final Runtime rt = be == null ? null : runtime(be);
         if (be == null || rt == null) return new Answer(false, "flight.no_aircraft");
         if (be.phase != Phase.PARKED) return new Answer(false, "flight.busy");
+        if (be.modifying) return new Answer(false, "flight.modifying");
         if (!be.lacks.isEmpty()) return new Answer(false, "flight.unfit", Shipyard.partNames(be.lacks));
         if (pilot == null) return new Answer(false, "flight.no_pilot");
         // The pad it lands on: the one asked for, or another pad of that airfield (its own home is never exchanged).

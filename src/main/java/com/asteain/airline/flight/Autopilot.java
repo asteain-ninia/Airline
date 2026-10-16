@@ -428,7 +428,8 @@ final class Autopilot {
     private boolean turnStep(double toward) {
         final double ahead = wrap(toward - (c.yaw() + c.yawRate() * t.turnCoastSeconds));
         // The last degrees with the slow turn, when the design has one: a push of one tick turns it by its turning speed / 20.
-        final boolean fine = t.slowTurnRate > 0 && Math.abs(ahead) < t.fineTurnBelow;
+        // Over a pad the whole turn: a fast turn carries the ship sideways (koeda, 2026-10-16: 0.3 to 0.4 of a block).
+        final boolean fine = t.slowTurnRate > 0 && (Math.abs(ahead) < t.fineTurnBelow || placing);
         int length = (int) Math.round(Math.abs(ahead) * (fine ? 0.8 * 20.0 / t.slowTurnRate : t.turnTicksPerDegree));
         if (Math.abs(ahead) < t.turnDeadband || length < 1) return true;
         length = Math.max(2, Math.min(t.period, length));

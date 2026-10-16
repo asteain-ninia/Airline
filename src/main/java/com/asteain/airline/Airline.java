@@ -244,6 +244,8 @@ public final class Airline {
         if (net.neoforged.fml.loading.FMLEnvironment.dist == net.neoforged.api.distmarker.Dist.CLIENT) com.asteain.airline.client.PilotLook.hook();
         container.registerConfig(ModConfig.Type.COMMON, RouteRules.SPEC);
         container.registerConfig(ModConfig.Type.COMMON, Cargo.SPEC, MOD_ID + "-cargo.toml");
+        // Per world (saves/<world>/serverconfig/): the design tools, off unless a world that is not played switches them on.
+        container.registerConfig(ModConfig.Type.SERVER, com.asteain.airline.flight.DesignTools.SPEC, MOD_ID + "-server.toml");
         Flights.bootstrap();
         BLOCKS.register(modBus);
         ITEMS.register(modBus);

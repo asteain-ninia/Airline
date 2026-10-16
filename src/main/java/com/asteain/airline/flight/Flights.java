@@ -321,19 +321,30 @@ public final class Flights {
         return FlightController.departNow(level, airfield, player);
     }
 
-    /**
-     * Switched in the airfield's aircraft tab: whether the airfield puts its aircraft back the way the design has it.
-     * Switched off, what its aircraft lacks is forgotten at once (it flies as it stands).
-     */
-    public static void selfRepair(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield, boolean on) {
-        final com.asteain.airline.colony.AircraftModule tab = airfield.getFirstModuleOccurance(com.asteain.airline.colony.AircraftModule.class);
-        if (tab != null) tab.selfRepair(on);
-        if (on || !available()) return;
+    /** The design tools ({@link DesignTools}): the design's aircraft on the pad, marked as being changed by hand. */
+    public static Answer designStart(ServerLevel level, BlockPos pad, String design) {
+        if (!AircraftType.ALL.containsKey(design)) return new Answer(false, "flight.no_design", design, String.join(", ", AircraftType.ALL.keySet()));
+        return available() ? Designing.start(level, pad, design) : OFF;
+    }
+
+    /** The design tools: marks an aircraft as being changed by hand, or takes the mark off (the airfield puts it back then). */
+    public static void modifying(AircraftBlockEntity aircraft, boolean on) {
+        if (available()) Designing.modifying(aircraft, on);
+    }
+
+    /** The design tools: the aircraft's blocks as they stand, written as a design file (game folder/airline-designs/name.json). */
+    public static Answer designCapture(ServerLevel level, AircraftBlockEntity aircraft, String name) {
+        return available() ? Designing.capture(level, aircraft, name) : OFF;
+    }
+
+    /** The loaded aircraft whose home is this pad, or null. */
+    @Nullable
+    public static AircraftBlockEntity homeAircraft(ServerLevel level, BlockPos pad) {
+        if (!available()) return null;
         for (final AircraftBlockEntity aircraft : FlightController.loaded(level)) {
-            if (!airfield.pad().equals(aircraft.home) || aircraft.lacks.isEmpty()) continue;
-            aircraft.lacks.clear();
-            aircraft.setChanged();
+            if (pad.equals(aircraft.home)) return aircraft;
         }
+        return null;
     }
 
     /** Asked for from the airfield's window ({@link Shipyard#stop}): the building on the airfield's own pad is called off. */

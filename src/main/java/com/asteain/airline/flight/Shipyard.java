@@ -162,8 +162,8 @@ final class Shipyard {
         final Map<BlockPos, Part> parts = parts(level, c.type);
         final BuildingAirfield airfield = be.home == null || !be.home.equals(be.at) ? null : Cargo.airfieldAt(level, be.home);
         if (parts == null || airfield == null) return new int[2];
-        if (!selfRepair(airfield)) {
-            // Self-repair switched off at the airfield: the aircraft is left as it stands, and flies whatever it lacks.
+        if (be.modifying) {
+            // Being changed by hand (the design tools): it is left as it stands.
             if (!be.lacks.isEmpty()) {
                 be.lacks.clear();
                 be.setChanged();
@@ -220,12 +220,6 @@ final class Shipyard {
             }
         }
         return new int[] {restored, removed};
-    }
-
-    /** Whether the airfield puts its aircraft back the way the design has it (its aircraft tab; on unless switched off). */
-    static boolean selfRepair(BuildingAirfield airfield) {
-        final com.asteain.airline.colony.AircraftModule tab = airfield.getFirstModuleOccurance(com.asteain.airline.colony.AircraftModule.class);
-        return tab == null || tab.selfRepair();
     }
 
     /** The parts as players read them: "Oak Planks x3, Cogwheel x1" (the names of the blocks, not their ids). */

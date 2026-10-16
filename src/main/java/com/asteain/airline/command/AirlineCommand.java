@@ -67,6 +67,7 @@ public final class AirlineCommand {
     private static final String FROM = "from";
     private static final String DESTINATION = "destination";
     private static final String TO = "to";
+    private static final String NAME = "name";
 
     private AirlineCommand() {}
 
@@ -103,6 +104,16 @@ public final class AirlineCommand {
                         .then(Commands.literal("list").executes(AirlineCommand::aircraftList))
                         .then(Commands.literal("clear").executes(AirlineCommand::aircraftClear))
                         .then(Commands.literal("forget").then(Commands.argument(COLONY, IntegerArgumentType.integer(1)).executes(AirlineCommand::aircraftForget))))
+                // The design tools (a world whose server config switches them on): bring out a design's aircraft to be
+                // changed by hand, take the result in as a design file, take the mark off.
+                .then(Commands.literal("design")
+                        .then(Commands.literal("start").then(Commands.argument(COLONY, IntegerArgumentType.integer(1)).executes(ctx -> designStart(ctx, null))
+                                .then(Commands.argument(DESIGN, com.mojang.brigadier.arguments.StringArgumentType.word())
+                                        .suggests((ctx, builder) -> net.minecraft.commands.SharedSuggestionProvider.suggest(Flights.designs(), builder))
+                                        .executes(ctx -> designStart(ctx, com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, DESIGN))))))
+                        .then(Commands.literal("capture").then(Commands.argument(COLONY, IntegerArgumentType.integer(1))
+                                .then(Commands.argument(NAME, com.mojang.brigadier.arguments.StringArgumentType.word()).executes(AirlineCommand::designCapture))))
+                        .then(Commands.literal("end").then(Commands.argument(COLONY, IntegerArgumentType.integer(1)).executes(AirlineCommand::designEnd))))
                 .then(Commands.literal("flight")
                         .then(Commands.literal("status").executes(AirlineCommand::flightStatus))
                         .then(Commands.literal("cancel").executes(ctx -> answer(ctx, Flights.cancel(ctx.getSource().getLevel())))
@@ -140,6 +151,38 @@ public final class AirlineCommand {
         if (airfield == null) return 0;
         airfield.registerPad();
         return answer(ctx, design == null ? Flights.spawn(ctx.getSource().getLevel(), airfield.pad()) : Flights.spawn(ctx.getSource().getLevel(), airfield.pad(), design));
+    }
+
+    /** A design's aircraft brought out on the airfield's pad to be changed by hand; without a design, the aircraft that is there is marked. */
+    private static int designStart(CommandContext<CommandSourceStack> ctx, @org.jetbrains.annotations.Nullable String design) {
+        if (!com.asteain.airline.flight.DesignTools.enabled()) return answer(ctx, new Flights.Answer(false, "design.off"));
+        final BuildingAirfield airfield = airfield(ctx, COLONY);
+        if (airfield == null) return 0;
+        airfield.registerPad();
+        if (design != null) return answer(ctx, Flights.designStart(ctx.getSource().getLevel(), airfield.pad(), design));
+        final AircraftBlockEntity aircraft = Flights.homeAircraft(ctx.getSource().getLevel(), airfield.pad());
+        if (aircraft == null) return answer(ctx, new Flights.Answer(false, "flight.no_aircraft"));
+        Flights.modifying(aircraft, true);
+        return answer(ctx, new Flights.Answer(true, "design.started", aircraft.type));
+    }
+
+    private static int designCapture(CommandContext<CommandSourceStack> ctx) {
+        if (!com.asteain.airline.flight.DesignTools.enabled()) return answer(ctx, new Flights.Answer(false, "design.off"));
+        final BuildingAirfield airfield = airfield(ctx, COLONY);
+        if (airfield == null) return 0;
+        final AircraftBlockEntity aircraft = Flights.homeAircraft(ctx.getSource().getLevel(), airfield.pad());
+        if (aircraft == null) return answer(ctx, new Flights.Answer(false, "flight.no_aircraft"));
+        return answer(ctx, Flights.designCapture(ctx.getSource().getLevel(), aircraft, com.mojang.brigadier.arguments.StringArgumentType.getString(ctx, NAME)));
+    }
+
+    private static int designEnd(CommandContext<CommandSourceStack> ctx) {
+        if (!com.asteain.airline.flight.DesignTools.enabled()) return answer(ctx, new Flights.Answer(false, "design.off"));
+        final BuildingAirfield airfield = airfield(ctx, COLONY);
+        if (airfield == null) return 0;
+        final AircraftBlockEntity aircraft = Flights.homeAircraft(ctx.getSource().getLevel(), airfield.pad());
+        if (aircraft == null) return answer(ctx, new Flights.Answer(false, "flight.no_aircraft"));
+        Flights.modifying(aircraft, false);
+        return answer(ctx, new Flights.Answer(true, "design.ended"));
     }
 
     private static int aircraftDesigns(CommandContext<CommandSourceStack> ctx) {

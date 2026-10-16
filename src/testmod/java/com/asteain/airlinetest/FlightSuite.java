@@ -1080,18 +1080,32 @@ final class FlightSuite {
             done = Flights.maintain(level, a.aircraft);
             s.soft("yard / with the part on the racks it is put in at the next look, and nothing is lacking any more", done[0] == 1 && a.aircraft.lacks.isEmpty() && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(deckBlock),
                     "put right " + done[0] + ", lacks " + a.aircraft.lacks);
-            // Self-repair switched off at the airfield: what is changed by hand stays, and a missing part keeps nothing on the ground.
-            Flights.selfRepair(level, a.airfield, false);
+            // Being changed by hand with the design tools (2026-10-16; it was self-repair switched off at the airfield before):
+            // what is changed stays, it does not fly, and taken in as a design file the change is in it.
+            Flights.modifying(a.aircraft, true);
             level.removeBlock(Flights.partOf(a.aircraft, plank), false);
             level.setBlock(Flights.partOf(a.aircraft, added), Blocks.DIRT.defaultBlockState(), 3);
             done = Flights.maintain(level, a.aircraft);
-            s.soft("yard / with self-repair switched off, nothing is put back: the missing plank stays missing, the added block stays, and nothing is counted as lacking (it may fly)",
-                    done[0] == 0 && done[1] == 0 && level.getBlockState(Flights.partOf(a.aircraft, plank)).isAir() && level.getBlockState(Flights.partOf(a.aircraft, added)).is(Blocks.DIRT) && a.aircraft.lacks.isEmpty(),
-                    "put right " + done[0] + ", taken out " + done[1] + ", lacks " + a.aircraft.lacks);
-            Flights.selfRepair(level, a.airfield, true);
+            final Flights.Answer whileChanged = Flights.send(level, a.pad, padB, false, a.pilot);
+            s.soft("yard / while it is being changed by hand, nothing is put back: the missing plank stays missing, the added block stays, nothing is counted as lacking, and it does not fly",
+                    done[0] == 0 && done[1] == 0 && level.getBlockState(Flights.partOf(a.aircraft, plank)).isAir() && level.getBlockState(Flights.partOf(a.aircraft, added)).is(Blocks.DIRT) && a.aircraft.lacks.isEmpty()
+                            && !whileChanged.ok(),
+                    "put right " + done[0] + ", taken out " + done[1] + ", lacks " + a.aircraft.lacks + "; a flight: " + whileChanged.text().getString());
+            final Flights.Answer taken = Flights.designCapture(level, a.aircraft, "yard-check");
+            String file = "";
+            try {
+                if (taken.ok()) file = java.nio.file.Files.readString(java.nio.file.Path.of(String.valueOf(taken.args()[1])));
+            } catch (java.io.IOException e) {
+                file = "";
+            }
+            final String addedRow = "[" + added.getX() + "," + added.getY() + "," + added.getZ() + ",\"minecraft:dirt\"]", plankRow = "[" + plank.getX() + "," + plank.getY() + "," + plank.getZ() + ",";
+            s.soft("yard / taken in as a design file: the added block is in it, the missing plank is not, and it says what it was made from",
+                    taken.ok() && file.contains(addedRow) && !file.contains(plankRow) && file.contains("\"capturedFrom\""),
+                    taken.text().getString() + "; dirt row " + file.contains(addedRow) + ", plank row " + file.contains(plankRow));
+            Flights.modifying(a.aircraft, false);
             Fixture.stock(rack[0], deckItem, 1);
             done = Flights.maintain(level, a.aircraft);
-            s.soft("yard / switched on again, the aircraft is put back the way its design has it", done[0] == 1 && done[1] == 1 && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(deckBlock)
+            s.soft("yard / the mark taken off, the aircraft is put back the way its design has it", done[0] == 1 && done[1] == 1 && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(deckBlock)
                     && level.getBlockState(Flights.partOf(a.aircraft, added)).isAir() && a.aircraft.lacks.isEmpty(), "put right " + done[0] + ", taken out " + done[1] + ", lacks " + a.aircraft.lacks);
             double[] weight = Flights.weight(level, a.aircraft);
             s.note(String.format("OBS yard: after the work the aircraft has mass %.2f", weight[0]));

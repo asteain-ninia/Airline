@@ -55,6 +55,8 @@ public final class AircraftBlockEntity extends BlockEntity {
      * not in a ship) and the number of the work order the colony's builders have for it (0: none). See {@link Shipyard}.
      */
     @Nullable public BlockPos yard;
+    /** Being changed by hand with the design tools ({@link DesignTools}): it stands fixed, is not put back and does not fly. */
+    public boolean modifying;
     public int workOrder;
     /** The landing pad (network point) of the home airfield, and the pad it stands on now (null while in the air). */
     @Nullable public BlockPos home, at;
@@ -138,6 +140,7 @@ public final class AircraftBlockEntity extends BlockEntity {
         tag.putInt("workOrder", workOrder);
         tag.putDouble("restOffset", restOffset);
         tag.putString("phase", phase.name());
+        if (modifying) tag.putBoolean("modifying", true);
         tag.put("route", new LongArrayTag(route.stream().mapToLong(BlockPos::asLong).toArray()));
         tag.putInt("leg", leg);
         putPos(tag, "origin", origin);
@@ -180,8 +183,8 @@ public final class AircraftBlockEntity extends BlockEntity {
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        // (A save from before there were designs to choose from: the one design there was.)
-        type = tag.contains("type") ? tag.getString("type") : AircraftType.FIRST;
+        type = tag.getString("type");
+        modifying = tag.getBoolean("modifying");
         home = getPos(tag, "home");
         at = getPos(tag, "at");
         fuel = tag.getLong("fuel");
