@@ -261,12 +261,20 @@ public final class Airline {
         NeoForge.EVENT_BUS.addListener((RegisterCommandsEvent event) -> AirlineCommand.register(event.getDispatcher(), event.getBuildContext()));
         NeoForge.EVENT_BUS.addListener(RouteNetwork::onLevelTick);
         NeoForge.EVENT_BUS.addListener(RouteNetwork::onNeighborNotify);
+        // The lines of the network for the players' maps (JourneyMap, when they have it).
+        NeoForge.EVENT_BUS.addListener(com.asteain.airline.route.RouteMap::onServerTick);
+        NeoForge.EVENT_BUS.addListener(com.asteain.airline.route.RouteMap::onLogin);
+        NeoForge.EVENT_BUS.addListener(com.asteain.airline.route.RouteMap::onChangedDimension);
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStartedEvent event) -> com.asteain.airline.route.RouteMap.forget());
     }
 
-    /** What the client sends to the server: the aircraft tab's requests. */
+    /** What the client sends to the server (the aircraft tab's requests), and what the server sends (the lines of the network, for the map). */
     private static void registerPayloads(net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent event) {
-        event.registrar("1").playToServer(com.asteain.airline.network.AircraftOrderPayload.TYPE, com.asteain.airline.network.AircraftOrderPayload.STREAM_CODEC,
+        final net.neoforged.neoforge.network.registration.PayloadRegistrar registrar = event.registrar("1");
+        registrar.playToServer(com.asteain.airline.network.AircraftOrderPayload.TYPE, com.asteain.airline.network.AircraftOrderPayload.STREAM_CODEC,
                 com.asteain.airline.network.AircraftOrderPayload::handle);
+        registrar.playToClient(com.asteain.airline.network.RouteMapPayload.TYPE, com.asteain.airline.network.RouteMapPayload.STREAM_CODEC,
+                com.asteain.airline.network.RouteMapPayload::handle);
     }
 
     public static ResourceLocation id(String path) {

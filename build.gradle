@@ -41,8 +41,13 @@ sourceSets {
 def sharedLibs = '../ColonyPatchServer/libs'
 def sharedTestJars = '../ColonyPatchServer/test-jars'
 
+// JourneyMap: only its API jar is compiled against (shared with JourneyMap Ships, not copied); the full jar runs in the visual check only.
+def journeyMapApiJar = file('../JMShips/libs/journeymap-api-neoforge-2.0.0-1.21.1.jar')
+def journeyMapJar = file('../JMShips/test-jars/journeymap-neoforge-1.21.1-6.0.7.jar')
+
 dependencies {
     compileOnly fileTree(dir: sharedLibs, include: ['*.jar'])
+    compileOnly files(journeyMapApiJar)
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
@@ -163,6 +168,19 @@ neoForge {
             systemProperty 'airlinetest.timeoutSeconds', providers.gradleProperty('timeoutSeconds').getOrElse('1700')
             jvmArgument '-Xmx3G'
         }
+        // A real client with JourneyMap (2026-10-17): a flat world, buoys, the lines of the network drawn on JourneyMap's
+        // maps, screenshots, quits. The pictures are judged by eye.
+        visual {
+            client()
+            gameDirectory = project.file('run-visual')
+            sourceSet = sourceSets.testmod
+            loadedMods = [neoForge.mods.named(mod_id).get(), neoForge.mods.named('airlinetest').get()]
+            systemProperty 'airlinetest.suite', 'visual'
+            systemProperty 'airlinetest.visual', 'true'
+            systemProperty 'airlinetest.timeoutSeconds', providers.gradleProperty('timeoutSeconds').getOrElse('600')
+            programArguments.addAll '--width', '1280', '--height', '800'
+            jvmArgument '-Xmx3G'
+        }
         // Stage 4, first half: buoys, the network, verification, routes, commands. Nothing flies; MineColonies only.
         network {
             server()
@@ -181,6 +199,7 @@ neoForge {
 neoForge.addModdingDependenciesTo(sourceSets.testmod)
 
 dependencies {
+    testmodCompileOnly files(journeyMapApiJar)
     testmodCompileOnly fileTree(dir: sharedLibs, include: ['*.jar'])
     testmodCompileOnly flightCompileJars
 }
@@ -290,6 +309,29 @@ tasks.named('runBench').configure {
         prepareRun('run-bench', mineColoniesJars + physicsJars + [patch.name], 25633, 'Airline bench', [patch])
     }
     doLast { verifyResult('run-bench', 'bench') }
+}
+
+tasks.named('runVisual').configure {
+    doFirst {
+        if (!journeyMapJar.isFile()) throw new GradleException("Missing ${journeyMapJar}")
+        // A fresh world every time; JourneyMap's map of the last one would show through under the new one.
+        delete file('run-visual/saves/AirlineVisual')
+        delete file('run-visual/airline-visual-result.txt')
+        delete fileTree(dir: 'run-visual/screenshots', include: 'airline-*.png')
+        delete file('run-visual/journeymap/data')
+        prepareRun('run-visual', mineColoniesJars + [journeyMapJar.name], 25640, 'Airline visual', [journeyMapJar])
+        def options = file('run-visual/options.txt')
+        if (!options.exists()) {
+            options.text = ['pauseOnLostFocus:false', 'onboardAccessibility:false', 'skipMultiplayerWarning:true', 'tutorialStep:none',
+                            'renderDistance:8', 'simulationDistance:6', 'guiScale:2', 'lang:ja_jp', 'soundCategory_master:0.0'].join(System.lineSeparator()) + System.lineSeparator()
+        }
+    }
+    doLast {
+        def report = file('run-visual/airline-visual-result.txt')
+        if (!report.exists()) throw new GradleException('The visual client produced no result')
+        if (!report.text.startsWith('PASS ')) throw new GradleException(report.text)
+        logger.lifecycle(report.text)
+    }
 }
 
 tasks.named('runNetwork').configure {

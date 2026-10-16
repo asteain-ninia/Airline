@@ -47,6 +47,8 @@ public final class AirlineTest {
                 case "network" -> NetworkSuite.build(server);
                 case "flight" -> FlightSuite.build(server);
                 case "bench" -> BenchSuite.build(server);
+                // The client check of the maps (Visual): nothing to run on the server.
+                case "visual" -> null;
                 default -> throw new AssertionError("unknown airlinetest.suite '" + suite + "'");
             };
             // Faster than real time (2026-10-15): the checks count ticks, not seconds. With -Psprint=on the server ticks

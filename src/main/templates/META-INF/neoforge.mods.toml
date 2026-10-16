@@ -60,3 +60,11 @@ type="optional"
 versionRange="[1.2.1,)"
 ordering="AFTER"
 side="BOTH"
+
+# JourneyMap: when a player has it, the lines of the air network are drawn on its maps (client only).
+[[dependencies.${mod_id}]]
+modId="journeymap"
+type="optional"
+versionRange="*"
+ordering="AFTER"
+side="CLIENT"
