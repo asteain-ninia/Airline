@@ -52,6 +52,24 @@ public final class Flights {
         if (available()) FlightController.failNext = true;
     }
 
+    /** For the development checks only: the aircraft counts as built by the builders (it looks for a home at an anchorage). */
+    public static void markBuiltForChecks(AircraftBlockEntity aircraft) {
+        aircraft.newlyBuilt = true;
+        aircraft.setChanged();
+    }
+
+    /** How many aircraft have their home at an anchorage of this airfield's colony (by the timetable, loaded or not). */
+    public static int anchoredFleet(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield) {
+        if (!available()) return 0;
+        final java.util.Set<BlockPos> anchorages = new java.util.HashSet<>();
+        for (final com.minecolonies.api.colony.buildings.IBuilding building : airfield.getColony().getServerBuildingManager().getBuildings().values())
+            if (building instanceof com.asteain.airline.colony.BuildingAirfield anchorage && anchorage.facility() == com.asteain.airline.route.Facility.ANCHORAGE && anchorage.pad() != null) anchorages.add(anchorage.pad());
+        int n = 0;
+        for (final Timetable.Entry entry : Timetable.get(level.getServer()).entries())
+            if (anchorages.contains(entry.home()) && entry.dimension().equals(level.dimension().location().toString())) n++;
+        return n;
+    }
+
     /** For the development checks only: the next placing over a pad goes across again once (as if it were 0.5 off). */
     public static void redoAcrossOnceForChecks() {
         if (available()) FlightController.redoAcrossNext = true;

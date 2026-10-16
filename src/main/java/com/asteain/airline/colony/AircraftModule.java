@@ -34,6 +34,7 @@ public class AircraftModule extends AbstractBuildingModule implements ITickingMo
             if (building.getColony().getWorld() instanceof ServerLevel level) own = Flights.ownAircraft(level, airfield.pad(), design);
         }
         buf.writeBoolean(Flights.available());
+        buf.writeVarInt(building instanceof BuildingAirfield airfield && building.getColony().getWorld() instanceof ServerLevel level ? Flights.anchoredFleet(level, airfield) : 0);
         // The airfield's own aircraft: 0 none, 1 being built (blocks still to go), 2 there is one; and its design's title.
         buf.writeByte(own[0]);
         buf.writeUtf(design[0]);

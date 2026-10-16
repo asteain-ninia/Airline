@@ -172,7 +172,7 @@ public final class Airline {
     /** Module keys are global in MineColonies and are written into the building's save data: never rename them lightly. */
     public static final BuildingEntry.ModuleProducer<PilotWorkModule, WorkerBuildingModuleView> PILOT_WORK =
             new BuildingEntry.ModuleProducer<>(MOD_ID + "_pilot_work",
-                    () -> new PilotWorkModule(PILOT.get(), Skill.Adaptability, Skill.Focus, true, b -> 1),
+                    () -> new PilotWorkModule(PILOT.get(), Skill.Adaptability, Skill.Focus, true, com.asteain.airline.colony.BuildingAirfield::pilotsFor),
                     () -> WorkerBuildingModuleView::new);
     public static final BuildingEntry.ModuleProducer<ExportStockModule, ExportStockModuleView> EXPORT_STOCK =
             new BuildingEntry.ModuleProducer<>(MOD_ID + "_export_stock", ExportStockModule::new, () -> ExportStockModuleView::new);

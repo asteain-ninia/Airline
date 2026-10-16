@@ -21,6 +21,8 @@ public class AircraftModuleView extends AbstractBuildingModuleView {
 
     /** Whether aircraft can be built at all (the mods the flying part needs are there). */
     public boolean available;
+    /** Aircraft of the colony whose home is one of its anchorages. */
+    public int fleet;
     /** The airfield's own aircraft: 0 none, 1 being built, 2 there is one; the translation key of its design's name; the blocks still to go while it is built. */
     public int own, ownNumber;
     public String ownDesign = "";
@@ -32,6 +34,7 @@ public class AircraftModuleView extends AbstractBuildingModuleView {
     @Override
     public void deserialize(@NotNull RegistryFriendlyByteBuf buf) {
         available = buf.readBoolean();
+        fleet = buf.readVarInt();
         own = buf.readByte();
         ownDesign = buf.readUtf();
         ownNumber = buf.readInt();

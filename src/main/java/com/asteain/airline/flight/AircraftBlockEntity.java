@@ -57,6 +57,8 @@ public final class AircraftBlockEntity extends BlockEntity {
     @Nullable public BlockPos yard;
     /** Being changed by hand with the design tools ({@link DesignTools}): it stands fixed, is not put back and does not fly. */
     public boolean modifying;
+    /** Built by the colony's builders and not yet looked at for a home at an anchorage (see FlightController#relocate). */
+    public boolean newlyBuilt;
     public int workOrder;
     /** The landing pad (network point) of the home airfield, and the pad it stands on now (null while in the air). */
     @Nullable public BlockPos home, at;
@@ -185,6 +187,7 @@ public final class AircraftBlockEntity extends BlockEntity {
         tag.putDouble("restOffset", restOffset);
         tag.putString("phase", phase.name());
         if (modifying) tag.putBoolean("modifying", true);
+        if (newlyBuilt) tag.putBoolean("newlyBuilt", true);
         tag.put("route", new LongArrayTag(route.stream().mapToLong(BlockPos::asLong).toArray()));
         tag.putInt("leg", leg);
         putPos(tag, "origin", origin);
@@ -240,6 +243,7 @@ public final class AircraftBlockEntity extends BlockEntity {
         super.loadAdditional(tag, registries);
         type = tag.getString("type");
         modifying = tag.getBoolean("modifying");
+        newlyBuilt = tag.getBoolean("newlyBuilt");
         home = getPos(tag, "home");
         at = getPos(tag, "at");
         fuel = tag.getLong("fuel");

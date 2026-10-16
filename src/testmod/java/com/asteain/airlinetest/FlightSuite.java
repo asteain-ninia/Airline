@@ -463,6 +463,40 @@ final class FlightSuite {
         flyToPier(s, level, medium, wood, fm, "medium", design());
         // From the large airfield the large aircraft (2026-10-15, Codex's design; the medium one where there is none).
         flyToPier(s, level, large, stone, fl, "large", Flights.designs().contains("oonagi") ? "oonagi" : design());
+        fleet(s, level, medium, wood, mirrored, large, fm);
+    }
+
+    /**
+     * An airfield's aircraft beyond its pad (2026-10-17, the user's ruling "判断は一旦全部推奨で"): a medium or large aircraft
+     * built by the builders moves to the nearest free anchorage of its colony, which becomes its home, and the airfield's pad
+     * is free for the next one. An airfield hires a pilot for its pad and one for each anchorage of its colony.
+     */
+    private static void fleet(Script s, ServerLevel level, Site medium, Site wood, Site mirrored, Site large, Field fm) {
+        final BlockPos[] was = new BlockPos[1];
+        s.step("facilities: fleet: pilots; the medium aircraft counts as built by the builders", () -> {
+            final int mediumPilots = medium.building().getFirstModuleOccurance(WorkerBuildingModule.class).getModuleMax();
+            final int largePilots = large.building().getFirstModuleOccurance(WorkerBuildingModule.class).getModuleMax();
+            s.soft("facilities / fleet: an airfield hires a pilot for its pad and one for each anchorage of its colony (medium 1 + 2, large 1 + 1)", mediumPilots == 3 && largePilots == 2,
+                    "medium airfield " + mediumPilots + ", large airfield " + largePilots);
+            was[0] = fm.aircraft.home;
+            Flights.markBuiltForChecks(fm.aircraft);
+        });
+        s.until("facilities: fleet: the medium aircraft moves to an anchorage", () -> {}, () -> fm.aircraft.home != null && !fm.aircraft.home.equals(was[0])
+                && fm.aircraft.phase == Phase.PARKED && fm.aircraft.home.equals(fm.aircraft.at), 12000);
+        s.step("facilities: fleet: result", () -> {
+            final BlockPos woodPad = wood.building().pad(), mirroredPad = mirrored.building().pad();
+            s.soft("facilities / fleet: built, the medium aircraft took the nearest free anchorage of its colony (the wooden one) as its home and flew there; its pilot got off onto the pier",
+                    woodPad.equals(fm.aircraft.home) && Boarding.state(fm.pilot) == Boarding.State.NONE && fm.pilot.isAlive(),
+                    "home " + fm.aircraft.home + " (wooden " + woodPad + ", mirrored " + mirroredPad + "); pilot " + Boarding.state(fm.pilot) + " | " + fm.aircraft.note);
+            final Flights.Answer second = Flights.spawn(level, was[0], design());
+            AircraftBlockEntity made = null;
+            for (AircraftBlockEntity each : Flights.aircraft(level)) if (was[0].equals(each.home)) made = each;
+            s.soft("facilities / fleet: the airfield's pad is free for the next one: a second medium aircraft is made there and keeps it as its home (it was made by command, not built)",
+                    second.ok() && made != null && made != fm.aircraft && !made.newlyBuilt, second.text().getString());
+            s.soft("facilities / fleet: the airfield counts one aircraft whose home is one of its colony's anchorages", Flights.anchoredFleet(level, medium.building()) == 1,
+                    "counted " + Flights.anchoredFleet(level, medium.building()));
+            for (String l : fm.log) if (l.contains("->")) s.note("OBS facilities fleet: " + l);
+        });
     }
 
     /** Places the blueprint of that level at the site (Structurize, at once); the first placement registers the building. */

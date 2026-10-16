@@ -504,6 +504,7 @@ final class FlightController {
         switch (be.phase) {
             case PARKED -> {
                 if (be.homeward && be.at != null && !be.at.equals(be.home)) goHome(level, be, rt, net);
+                else if (be.newlyBuilt && rt.age % 100 == 25) relocate(level, be, rt, net);
                 else if (rt.age % MAINTAIN_EVERY == 150) Shipyard.maintain(level, be, c);
                 else if (rt.age % 100 == 50 && be.lacks.isEmpty() && be.carryCount == 0) dispatch(level, be, rt, net);
                 // The tank is filled from the racks of the airfield it stands at, whenever it is not well filled.
@@ -837,6 +838,46 @@ final class FlightController {
         be.phase = Phase.BOARDING;
         be.note = "flying home";
         LOGGER.info("[Airline/flight] the aircraft parked at {} flies home.", be.at);
+        be.setChanged();
+    }
+
+    /**
+     * A new aircraft of a class that anchorages take moves to a free anchorage of its colony, which becomes its home
+     * (2026-10-17, the user's ruling "判断は一旦全部推奨で": an airfield may have more aircraft than pads; the ones over go
+     * to the colony's anchorages, one at each, and fly from there; the airfield's pad is free for the next one then).
+     * The nearest anchorage it has a way to is taken. One that finds none free keeps the airfield's pad as its home.
+     * An anchorage that is an aircraft's home is kept for it, as the home pad of an airfield is.
+     */
+    private static void relocate(ServerLevel level, AircraftBlockEntity be, Runtime rt, RouteNetwork net) {
+        if (be.at == null || !be.at.equals(be.home)) return;
+        final BuildingAirfield airfield = Cargo.airfieldAt(level, be.home);
+        final com.asteain.airline.route.ShipClass cls = shipClass(be);
+        BlockPos best = null;
+        if (airfield != null && airfield.facility().airfield() && com.asteain.airline.route.Facility.ANCHORAGE.berths(cls)) {
+            double nearest = Double.MAX_VALUE;
+            for (final com.minecolonies.api.colony.buildings.IBuilding building : airfield.getColony().getServerBuildingManager().getBuildings().values()) {
+                if (!(building instanceof BuildingAirfield anchorage) || anchorage.facility() != com.asteain.airline.route.Facility.ANCHORAGE || anchorage.getBuildingLevel() < 1) continue;
+                final BlockPos pad = anchorage.pad();
+                if (pad == null || !berthsAt(net, pad, cls) || !free(level, pad, rt.craft.id()) || net.route(be.home, pad, cls).size() < 2) continue;
+                if (pad.distSqr(be.home) < nearest) {
+                    nearest = pad.distSqr(be.home);
+                    best = pad;
+                }
+            }
+        }
+        if (best == null) {
+            // No anchorage free for it: its home stays the airfield's pad.
+            be.newlyBuilt = false;
+            be.setChanged();
+            return;
+        }
+        final Mob pilot = Cargo.freePilot(level, airfield, be);
+        if (pilot == null) return;      // looked at again: it moves once a pilot is free
+        be.newlyBuilt = false;
+        setPilot(be, pilot);
+        be.home = best;
+        be.homeward = true;
+        note(be, "a new aircraft: its home is the anchorage at " + best.toShortString() + " (the airfield's pad is free for the next one)");
         be.setChanged();
     }
 
@@ -1994,6 +2035,8 @@ final class FlightController {
         be.restOffset = pose.position().y() - (pad.getY() + 1);
         be.landed = level.getGameTime();
         be.phase = Phase.PARKED;
+        // Built by the colony's builders (not made by command): looked at for a home at one of the colony's anchorages.
+        be.newlyBuilt = !fuelled;
         // Built with the nose toward +x; turned to the heading of the pad, then fixed.
         RigidBodyHandle.of(ship).teleport(new Vector3d(pose.position()), new Quaterniond(pose.orientation()).rotateY(-Math.toRadians(node.heading())));
         craft.lock(true);

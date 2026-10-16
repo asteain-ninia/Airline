@@ -342,6 +342,29 @@ public final class Cargo {
     record Order(BuildingAirfield from, BuildingAirfield to, int ready, Mob pilot, BlockPos pad, boolean fetch) {}
 
     /**
+     * A pilot of the airfield, present, that no other aircraft has on its way (flying, loading, unloading, going home):
+     * the one this aircraft had last, if it is free, else the first free one. Null when there is none.
+     */
+    @Nullable
+    static Mob freePilot(ServerLevel level, BuildingAirfield airfield, AircraftBlockEntity self) {
+        Mob first = null;
+        for (final ICitizenData citizen : airfield.getAllAssignedCitizen()) {
+            if (citizen.getEntity().isEmpty()) continue;
+            final Mob mob = citizen.getEntity().get();
+            boolean busy = false;
+            for (final AircraftBlockEntity other : FlightController.loaded(level)) {
+                if (other == self) continue;
+                final boolean same = mob.getUUID().equals(other.pilot) || (other.pilotColony == citizen.getColony().getID() && other.pilotCitizen == citizen.getId());
+                if (same && (other.cargo || other.flying() || other.homeward || other.phase != AircraftBlockEntity.Phase.PARKED)) busy = true;
+            }
+            if (busy) continue;
+            if (mob.getUUID().equals(self.pilot)) return mob;
+            if (first == null) first = mob;
+        }
+        return first;
+    }
+
+    /**
      * A round (2026-10-17): other colonies the same flight may carry goods to, besides the one chosen first: those with
      * wanted goods ready on home's export racks and a place to land with a way from home or from the first colony, the
      * ones with the most ready first.
@@ -377,8 +400,9 @@ public final class Cargo {
     static Order consider(ServerLevel level, AircraftBlockEntity be, RouteNetwork net, UUID ship, List<String> barred) {
         final BuildingAirfield home = airfieldAt(level, be.home);
         if (home == null || home.getBuildingLevel() < 1) return null;
-        Mob pilot = null;
-        for (final ICitizenData citizen : home.getAllAssignedCitizen()) if (citizen.getEntity().isPresent()) pilot = citizen.getEntity().get();
+        // The pilots are the airfield's (an aircraft whose home is an anchorage flies with a pilot of the colony's airfield).
+        final BuildingAirfield crew = storeOf(home);
+        final Mob pilot = crew == null ? null : freePilot(level, crew, be);
         if (pilot == null) return null;
         final WantLedger ledger = WantLedger.get(level.getServer());
         final WantLedger.Key self = WantLedger.Key.of(home.getColony());

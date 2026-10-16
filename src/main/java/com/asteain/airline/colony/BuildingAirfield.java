@@ -209,4 +209,16 @@ public class BuildingAirfield extends AbstractBuilding {
     public boolean canBeGathered() {
         return false;
     }
+
+    /**
+     * Pilots an airfield hires (2026-10-17): one for its own pad and one for each anchorage of its colony, whose aircraft
+     * are the airfield's too; a small airfield one (small aircraft do not berth at anchorages).
+     */
+    public static int pilotsFor(com.minecolonies.api.colony.buildings.IBuilding building) {
+        if (!(building instanceof BuildingAirfield airfield) || !airfield.facility().airfield() || airfield.facility() == com.asteain.airline.route.Facility.SMALL_AIRFIELD) return 1;
+        int n = 1;
+        for (final com.minecolonies.api.colony.buildings.IBuilding other : building.getColony().getServerBuildingManager().getBuildings().values())
+            if (other instanceof BuildingAirfield anchorage && anchorage.facility() == com.asteain.airline.route.Facility.ANCHORAGE && anchorage.getBuildingLevel() >= 1) n++;
+        return n;
+    }
 }

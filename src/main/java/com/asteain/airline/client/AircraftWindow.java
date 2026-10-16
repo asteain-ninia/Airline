@@ -61,10 +61,14 @@ public class AircraftWindow extends AbstractModuleWindow<AircraftModuleView> {
         shown = moduleView.version;
         final AircraftModuleView v = moduleView;
         final Component design = Component.translatable(v.ownDesign);
-        if (!v.available) status.setText(Component.translatable(KEY + "unavailable"));
-        else if (v.own == 1) status.setText(Component.translatable(KEY + "building", design, v.ownNumber));
-        else if (v.own == 2) status.setText(Component.translatable(KEY + "exists", design));
-        else status.setText(Component.translatable(KEY + "none"));
+        final net.minecraft.network.chat.MutableComponent text;
+        if (!v.available) text = Component.translatable(KEY + "unavailable");
+        else if (v.own == 1) text = Component.translatable(KEY + "building", design, v.ownNumber);
+        else if (v.own == 2) text = Component.translatable(KEY + "exists", design);
+        else text = Component.translatable(KEY + "none");
+        // The aircraft whose home is one of the colony's anchorages (2026-10-17).
+        if (v.available && v.fleet > 0) text.append(" ").append(Component.translatable(KEY + "fleet", v.fleet));
+        status.setText(text);
         stopButton.setVisible(v.available && v.own == 1);
         list.refreshElementPanes();
     }

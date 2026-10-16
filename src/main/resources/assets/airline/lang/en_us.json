@@ -160,6 +160,7 @@
   "commands.airline.flight.note.going_round": "An aircraft has waited for another ship in its way. It goes round: back to the last point, and on over other lines.",
   "com.airline.gui.airfield.aircraft": "Aircraft",
   "com.airline.gui.aircraft.none": "This airfield has no aircraft yet. Choose a design below to have one built (the colony's builders put it up on the airfield's landing pad).",
+  "com.airline.gui.aircraft.fleet": "Aircraft homed at the colony's anchorages: %s",
   "com.airline.gui.aircraft.building": "Being built: %s (%s blocks to go). You can switch to another design below.",
   "com.airline.gui.aircraft.exists": "This airfield's aircraft: %s. No new one can be ordered while it exists.",
   "com.airline.gui.aircraft.unavailable": "Aircraft cannot be built: the mods needed for flying (Sable, Create Aeronautics, ColonyPatch Server) are not installed.",
