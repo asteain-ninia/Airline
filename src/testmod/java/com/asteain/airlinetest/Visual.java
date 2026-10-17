@@ -144,8 +144,10 @@ public final class Visual {
         level.setBlockAndUpdate(c, Airline.BUOYS.get(1).get().defaultBlockState());
         level.setBlockAndUpdate(d, Airline.BUOYS.get(2).get().defaultBlockState());
         level.setBlockAndUpdate(e, Airline.BUOYS.get(2).get().defaultBlockState());
-        // In the way of the line from a to d, half way and at its height (9 above a grade 1 buoy, 13 above a grade 3 one): that line is blocked.
-        for (int x = 48; x <= 52; x++) for (int y = Y + 7; y <= Y + 15; y++) for (int z = 8; z <= 12; z++) level.setBlockAndUpdate(new BlockPos(x, y, z), Blocks.STONE.defaultBlockState());
+        // In the way of the line from a to d, half way, from below its height (9 above a grade 1 buoy, 13 above a grade 3 one) up
+        // so high that the line cannot be raised over it (2026-10-18: lines pass over what is lower, by 32 at most): that line
+        // is blocked. Set from the top down: the column stands when a block comes into the line.
+        for (int y = Y + 50; y >= Y + 7; y--) for (int x = 48; x <= 52; x++) for (int z = 8; z <= 12; z++) level.setBlockAndUpdate(new BlockPos(x, y, z), Blocks.STONE.defaultBlockState());
         final ServerPlayer player = server.getPlayerList().getPlayer(playerId);
         if (player != null) {
             player.getAbilities().flying = true;
