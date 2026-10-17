@@ -196,14 +196,16 @@ public final class ColonyRoutes extends SavedData {
             if (part.length != 3 || !part[0].equals(dimension)) continue;
             final int a = Integer.parseInt(part[1]), b = Integer.parseInt(part[2]);
             for (final ShipClass ship : classesOf(level, net, a)) {
+                // The shortest open way; only when there is none, the shortest one there would be if nothing were in the way.
                 List<BlockPos> best = List.of();
-                double shortest = Double.MAX_VALUE;
-                for (final BlockPos from : padsFor(level, net, a, ship)) for (final BlockPos to : padsFor(level, net, b, ship)) {
-                    List<BlockPos> way = net.route(from, to, ship);
-                    if (way.size() < 2) way = net.routeIfClear(from, to, ship);
-                    if (way.size() >= 2 && net.length(way) < shortest) {
-                        shortest = net.length(way);
-                        best = way;
+                for (int pass = 0; pass < 2 && best.isEmpty(); pass++) {
+                    double shortest = Double.MAX_VALUE;
+                    for (final BlockPos from : padsFor(level, net, a, ship)) for (final BlockPos to : padsFor(level, net, b, ship)) {
+                        final List<BlockPos> way = pass == 0 ? net.route(from, to, ship) : net.routeIfClear(from, to, ship);
+                        if (way.size() >= 2 && net.length(way) < shortest) {
+                            shortest = net.length(way);
+                            best = way;
+                        }
                     }
                 }
                 for (int i = 1; i < best.size(); i++) {
@@ -236,13 +238,24 @@ public final class ColonyRoutes extends SavedData {
             if (level == null) continue;
             final int a = Integer.parseInt(part[1]), b = Integer.parseInt(part[2]);
             final IColony one = IColonyManager.getInstance().getColonyByDimension(a, level.dimension()), two = IColonyManager.getInstance().getColonyByDimension(b, level.dimension());
-            if (one == null || two == null) continue;
+            if (one == null || two == null) {
+                // One of the two colonies is gone (taken down): the route goes with it. (Only once the colonies of that
+                // dimension are known: never while they are not loaded yet.)
+                if (!IColonyManager.getInstance().getColonies(level).isEmpty()) {
+                    WAS_OPEN.remove(pair);
+                    routes.pairs.remove(pair);
+                    routes.setDirty();
+                }
+                continue;
+            }
             final boolean open = anyOpen(level, a, b);
             final Boolean was = WAS_OPEN.put(pair, open);
             if (was == null || was == open) continue;
-            final String key = MESSAGE + (open ? "open" : "closed");
-            MessageUtils.format(key, one.getName(), two.getName()).sendTo(one).forManagers();
-            MessageUtils.format(key, one.getName(), two.getName()).sendTo(two).forManagers();
+            // Once to each player: one who manages both colonies is told once.
+            final Map<java.util.UUID, net.minecraft.world.entity.player.Player> players = new java.util.LinkedHashMap<>();
+            for (final net.minecraft.world.entity.player.Player player : one.getImportantMessageEntityPlayers()) players.put(player.getUUID(), player);
+            for (final net.minecraft.world.entity.player.Player player : two.getImportantMessageEntityPlayers()) players.put(player.getUUID(), player);
+            if (!players.isEmpty()) MessageUtils.format(MESSAGE + (open ? "open" : "closed"), one.getName(), two.getName()).sendTo(new ArrayList<>(players.values()));
         }
     }
 

@@ -184,7 +184,7 @@
   "com.airline.gui.wants.desc": "What each colony wants",
   "com.airline.gui.wants.own": "(this colony)",
   "com.airline.gui.wants.nothing": "Wants nothing.",
-  "com.airline.gui.wants.line": "%s x %s (%s on the way)",
+  "com.airline.gui.wants.line": "%s x %s (%s covered)",
   "com.airline.gui.wants.more": "%s more",
   "com.airline.gui.aircraft.none": "This airfield has no aircraft yet. Choose a design below to have one built (the colony's builders put it up on the airfield's landing pad).",
   "com.airline.gui.aircraft.fleet": "Aircraft homed at the colony's anchorages: %s",

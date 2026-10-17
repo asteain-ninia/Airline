@@ -184,7 +184,7 @@
   "com.airline.gui.wants.desc": "どの村が何を欲しがっているか",
   "com.airline.gui.wants.own": "(この村)",
   "com.airline.gui.wants.nothing": "欲しがっている品はありません。",
-  "com.airline.gui.wants.line": "%s × %s(運搬中 %s)",
+  "com.airline.gui.wants.line": "%s × %s(手配済み %s)",
   "com.airline.gui.wants.more": "ほか %s 品",
   "com.airline.gui.aircraft.none": "この飛行場の機体はまだありません。下で型を選んで建造を頼めます。村の建築家が、飛行場の発着場の上に組み立てます。",
   "com.airline.gui.aircraft.fleet": "泊地を母港にする所属機: %s 機",

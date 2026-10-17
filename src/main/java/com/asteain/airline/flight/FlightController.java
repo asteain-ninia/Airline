@@ -1490,13 +1490,17 @@ final class FlightController {
     static final int ROUND = 3;
 
     /** The colonies of a round in the order of the shortest way round, from home and back; when no order has ways all round, the last-ranked colony is left out. */
-    private static List<Cargo.Order> shortestRound(RouteNetwork net, BlockPos home, List<Cargo.Order> all, com.asteain.airline.route.ShipClass cls) {
+    private static List<Cargo.Order> shortestRound(ServerLevel level, RouteNetwork net, BlockPos home, List<Cargo.Order> all, com.asteain.airline.route.ShipClass cls) {
         for (int n = all.size(); n > 1; n--) {
             List<Cargo.Order> best = null;
             double shortest = Double.POSITIVE_INFINITY;
             for (final List<Cargo.Order> order : orders(all.subList(0, n))) {
                 double length = leg(net, home, order.get(0).pad(), cls) + leg(net, order.get(order.size() - 1).pad(), home, cls);
-                for (int i = 0; i + 1 < order.size(); i++) length += leg(net, order.get(i).pad(), order.get(i + 1).pad(), cls);
+                for (int i = 0; i + 1 < order.size(); i++) {
+                    // From one colony of the round to the next only where a route is drawn between the two (2026-10-18).
+                    final boolean drawn = com.asteain.airline.route.ColonyRoutes.drawn(level, order.get(i).to().getColony().getID(), order.get(i + 1).to().getColony().getID());
+                    length += drawn ? leg(net, order.get(i).pad(), order.get(i + 1).pad(), cls) : Double.POSITIVE_INFINITY;
+                }
                 if (length < shortest) {
                     shortest = length;
                     best = order;
@@ -1667,7 +1671,7 @@ final class FlightController {
             final List<Cargo.Order> all = new ArrayList<>(List.of(order));
             all.addAll(Cargo.moreStops(level, be, net, rt.craft.id(), order, ROUND - 1));
             if (all.size() > 1) {
-                final List<Cargo.Order> round = shortestRound(net, be.home, all, shipClass(be));
+                final List<Cargo.Order> round = shortestRound(level, net, be.home, all, shipClass(be));
                 if (round.size() > 1) {
                     for (final Cargo.Order stop : round) be.stops.add(new AircraftBlockEntity.Stop(stop.to().getColony().getID()));
                     first = round.get(0);
