@@ -268,6 +268,7 @@ final class FlightSuite {
             case "cargo" -> cargo(s, level);
             case "carry" -> carry(s, level);
             case "tour" -> tour(s, level);
+            case "routes" -> routes(s, level);
             case "traffic" -> traffic(s, level);
             case "three" -> three(s, level);
             case "detour" -> detour(s, level);
@@ -2152,6 +2153,76 @@ final class FlightSuite {
 
     private static int hands(Field a) {
         return a.pilot instanceof com.minecolonies.api.entity.citizen.AbstractEntityCitizen citizen ? iron(citizen.getInventoryCitizen()) : 0;
+    }
+
+    /** The translation key of a status line of the routes tab. */
+    private static String statusKey(com.asteain.airline.route.ColonyRoutes.ClassStatus status) {
+        return status.text().getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents t ? t.getKey().replace("com.airline.gui.routes.", "") : "?";
+    }
+
+    /**
+     * Routes drawn by players (2026-10-18, the user's ruling: routes between colonies are drawn in the airfield's window,
+     * the automatic ones are not used): a colony with goods wanted elsewhere sends nothing until a route is drawn there;
+     * the routes tab tells, for each class, whether a route can be flown or why not (one place): too far with no buoys,
+     * no place there that takes the class, something in the way.
+     */
+    private static void routes(Script s, ServerLevel level) {
+        final WantLedger ledger = WantLedger.get(level.getServer());
+        final Field a = new Field(HUT_A);
+        addField(s, level, a, "routes A");
+        final Port b = new Port(HUT_A.offset(88, 0, 0)), c = new Port(HUT_A.offset(300, 0, 0));
+        addPort(s, level, b, "routes B", true);
+        addPort(s, level, c, "routes C", false);
+        final IColony[] d = new IColony[1];
+        final BlockPos[] stone = new BlockPos[1];
+        s.step("routes: no route drawn yet; 64 iron on A's export racks, B wants them; colony D has no airfield", () -> {
+            com.asteain.airline.route.ColonyRoutes.allForChecks(false);
+            Fixture.stock(equip(level, a), Items.IRON_INGOT, 64);
+            ledger.set(WantLedger.Key.of(b.colony), Items.IRON_INGOT, 64);
+            d[0] = Fixture.create(level, HUT_A.offset(0, 0, 88), "Airline routes D");
+            Fixture.townHall(d[0], HUT_A.offset(0, 0, 88));
+            watch(s, a, "routes");
+        });
+        s.settle("routes: a while with no route", 600);
+        s.step("routes: without a route nothing is flown; the tab tells why each colony can or cannot be flown to", () -> {
+            s.soft("routes / with no route drawn to B the aircraft stays parked and loads nothing", a.aircraft.phase == Phase.PARKED && !a.aircraft.cargo, "doing " + a.aircraft.phase + " | " + a.aircraft.note);
+            final List<com.asteain.airline.route.ColonyRoutes.ClassStatus> toB = com.asteain.airline.route.ColonyRoutes.status(level, a.colony.getID(), b.colony.getID());
+            final List<com.asteain.airline.route.ColonyRoutes.ClassStatus> toC = com.asteain.airline.route.ColonyRoutes.status(level, a.colony.getID(), c.colony.getID());
+            final List<com.asteain.airline.route.ColonyRoutes.ClassStatus> toD = com.asteain.airline.route.ColonyRoutes.status(level, a.colony.getID(), d[0].getID());
+            s.note("OBS routes: to B " + toB.get(0).text().getString() + " | to C " + toC.get(0).text().getString() + " | to D " + toD.get(0).text().getString());
+            s.soft("routes / to B (88 blocks): small aircraft can fly it", toB.size() == 1 && toB.get(0).open() && statusKey(toB.get(0)).equals("open"), statusKey(toB.get(0)));
+            s.soft("routes / to C (300 blocks, no buoy): too far to fly straight, and no buoys join them", !toC.get(0).open() && statusKey(toC.get(0)).equals("too_far"), statusKey(toC.get(0)));
+            s.soft("routes / to D (no airfield): nothing there takes the aircraft", !toD.get(0).open() && statusKey(toD.get(0)).equals("no_berth"), statusKey(toD.get(0)));
+            // Stone in the way of the line A - B, half way, at its height.
+            final net.minecraft.world.phys.Vec3 high = RouteNetwork.get(level).waypoint(a.pad);
+            stone[0] = BlockPos.containing((a.pad.getX() + b.pad.getX()) / 2.0, high.y, (a.pad.getZ() + b.pad.getZ()) / 2.0);
+            for (int y = -1; y <= 1; y++) level.setBlockAndUpdate(stone[0].above(y), Blocks.STONE.defaultBlockState());
+        });
+        s.until("routes: the stone is found on the line A - B", () -> {}, () -> {
+            final Edge edge = RouteNetwork.get(level).edge(a.pad, b.pad);
+            return edge != null && edge.state() == State.BLOCKED;
+        }, 2400);
+        s.step("routes: the reason names the stone and one place", () -> {
+            final com.asteain.airline.route.ColonyRoutes.ClassStatus toB = com.asteain.airline.route.ColonyRoutes.status(level, a.colony.getID(), b.colony.getID()).get(0);
+            final String text = toB.text().getString();
+            s.note("OBS routes: blocked: " + text);
+            s.soft("routes / with stone in the way the tab tells what is in the way, and where (one place)", !toB.open() && statusKey(toB).equals("blocked") && text.contains(Blocks.STONE.getName().getString()),
+                    statusKey(toB) + ": " + text);
+            for (int y = -1; y <= 1; y++) level.setBlockAndUpdate(stone[0].above(y), Blocks.AIR.defaultBlockState());
+        });
+        s.until("routes: the line is clear again", () -> {}, () -> {
+            final Edge edge = RouteNetwork.get(level).edge(a.pad, b.pad);
+            return edge != null && edge.state() == State.CLEAR;
+        }, 2400);
+        s.step("routes: a route to B is drawn", () -> com.asteain.airline.route.ColonyRoutes.get(level.getServer()).draw(level, a.colony.getID(), b.colony.getID()));
+        s.until("routes: with the route drawn, the flight to B is prepared", () -> {}, () -> a.aircraft.cargo && a.aircraft.freightColony == b.colony.getID(), 2400);
+        s.step("routes: result", () -> {
+            s.soft("routes / once the route is drawn, the iron is loaded for B", a.aircraft.cargo && a.aircraft.freightColony == b.colony.getID(), "doing " + a.aircraft.phase + " | " + a.aircraft.note);
+            com.asteain.airline.route.ColonyRoutes.get(level.getServer()).remove(level, a.colony.getID(), b.colony.getID());
+            s.soft("routes / the route can be taken off again", !com.asteain.airline.route.ColonyRoutes.drawn(level, a.colony.getID(), b.colony.getID()), "");
+            com.asteain.airline.route.ColonyRoutes.allForChecks(true);
+            s.clearMonitors();
+        });
     }
 
     /**

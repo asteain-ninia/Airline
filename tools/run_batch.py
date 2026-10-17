@@ -28,7 +28,7 @@ TASKS = {"runAirfield": ("run-airfield", 1500), "runAirfieldReload": ("run-airfi
 # 全部の場面(2026-10-15 の c120m の並びに、設計図から建てる場面 facilities を足した)。中型機の場面は、中型機 stratus で飛ばす
 # (それまでは、こかぜに中型の印を付けただけの代役 ColonyPatchServer/design/classes-2026-10-14/kokaze_medium.json)。
 ALL = (["classes@stratus", "facilities@stratus", "items", "runNetwork", "runAirfield", "runAirfieldReload", "runAirfieldRemoved",
-        "yard", "trip", "direct", "three", "traffic", "detour", "cargo", "carry", "tour", "far", "faults", "crash", "ground", "lost", "hindered", "fuel", "fetch",
+        "yard", "trip", "direct", "three", "traffic", "detour", "cargo", "carry", "tour", "routes", "far", "faults", "crash", "ground", "lost", "hindered", "fuel", "fetch",
         "reopen1", "reopen2", "reopen3", "reopenc1", "reopenc2", "reopenc3", "reopenc4"]
        + [scene + "@small" for scene in ("trip", "far", "fuel", "traffic", "yard", "cargo", "crash")] + ["trip@whitesail"])
 

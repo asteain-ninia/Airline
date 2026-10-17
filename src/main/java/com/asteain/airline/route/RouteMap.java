@@ -33,14 +33,16 @@ public final class RouteMap {
     private RouteMap() {
     }
 
-    /** The lines of a dimension now. */
+    /** The lines of a dimension now that a map shows: those of the routes players drew (2026-10-18). */
     public static List<Line> lines(ServerLevel level) {
         final List<Line> lines = new ArrayList<>();
-        for (final RouteNetwork.Edge edge : RouteNetwork.get(level).edges()) {
+        for (final RouteNetwork.Edge edge : ColonyRoutes.drawnLines(level)) {
             byte open = -1;
             for (final ShipClass c : ShipClass.values()) if (edge.opens(c)) open = (byte) c.ordinal();
             lines.add(new Line(edge.a, edge.b, open, (byte) edge.state().ordinal()));
         }
+        // In a fixed order: what was sent is compared with what would be sent now.
+        lines.sort(java.util.Comparator.comparingLong((Line l) -> l.a().asLong()).thenComparingLong(l -> l.b().asLong()));
         return lines;
     }
 

@@ -809,8 +809,8 @@ public final class RouteNetwork extends SavedData {
             }
         }
         if (now.equals(linked)) return;
-        for (final Pair pair : now) if (!linked.contains(pair)) AirLinks.changed(level, pair.a(), pair.b(), true, lengths.get(pair));
-        for (final Pair pair : linked) if (!now.contains(pair)) AirLinks.changed(level, pair.a(), pair.b(), false, 0);
+        // (Colonies are told about the routes their players drew, by ColonyRoutes, once for two colonies: 2026-10-18. The
+        // notices for every pair of airfields that came near each other, in the colonies' names only, were confusing.)
         linked.clear();
         linked.addAll(now);
         setDirty();
@@ -932,6 +932,26 @@ public final class RouteNetwork extends SavedData {
      * caller's question.
      */
     public List<BlockPos> route(BlockPos from, BlockPos to, ShipClass ship, Collection<Edge> without) {
+        return search(from, to, edge -> edge.opens(ship) && !without.contains(edge));
+    }
+
+    /**
+     * The way there would be if no line were blocked: over every line made for this class (whatever was found on it).
+     * For telling why there is no way (2026-10-17: a colony's routes are drawn by players, and when one cannot be flown
+     * the reason is shown): the first line on it that this class may not fly is what stands in the way.
+     */
+    public List<BlockPos> routeIfClear(BlockPos from, BlockPos to, ShipClass ship) {
+        return search(from, to, edge -> edge.serves().atLeast(ship));
+    }
+
+    /** A single line goes back to "not verified" and is looked at again (a block that kept it closed may be gone). */
+    public void recheck(Edge edge) {
+        edge.version++;
+        set(edge, State.UNVERIFIED, null);
+        enqueue(edge);
+    }
+
+    private List<BlockPos> search(BlockPos from, BlockPos to, java.util.function.Predicate<Edge> usable) {
         if (!nodes.containsKey(from) || !nodes.containsKey(to)) return List.of();
         final Map<BlockPos, Double> best = new HashMap<>();
         final Map<BlockPos, BlockPos> cameFrom = new HashMap<>();
@@ -945,7 +965,7 @@ public final class RouteNetwork extends SavedData {
             if (here.pos().equals(to)) break;
             if (!here.pos().equals(from) && nodes.get(here.pos()).kind() == Kind.AIRFIELD) continue;
             for (final Edge edge : around.getOrDefault(here.pos(), List.of())) {
-                if (!edge.opens(ship) || without.contains(edge)) continue;
+                if (!usable.test(edge)) continue;
                 final BlockPos next = edge.other(here.pos());
                 final double distance = here.distance() + edge.length();
                 if (distance < best.getOrDefault(next, Double.MAX_VALUE)) {

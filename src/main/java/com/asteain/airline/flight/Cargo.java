@@ -378,6 +378,7 @@ public final class Cargo {
         final com.asteain.airline.route.ShipClass cls = FlightController.shipClass(be);
         for (final WantLedger.Key other : ledger.keys()) {
             if (other.equals(self) || other.colony() == first.to().getColony().getID() || !other.dimension().equals(self.dimension())) continue;
+            if (!com.asteain.airline.route.ColonyRoutes.drawn(level, self.colony(), other.colony())) continue;
             int ready = 0;
             for (final Map.Entry<Item, Integer> stock : onRacks.entrySet()) ready += Math.min(stock.getValue(), ledger.net(other, stock.getKey()));
             if (ready <= 0 || facilitiesOf(level, other.colony()).isEmpty()) continue;
@@ -411,6 +412,8 @@ public final class Cargo {
         final com.asteain.airline.route.ShipClass cls = FlightController.shipClass(be);
         for (final WantLedger.Key other : ledger.keys()) {
             if (other.equals(self) || !other.dimension().equals(self.dimension())) continue;
+            // Only to colonies a route is drawn to (2026-10-18: routes are drawn by players).
+            if (!com.asteain.airline.route.ColonyRoutes.drawn(level, self.colony(), other.colony())) continue;
             int ready = 0;
             for (final Map.Entry<Item, Integer> stock : onRacks.entrySet()) ready += Math.min(stock.getValue(), ledger.net(other, stock.getKey()));
             if (ready <= 0 || (best != null && ready <= best.ready())) continue;
@@ -433,7 +436,7 @@ public final class Cargo {
         // anything itself, so it is looked for among the colonies, not in the ledger; and its racks can only be looked
         // at while its airfield is loaded.
         for (final IColony colony : IColonyManager.getInstance().getColonies(level)) {
-            if (colony == home.getColony()) continue;
+            if (colony == home.getColony() || !com.asteain.airline.route.ColonyRoutes.drawn(level, home.getColony().getID(), colony.getID())) continue;
             for (final BuildingAirfield there : facilitiesOf(level, colony.getID())) {
                 if (!level.isLoaded(there.getPosition())) continue;
                 int ready = 0;

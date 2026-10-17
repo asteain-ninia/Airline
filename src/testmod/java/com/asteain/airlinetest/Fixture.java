@@ -47,6 +47,8 @@ final class Fixture {
     static void reachAsLaidOut() {
         airfieldReachChunks(3, 3, 3, 3, 3);
         largeMapChunks(0);
+        // Every pair of colonies counts as having a route drawn (2026-10-18; the scene of the drawn routes switches it off).
+        com.asteain.airline.route.ColonyRoutes.allForChecks(true);
     }
 
     /** The side of a large map in chunks (airfields reach each other by large maps); 0 switches that rule off. */

@@ -182,6 +182,11 @@ public final class Airline {
     /** The aircraft tab (building an aircraft is asked for here, and only here). Made after the timetable, for the same reason. */
     public static final BuildingEntry.ModuleProducer<com.asteain.airline.colony.AircraftModule, com.asteain.airline.colony.AircraftModuleView> AIRCRAFT_TAB =
             new BuildingEntry.ModuleProducer<>(MOD_ID + "_aircraft", com.asteain.airline.colony.AircraftModule::new, () -> com.asteain.airline.colony.AircraftModuleView::new);
+    /** The routes tab (2026-10-18: routes to other colonies are drawn here) and the requests tab (what every colony wants). After the ones above. */
+    public static final BuildingEntry.ModuleProducer<com.asteain.airline.colony.RoutesModule, com.asteain.airline.colony.RoutesModuleView> ROUTES_TAB =
+            new BuildingEntry.ModuleProducer<>(MOD_ID + "_routes", com.asteain.airline.colony.RoutesModule::new, () -> com.asteain.airline.colony.RoutesModuleView::new);
+    public static final BuildingEntry.ModuleProducer<com.asteain.airline.colony.WantsModule, com.asteain.airline.colony.WantsModuleView> WANTS_TAB =
+            new BuildingEntry.ModuleProducer<>(MOD_ID + "_wants", com.asteain.airline.colony.WantsModule::new, () -> com.asteain.airline.colony.WantsModuleView::new);
 
     public static final DeferredHolder<BuildingEntry, BuildingEntry> AIRFIELD = BUILDINGS.register(BUILDING_NAME, () -> new BuildingEntry.Builder()
             .setBuildingBlock(AIRFIELD_HUT.get())
@@ -192,6 +197,8 @@ public final class Airline {
             .addBuildingModuleProducer(EXPORT_STOCK)
             .addBuildingModuleProducer(TIMETABLE)
             .addBuildingModuleProducer(AIRCRAFT_TAB)
+            .addBuildingModuleProducer(ROUTES_TAB)
+            .addBuildingModuleProducer(WANTS_TAB)
             .createBuildingEntry());
     /** The medium and the large airfield: the same pages as the small one. */
     public static final DeferredHolder<BuildingEntry, BuildingEntry> MEDIUM_AIRFIELD = BUILDINGS.register(com.asteain.airline.route.Facility.MEDIUM_AIRFIELD.schematic, () -> new BuildingEntry.Builder()
@@ -203,6 +210,8 @@ public final class Airline {
             .addBuildingModuleProducer(EXPORT_STOCK)
             .addBuildingModuleProducer(TIMETABLE)
             .addBuildingModuleProducer(AIRCRAFT_TAB)
+            .addBuildingModuleProducer(ROUTES_TAB)
+            .addBuildingModuleProducer(WANTS_TAB)
             .createBuildingEntry());
     public static final DeferredHolder<BuildingEntry, BuildingEntry> LARGE_AIRFIELD = BUILDINGS.register(com.asteain.airline.route.Facility.LARGE_AIRFIELD.schematic, () -> new BuildingEntry.Builder()
             .setBuildingBlock(LARGE_AIRFIELD_HUT.get())
@@ -213,6 +222,8 @@ public final class Airline {
             .addBuildingModuleProducer(EXPORT_STOCK)
             .addBuildingModuleProducer(TIMETABLE)
             .addBuildingModuleProducer(AIRCRAFT_TAB)
+            .addBuildingModuleProducer(ROUTES_TAB)
+            .addBuildingModuleProducer(WANTS_TAB)
             .createBuildingEntry());
     /**
      * The anchorage: no pilot, no aircraft page (it builds none) and no export list: it has no racks or store of its own,
@@ -266,6 +277,9 @@ public final class Airline {
         NeoForge.EVENT_BUS.addListener(com.asteain.airline.route.RouteMap::onLogin);
         NeoForge.EVENT_BUS.addListener(com.asteain.airline.route.RouteMap::onChangedDimension);
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStartedEvent event) -> com.asteain.airline.route.RouteMap.forget());
+        // The routes between colonies that players draw (2026-10-18): a route that became open or closed is told to both colonies.
+        NeoForge.EVENT_BUS.addListener(com.asteain.airline.route.ColonyRoutes::onServerTick);
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStartedEvent event) -> com.asteain.airline.route.ColonyRoutes.forget());
     }
 
     /** What the client sends to the server (the aircraft tab's requests), and what the server sends (the lines of the network, for the map). */
@@ -275,6 +289,8 @@ public final class Airline {
                 com.asteain.airline.network.AircraftOrderPayload::handle);
         registrar.playToClient(com.asteain.airline.network.RouteMapPayload.TYPE, com.asteain.airline.network.RouteMapPayload.STREAM_CODEC,
                 com.asteain.airline.network.RouteMapPayload::handle);
+        registrar.playToServer(com.asteain.airline.network.RouteOrderPayload.TYPE, com.asteain.airline.network.RouteOrderPayload.STREAM_CODEC,
+                com.asteain.airline.network.RouteOrderPayload::handle);
     }
 
     public static ResourceLocation id(String path) {
