@@ -5,7 +5,7 @@
     <list id="colonies" size="164 196" pos="13 28">
         <box size="100% 100" linewidth="1">
             <text id="name" size="155 11" pos="3 2" color="black"/>
-            <text id="wants" size="155 84" pos="3 14" color="black" wrap="true"/>
+            <text id="wants" size="155 84" pos="3 14" color="black" wrap="true" textalign="TOP_LEFT"/>
         </box>
     </list>
 </window>

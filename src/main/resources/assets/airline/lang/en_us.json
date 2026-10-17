@@ -163,7 +163,7 @@
   "com.airline.gui.airfield.wants": "Requests",
   "com.airline.gui.routes.desc": "Routes to other colonies",
   "com.airline.gui.routes.none": "There are no other colonies.",
-  "com.airline.gui.routes.distance": "%s blocks away",
+  "com.airline.gui.routes.distance": " (%s blocks away)",
   "com.airline.gui.routes.drawn": "[route]",
   "com.airline.gui.routes.not_drawn": "[no route]",
   "com.airline.gui.routes.draw": "Draw route",

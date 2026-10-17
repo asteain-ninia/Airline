@@ -61,9 +61,8 @@ public class RoutesWindow extends AbstractModuleWindow<RoutesModuleView> {
     }
 
     private void fill(RoutesModuleView.Row row, Pane pane) {
-        pane.findPaneOfTypeByID("name", Text.class).setText(Component.literal(row.name()).append("  ")
-                .append(Component.translatable(KEY + "distance", row.distance())).append("  ")
-                .append(Component.translatable(KEY + (row.drawn() ? "drawn" : "not_drawn"))));
+        // (Whether a route is drawn shows on the button: "draw" or "take off".)
+        pane.findPaneOfTypeByID("name", Text.class).setText(Component.literal(row.name()).append(Component.translatable(KEY + "distance", row.distance())));
         final MutableComponent lines = Component.empty();
         for (int i = 0; i < row.lines().size(); i++) {
             if (i > 0) lines.append("\n");

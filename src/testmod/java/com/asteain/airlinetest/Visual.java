@@ -46,7 +46,10 @@ public final class Visual {
     /** The flat world's ground is at -61; the buoys float well above it. */
     private static final int Y = -40;
 
-    private static boolean creating, prepared, finished;
+    private static boolean creating, prepared, finished, linesOk;
+    private static int tabs;
+    /** The airfield of the player's colony, whose window is opened. */
+    private static BlockPos airfield;
     private static int ticks;
     private static final List<String> NOTES = new ArrayList<>();
 
@@ -110,8 +113,22 @@ public final class Visual {
             final String counts = String.format("lines sent to the client: %d (blocked %d, small %d, medium %d, large %d; still unverified %d)",
                     lines.size(), byOpen[0], byOpen[1], byOpen[2], byOpen[3], unverified);
             NOTES.add(counts);
-            final boolean ok = lines.size() >= 5 && byOpen[0] >= 1 && byOpen[1] >= 1 && byOpen[2] >= 1 && byOpen[3] >= 1;
-            finish(mc, (ok ? "PASS " : "FAIL ") + "two screenshots taken; the pictures need a look. " + String.join(" | ", NOTES));
+            linesOk = lines.size() >= 5 && byOpen[0] >= 1 && byOpen[1] >= 1 && byOpen[2] >= 1 && byOpen[3] >= 1;
+        }
+        // The airfield's window (2026-10-18): the routes tab and the requests tab.
+        if (ticks == 530) {
+            // Into the colony: MineColonies sends its buildings to the players near it.
+            final UUID player = mc.player.getUUID();
+            final MinecraftServer server = mc.getSingleplayerServer();
+            server.execute(() -> server.getPlayerList().getPlayer(player).connection.teleport(airfield.getX() - 4.5, airfield.getY() + 2, airfield.getZ() + 0.5, 0f, 10f));
+        }
+        if (ticks == 640) tab(mc, com.asteain.airline.colony.RoutesModuleView.class);
+        if (ticks == 700) capture(mc, "airline-03-routes-tab.png");
+        if (ticks == 720) tab(mc, com.asteain.airline.colony.WantsModuleView.class);
+        if (ticks == 780) capture(mc, "airline-04-wants-tab.png");
+        if (ticks == 800) {
+            mc.setScreen(null);
+            finish(mc, (linesOk && tabs == 2 ? "PASS " : "FAIL ") + "four screenshots taken; the pictures need a look. " + String.join(" | ", NOTES));
         }
     }
 
@@ -135,7 +152,60 @@ public final class Visual {
             player.onUpdateAbilities();
             player.connection.teleport(50.5, Y + 30, 20.5, 0f, 80f);
         }
+        colonies(server, level, player);
         NOTES.add("buoys at " + a.toShortString() + " (1), " + b.toShortString() + " (1), " + c.toShortString() + " (2), " + d.toShortString() + " (3), " + e.toShortString() + " (3); stone in the way of a-d");
+    }
+
+    /**
+     * Two colonies with an airfield each: the player's own (its window is opened) and another 120 blocks away that wants
+     * some iron and bread; a third one without an airfield.
+     */
+    private static void colonies(MinecraftServer server, ServerLevel level, ServerPlayer player) {
+        try {
+            final BlockPos own = new BlockPos(30, -60, 100), other = new BlockPos(150, -60, 100), third = new BlockPos(30, -60, 260);
+            final com.minecolonies.api.colony.IColony a = com.minecolonies.api.colony.IColonyManager.getInstance().createColony(level, own, player, "空路の村", "Medieval Oak");
+            Fixture.townHall(a, own);
+            airfield = own.offset(8, 0, 0);
+            final net.minecraft.world.level.block.state.BlockState hut = Airline.AIRFIELD_HUT.get().defaultBlockState();
+            level.setBlockAndUpdate(airfield, hut);
+            Airline.AIRFIELD_HUT.get().setPlacedBy(level, airfield, hut, player, new net.minecraft.world.item.ItemStack(Airline.AIRFIELD_HUT.get()));
+            a.getServerBuildingManager().getBuilding(airfield).setBuildingLevel(1);
+            final com.minecolonies.api.colony.IColony b = Fixture.create(level, other, "となり村");
+            Fixture.townHall(b, other);
+            Fixture.placeHut(level, b, Airline.AIRFIELD_HUT.get(), other.offset(8, 0, 0)).setBuildingLevel(1);
+            final com.minecolonies.api.colony.IColony c = Fixture.create(level, third, "遠い村");
+            Fixture.townHall(c, third);
+            final com.asteain.airline.ledger.WantLedger ledger = com.asteain.airline.ledger.WantLedger.get(server);
+            ledger.set(com.asteain.airline.ledger.WantLedger.Key.of(b), net.minecraft.world.item.Items.IRON_INGOT, 64);
+            ledger.set(com.asteain.airline.ledger.WantLedger.Key.of(b), net.minecraft.world.item.Items.BREAD, 32);
+            NOTES.add("colonies: own " + a.getID() + ", other " + b.getID() + ", far " + c.getID());
+        } catch (Throwable t) {
+            LOGGER.error("[AIRLINEVISUAL] the colonies could not be made", t);
+            NOTES.add("colonies not made: " + t);
+        }
+    }
+
+    /** Opens a tab of the airfield's window. */
+    private static void tab(Minecraft mc, Class<? extends com.minecolonies.api.colony.buildings.modules.IBuildingModuleView> type) {
+        try {
+            final com.minecolonies.api.colony.buildings.views.IBuildingView view = com.minecolonies.api.colony.IColonyManager.getInstance().getBuildingView(mc.level.dimension(), airfield);
+            if (view == null) {
+                NOTES.add("no view of the airfield");
+                return;
+            }
+            final com.minecolonies.api.colony.buildings.modules.IBuildingModuleView module = view.getModuleViewByType(type);
+            if (module == null) {
+                NOTES.add("no " + type.getSimpleName());
+                return;
+            }
+            mc.setScreen(null);
+            module.getWindow().open();
+            tabs++;
+            NOTES.add("opened " + type.getSimpleName());
+        } catch (Throwable t) {
+            LOGGER.error("[AIRLINEVISUAL] the tab could not be opened", t);
+            NOTES.add("tab not opened: " + t);
+        }
     }
 
     /** Opens the fullscreen map (or leaves it open) centred over the buoys. */
