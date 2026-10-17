@@ -160,13 +160,12 @@ public final class ColonyRoutes extends SavedData {
             final BlockPos middle = BlockPos.containing((edge.a.getX() + edge.b.getX()) / 2.0, (edge.a.getY() + edge.b.getY()) / 2.0, (edge.a.getZ() + edge.b.getZ()) / 2.0);
             return edge.hasUnseenParts() ? Component.translatable(STATUS + "unloaded", name, at(middle)) : Component.translatable(STATUS + "checking", name);
         }
-        // A landing pad the line crosses too low (for the small class, or for this class only).
-        final BlockPos pad = edge.barredBy();
-        if (pad != null || (edge.closedFrom() != null && edge.blockedFromAt() == null)) {
-            final BlockPos where = pad != null ? pad : edge.blockedAt();
-            final BuildingAirfield airfield = where == null ? null : Cargo.airfieldAt(level, where);
+        // A landing pad on the way that the line would have to be raised too far to pass over (for the small class, or for this class).
+        final BlockPos pad = edge.barredBy() != null ? edge.barredBy() : edge.barredFrom() != null && ship.atLeast(edge.barredFrom()) ? edge.barredFromAt() : null;
+        if (pad != null) {
+            final BuildingAirfield airfield = Cargo.airfieldAt(level, pad);
             final String colony = airfield == null ? "?" : airfield.getColony().getName();
-            return where == null ? Component.translatable(STATUS + "checking", name) : Component.translatable(STATUS + "crosses_pad", name, colony, at(where));
+            return Component.translatable(STATUS + "crosses_pad", name, colony, RouteRules.lineRaiseMax(), at(pad));
         }
         final BlockPos block = edge.state() == RouteNetwork.State.BLOCKED ? edge.blockedAt() : edge.blockedFromAt();
         if (block == null) return Component.translatable(STATUS + "checking", name);

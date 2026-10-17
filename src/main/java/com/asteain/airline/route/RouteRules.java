@@ -82,6 +82,15 @@ public final class RouteRules {
                     "so that the airfield's own building (up to 8 blocks lower than this) is not in its way.",
                     "At least so high that a line passes a block over a small aircraft standing on another pad (18 with the margin as it comes).")
             .defineInRange("airfieldWaypointHeight", 18, 2, 64);
+    /**
+     * Lines are level and pass over what lies on their way (2026-10-18, the user: "航路、ある程度の障害物はうまいこと避ける
+     * んじゃダメですかね？", and "そもそも離発着が衝突するの自体が設計の失敗では？"): a line runs at the height of the higher of
+     * its two ends and is raised, by this much at most, until it passes over the landing pads and the blocks below it.
+     */
+    private static final ModConfigSpec.IntValue LINE_RAISE = BUILDER
+            .comment("Lines are level, at the height of the higher of their two ends. One that would pass too low over a landing pad, or through blocks",
+                    "(a building, a tree), is raised until it passes over them, by this many blocks at most; more than that, and it counts as blocked.")
+            .defineInRange("lineRaiseMax", 32, 0, 128);
     /** Room added around the aircraft's outline to get the tube that has to be free of solid blocks. */
     private static final ModConfigSpec.DoubleValue TUBE_MARGIN = BUILDER
             .comment("Room added around the aircraft's outline, in blocks, to get the tube that must be free of solid blocks.")
@@ -211,6 +220,15 @@ public final class RouteRules {
         return Math.max(AIRFIELD_WAYPOINT_HEIGHT.get(), (int) Math.ceil(padClearance() + 0.5));
     }
 
+    public static int lineRaiseMax() {
+        return LINE_RAISE.get();
+    }
+
+    /** The setting itself, for the tests (a line that may not be raised is blocked by what is in it). */
+    public static ModConfigSpec.IntValue lineRaiseSetting() {
+        return LINE_RAISE;
+    }
+
     public static double arrivalRadius() {
         return ARRIVAL_RADIUS.get();
     }
@@ -302,9 +320,25 @@ public final class RouteRules {
 
     /** ... over a pad made for aircraft up to {@code padClass}, for aircraft of class {@code ship}. */
     public static Tube shaft(BlockPos pad, ShipClass padClass, ShipClass ship) {
-        final Vec3 top = waypoint(pad, RouteNetwork.Kind.AIRFIELD, padClass);
-        final double bottom = pad.getY() + SHAFT_FREE_FROM + tubeHalfHeight(ship) + 0.5;
-        return new Tube(top, new Vec3(top.x, Math.min(top.y, bottom), top.z), tubeRadius(ship), tubeHalfHeight(ship));
+        return shaft(pad, padClass, ship, waypoint(pad, RouteNetwork.Kind.AIRFIELD, padClass).y);
+    }
+
+    /** ... up to the height {@code top} of a line that was raised (never lower than where the pad's lines begin). */
+    public static Tube shaft(BlockPos pad, ShipClass padClass, ShipClass ship, double top) {
+        final Vec3 point = waypoint(pad, RouteNetwork.Kind.AIRFIELD, padClass);
+        final double high = Math.max(point.y, top), bottom = pad.getY() + SHAFT_FREE_FROM + tubeHalfHeight(ship) + 0.5;
+        return new Tube(new Vec3(point.x, high, point.z), new Vec3(point.x, Math.min(high, bottom), point.z), tubeRadius(ship), tubeHalfHeight(ship));
+    }
+
+    /**
+     * Over a buoy, a line that was raised (or that is higher than the buoy's own height) has an upright shaft from where the
+     * lines pass over the buoy up to its own height: an aircraft goes up or down there, over the buoy, from one line to the
+     * next. Null when there is nothing to go up or down.
+     */
+    @org.jetbrains.annotations.Nullable
+    public static Tube buoyShaft(Vec3 point, double top, ShipClass ship) {
+        if (top - point.y < 0.5) return null;
+        return new Tube(new Vec3(point.x, top, point.z), point, tubeRadius(ship), tubeHalfHeight(ship));
     }
 
     /**
@@ -343,6 +377,15 @@ public final class RouteRules {
     /** ... for aircraft of class {@code flying}, over a pad where one of class {@code parked} may stand. */
     public static boolean grazes(Tube line, BlockPos pad, ShipClass parked, ShipClass flying) {
         return line.lowestNear(pad.getX() + 0.5, pad.getZ() + 0.5, padReach(parked, flying)) < pad.getY() + padClearance(parked, flying);
+    }
+
+    /**
+     * How far a level line has to be raised to pass over the landing pad at {@code pad} with an aircraft of class
+     * {@code parked} standing there, for aircraft of class {@code flying}; 0 when it passes high enough or not near it.
+     */
+    public static double padLift(Tube line, BlockPos pad, ShipClass parked, ShipClass flying) {
+        final double lowest = line.lowestNear(pad.getX() + 0.5, pad.getZ() + 0.5, padReach(parked, flying));
+        return lowest == Double.POSITIVE_INFINITY ? 0.0 : Math.max(0.0, pad.getY() + padClearance(parked, flying) - lowest);
     }
 
     /** Whether two points connect: their reaches overlap. Whether the line can be flown is a different question (verification). */

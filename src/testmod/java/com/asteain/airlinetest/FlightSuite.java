@@ -57,6 +57,17 @@ final class FlightSuite {
     private static final BlockPos HUT_A = new BlockPos(0, Y, 0).subtract(com.asteain.airline.route.RouteRules.PAD_FROM_HUT).offset(0, -1, -10);
     /** The lowest of three layers of a wall across a line between two landing pads (the line passes 18 above a pad's floor; the wall is in its tube). */
     private static final int WALL = Y + 13;
+
+    /**
+     * A wall across the line of the scenes (z -11 to -9) at {@code x}, from 3 below WALL up so high that a line cannot be
+     * raised over it (2026-10-18: lines pass over what is lower, by 32 at most), listed from the top down: set in that
+     * order, the column above a block stands already when the block comes into the line's tube.
+     */
+    private static BlockPos[] tallWall(int x) {
+        final List<BlockPos> all = new ArrayList<>();
+        for (int y = WALL + 36; y >= WALL - 3; y--) for (int z = -11; z <= -9; z++) all.add(new BlockPos(x, y, z));
+        return all.toArray(new BlockPos[0]);
+    }
     /** The berth (ticks on a pad after every landing) the checks run with, and the longer one of the cargo scene. */
     private static final int BERTH = 300, BERTH_LONG = 1200;
     private static final String STATE = "airline-flight-state.txt";
@@ -759,7 +770,8 @@ final class FlightSuite {
 
         // ---- 1b. lines are verified for the class they are for (the user's ruling of 2026-10-15); buoys by grade
         final BlockPos smallBuoy = hub.offset(0, 0, -100);
-        final BlockPos onlyLarge = hub.offset(30, 20, 15), inSmall = hub.offset(30, 20, 0);
+        final BlockPos onlyLarge = hub.offset(30, 20, 15);
+        final BlockPos[] shafts = new BlockPos[2];
         s.step("classes: the heights of the lines; a grade 1 buoy; something in the large aircraft's tube only", () -> {
             // Over a pad: 18 (small airfield), 23 (medium), 29 (large airfield, anchorage); over a buoy: 9, 11, 13 by grade.
             // (16, 22, 28 and 8, 10, 12 until the small aircraft became 10 high, 2026-10-15.)
@@ -776,23 +788,37 @@ final class FlightSuite {
                     toMedium != null && toMedium.serves() == ShipClass.SMALL && net.waypoint(smallBuoy).y - smallBuoy.getY() - 0.5 == 9,
                     toMedium == null ? "no line" : toMedium.serves() + ", " + (net.waypoint(smallBuoy).y - smallBuoy.getY() - 0.5));
             // On the line from the buoy to the large airfield's pad, half way, 15 to the side: in the large aircraft's tube (17), not in the medium one's (12).
+            // (2026-10-18: lines are level and pass over what is in their way: the line is raised for every class.)
             level.setBlockAndUpdate(onlyLarge, Blocks.STONE.defaultBlockState());
             final Edge line = net.edge(hub, bare[2]);
             s.note("OBS classes: the line buoy - large airfield passes " + line.tube().from + " to " + line.tube().to + "; the stone is at " + onlyLarge.toShortString());
-            s.soft("classes / a block in the large aircraft's tube only keeps large aircraft off the line at once; medium ones may still fly it",
+            s.soft("classes / a block in the large aircraft's tube has the line looked at again at once", line.state() == State.UNVERIFIED, line.state() + ", closed from " + line.closedFrom());
+        });
+        s.until("classes: the line is looked at with the block", () -> {}, () -> net.pending() == 0, 6000);
+        s.step("classes: raised over the block; blocks over the large airfield's pad", () -> {
+            final Edge line = net.edge(hub, bare[2]);
+            // The line is 28.5 over the buoy's block, the stone 20: the large tube takes in blocks to 11 below the line, so the line goes 4 higher.
+            s.soft("classes / the line is raised over the block for every class (4) and large aircraft may fly it", line.state() == State.CLEAR && line.lift() == 4 && line.opens(ShipClass.LARGE) && line.closedFrom() == null,
+                    line.state() + ", raised " + line.lift() + ", closed from " + line.closedFrom());
+            // In the shaft over the large airfield's pad: 15 to the side (in the large aircraft's shaft, 17, not in the medium one's, 12), and 3.
+            shafts[0] = bare[2].offset(0, 10, 15);
+            shafts[1] = bare[2].offset(0, 10, 3);
+            level.setBlockAndUpdate(shafts[0], Blocks.STONE.defaultBlockState());
+            s.soft("classes / a block in the large aircraft's shaft over the pad only keeps large aircraft off the line at once; medium ones may still fly it",
                     line.state() != State.BLOCKED && !line.opens(ShipClass.LARGE) && line.opens(ShipClass.MEDIUM) && line.closedFrom() == ShipClass.LARGE,
                     line.state() + ", closed from " + line.closedFrom());
-            level.setBlockAndUpdate(inSmall, Blocks.STONE.defaultBlockState());
-            s.soft("classes / a block on the line itself (in the small tube) blocks it for every class", line.state() == State.BLOCKED && !line.opens(ShipClass.MEDIUM),
+            level.setBlockAndUpdate(shafts[1], Blocks.STONE.defaultBlockState());
+            s.soft("classes / a block in the small aircraft's shaft over the pad blocks the line for every class", line.state() == State.BLOCKED && !line.opens(ShipClass.MEDIUM),
                     line.state() + " at " + line.blockedAt());
-            level.removeBlock(inSmall, false);
+            level.removeBlock(shafts[1], false);
+            level.removeBlock(shafts[0], false);
             level.removeBlock(onlyLarge, false);
         });
         s.until("classes: the line is looked at again", () -> {}, () -> net.pending() == 0, 6000);
         s.step("classes: the line is open again", () -> {
             final Edge line = net.edge(hub, bare[2]);
-            s.soft("classes / with the blocks gone and the line looked at again, large aircraft may fly it again", line.state() == State.CLEAR && line.opens(ShipClass.LARGE) && line.closedFrom() == null,
-                    line.state() + ", closed from " + line.closedFrom());
+            s.soft("classes / with the blocks gone and the line looked at again, large aircraft may fly it again, and it is down again", line.state() == State.CLEAR && line.opens(ShipClass.LARGE) && line.closedFrom() == null && line.lift() == 0,
+                    line.state() + ", raised " + line.lift() + ", closed from " + line.closedFrom());
         });
 
         // ---- 2. colonies: M has a medium airfield with its own medium aircraft; N an anchorage, later a small airfield too
@@ -1390,7 +1416,7 @@ final class FlightSuite {
         Field a = new Field(HUT_A);
         addField(s, level, a, "A");
         BlockPos padB = new BlockPos(80, Y - 1, -10), buoy = new BlockPos(40, Y, -60);
-        BlockPos[] wall = new BlockPos[9];
+        BlockPos[] wall = tallWall(40);
         // The lines of this scene are kept loaded, so that the network can verify them without an aircraft.
         s.step("scene: keep the area loaded", () -> { for (int cx = -2; cx <= 6; cx++) for (int cz = -5; cz <= 1; cz++) { level.setChunkForced(cx, cz, true); level.getChunk(cx, cz); } });
         s.step("scene: pad B 80 blocks east, a buoy off to the side", () -> {
@@ -1420,8 +1446,6 @@ final class FlightSuite {
 
         // ---- round trip over the buoy (the direct line is blocked before the flight)
         s.step("trip: a wall on the direct line, then the order", () -> {
-            int n = 0;
-            for (int y = WALL; y <= WALL + 2; y++) for (int z = -11; z <= -9; z++) wall[n++] = new BlockPos(40, y, z);
             for (BlockPos pos : wall) level.setBlockAndUpdate(pos, Blocks.STONE.defaultBlockState());
             s.soft("trip / the wall blocks the direct line at once", net.edge(a.pad, padB).state() == State.BLOCKED, String.valueOf(net.edge(a.pad, padB).state()));
             s.soft("trip / the route goes over the buoy", net.route(a.pad, padB, ShipClass.SMALL).equals(List.of(a.pad, buoy, padB)), String.valueOf(net.route(a.pad, padB, ShipClass.SMALL)));
@@ -1448,7 +1472,7 @@ final class FlightSuite {
         });
 
         // ---- blocked on the way: back to the last point, another way
-        BlockPos[] late = new BlockPos[9];
+        BlockPos[] late = tallWall(55);
         boolean[] placed = new boolean[1];
         s.step("blocked: the old wall goes, the direct line is clear again", () -> {
             for (BlockPos pos : wall) level.setBlockAndUpdate(pos, Blocks.AIR.defaultBlockState());
@@ -1459,8 +1483,6 @@ final class FlightSuite {
             a.log.clear();
             a.clock = 0;
             a.since = 0;
-            int n = 0;
-            for (int y = WALL; y <= WALL + 2; y++) for (int z = -11; z <= -9; z++) late[n++] = new BlockPos(55, y, z);
             s.monitor(() -> {
                 double[] r = Flights.readings(a.aircraft);
                 if (r == null) return;
@@ -1493,7 +1515,7 @@ final class FlightSuite {
 
         // ---- blocked with no other way: back to where it started, cancelled
         boolean[] placed2 = new boolean[1];
-        BlockPos[] last = new BlockPos[9];
+        BlockPos[] last = tallWall(30);
         s.step("cancel: no buoy any more, the wall goes, a new wall will come", () -> {
             level.setBlockAndUpdate(buoy, Blocks.AIR.defaultBlockState());
             for (BlockPos pos : late) level.setBlockAndUpdate(pos, Blocks.AIR.defaultBlockState());
@@ -1504,8 +1526,6 @@ final class FlightSuite {
             a.log.clear();
             a.clock = 0;
             a.since = 0;
-            int n = 0;
-            for (int y = WALL; y <= WALL + 2; y++) for (int z = -11; z <= -9; z++) last[n++] = new BlockPos(30, y, z);
             s.monitor(() -> {
                 double[] r = Flights.readings(a.aircraft);
                 if (r != null && !placed2[0] && a.aircraft.phase == Phase.CRUISE && r[0] < 62) {
@@ -2193,31 +2213,56 @@ final class FlightSuite {
             s.soft("routes / to B (88 blocks): small aircraft can fly it", toB.size() == 1 && toB.get(0).open() && statusKey(toB.get(0)).equals("open"), statusKey(toB.get(0)));
             s.soft("routes / to C (300 blocks, no buoy): too far to fly straight, and no buoys join them", !toC.get(0).open() && statusKey(toC.get(0)).equals("too_far"), statusKey(toC.get(0)));
             s.soft("routes / to D (no airfield): nothing there takes the aircraft", !toD.get(0).open() && statusKey(toD.get(0)).equals("no_berth"), statusKey(toD.get(0)));
-            // Stone in the way of the line A - B, half way, at its height.
+            // Stone in the way of the line A - B, half way, at its height and a block above and below: the line is raised over it
+            // (2026-10-18), and the flight later goes over it.
             final net.minecraft.world.phys.Vec3 high = RouteNetwork.get(level).waypoint(a.pad);
             stone[0] = BlockPos.containing((a.pad.getX() + b.pad.getX()) / 2.0, high.y, (a.pad.getZ() + b.pad.getZ()) / 2.0);
             for (int y = -1; y <= 1; y++) level.setBlockAndUpdate(stone[0].above(y), Blocks.STONE.defaultBlockState());
         });
-        s.until("routes: the stone is found on the line A - B", () -> {}, () -> {
+        s.until("routes: the line A - B is looked at with the stone", () -> {}, () -> {
             final Edge edge = RouteNetwork.get(level).edge(a.pad, b.pad);
-            return edge != null && edge.state() == State.BLOCKED;
+            return edge != null && edge.state() == State.CLEAR && edge.lift() > 0;
         }, 2400);
-        s.step("routes: the reason names the stone and one place", () -> {
+        final BlockPos[] inShaft = new BlockPos[1];
+        s.step("routes: raised over the stone; a stone over B's pad", () -> {
+            final Edge edge = RouteNetwork.get(level).edge(a.pad, b.pad);
+            final com.asteain.airline.route.ColonyRoutes.ClassStatus open = com.asteain.airline.route.ColonyRoutes.status(level, a.colony.getID(), b.colony.getID()).get(0);
+            s.note("OBS routes: the line A - B is raised by " + edge.lift() + " to " + edge.height() + " (the stone's top at " + stone[0].above().getY() + ")");
+            s.soft("routes / with stone half way at the line's height the line is raised over it and B can still be flown to", open.open() && edge.lift() > 0 && !edge.needs(stone[0].getX(), stone[0].getY() + 1, stone[0].getZ()),
+                    statusKey(open) + ", raised " + edge.lift());
+            // Over B's pad (in its shaft) nothing is passed over.
+            inShaft[0] = b.pad.above(6);
+            level.setBlockAndUpdate(inShaft[0], Blocks.STONE.defaultBlockState());
             final com.asteain.airline.route.ColonyRoutes.ClassStatus toB = com.asteain.airline.route.ColonyRoutes.status(level, a.colony.getID(), b.colony.getID()).get(0);
             final String text = toB.text().getString();
             s.note("OBS routes: blocked: " + text);
-            s.soft("routes / with stone in the way the tab tells what is in the way, and where (one place)", !toB.open() && statusKey(toB).equals("blocked") && text.contains(Blocks.STONE.getName().getString()),
+            s.soft("routes / with stone over B's pad the tab tells what is in the way, and where (one place)", !toB.open() && statusKey(toB).equals("blocked") && text.contains(Blocks.STONE.getName().getString()),
                     statusKey(toB) + ": " + text);
-            for (int y = -1; y <= 1; y++) level.setBlockAndUpdate(stone[0].above(y), Blocks.AIR.defaultBlockState());
+            level.setBlockAndUpdate(inShaft[0], Blocks.AIR.defaultBlockState());
         });
         s.until("routes: the line is clear again", () -> {}, () -> {
             final Edge edge = RouteNetwork.get(level).edge(a.pad, b.pad);
-            return edge != null && edge.state() == State.CLEAR;
+            return edge != null && edge.state() == State.CLEAR && RouteNetwork.get(level).pending() == 0;
         }, 2400);
-        s.step("routes: a route to B is drawn", () -> com.asteain.airline.route.ColonyRoutes.get(level.getServer()).draw(level, a.colony.getID(), b.colony.getID()));
+        final double[] highest = {Double.NEGATIVE_INFINITY};
+        final boolean[] atB = new boolean[1];
+        s.step("routes: a route to B is drawn", () -> {
+            com.asteain.airline.route.ColonyRoutes.get(level.getServer()).draw(level, a.colony.getID(), b.colony.getID());
+            s.monitor(() -> {
+                final double[] r = Flights.readings(a.aircraft);
+                if (r != null && a.aircraft.flying()) highest[0] = Math.max(highest[0], r[1]);
+                // (A cargo flight does not let its pilot off at B: it is unloaded there and flies back.)
+                if (b.pad.equals(a.aircraft.at)) atB[0] = true;
+            });
+        });
         s.until("routes: with the route drawn, the flight to B is prepared", () -> {}, () -> a.aircraft.cargo && a.aircraft.freightColony == b.colony.getID(), 2400);
+        s.step("routes: loaded", () -> s.soft("routes / once the route is drawn, the iron is loaded for B", a.aircraft.cargo && a.aircraft.freightColony == b.colony.getID(), "doing " + a.aircraft.phase + " | " + a.aircraft.note));
+        s.until("routes: the aircraft flew to B over the stone and landed there", () -> {}, () -> atB[0], 6000);
         s.step("routes: result", () -> {
-            s.soft("routes / once the route is drawn, the iron is loaded for B", a.aircraft.cargo && a.aircraft.freightColony == b.colony.getID(), "doing " + a.aircraft.phase + " | " + a.aircraft.note);
+            final Edge edge = RouteNetwork.get(level).edge(a.pad, b.pad);
+            s.soft("routes / the aircraft flew the raised line to B without turning back, as high as the line, and landed there", atB[0] && a.log.stream().noneMatch(l -> l.contains("-> RETREAT"))
+                    && highest[0] >= edge.height() - 2.0, "at " + a.aircraft.at + ", highest " + highest[0] + ", line at " + edge.height() + " | " + a.aircraft.note);
+            for (int y = -1; y <= 1; y++) level.setBlockAndUpdate(stone[0].above(y), Blocks.AIR.defaultBlockState());
             com.asteain.airline.route.ColonyRoutes.get(level.getServer()).remove(level, a.colony.getID(), b.colony.getID());
             s.soft("routes / the route can be taken off again", !com.asteain.airline.route.ColonyRoutes.drawn(level, a.colony.getID(), b.colony.getID()), "");
             com.asteain.airline.route.ColonyRoutes.allForChecks(true);
@@ -2741,7 +2786,7 @@ final class FlightSuite {
         addPort(s, level, b, "hindered B", true);
         int[] n = new int[8];
         boolean[] flag = new boolean[3];
-        BlockPos[] wall = new BlockPos[9];
+        BlockPos[] wall = tallWall(44);
         s.step("hindered: 128 iron on A's export racks, B wants 128, B's import stash has room for one stack only", () -> {
             Fixture.stock(equip(level, a), Items.IRON_INGOT, 128);
             ledger.set(WantLedger.Key.of(b.colony), Items.IRON_INGOT, 128);
@@ -2749,8 +2794,6 @@ final class FlightSuite {
             for (int slot = 0; slot < stash.getSlots() - 1; slot++) stash.insertItem(slot, new ItemStack(Items.COBBLESTONE, 64), false);
             n[0] = iron(a.airfield.getItemHandlerCap()) + held(a) + iron(stash) + lying(level, Items.IRON_INGOT);
             s.note("OBS hindered: B's stash has " + stash.getSlots() + " slots, all but one filled with cobblestone; iron at the start " + n[0]);
-            int i = 0;
-            for (int y = WALL; y <= WALL + 2; y++) for (int z = -11; z <= -9; z++) wall[i++] = new BlockPos(44, y, z);
             watch(s, a, "hindered");
             s.monitor(() -> {
                 double[] r = Flights.readings(a.aircraft);

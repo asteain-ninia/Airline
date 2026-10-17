@@ -51,7 +51,7 @@ public class AircraftModuleView extends AbstractBuildingModuleView {
 
     @Override
     public ResourceLocation getIconResourceLocation() {
-        return ResourceLocation.fromNamespaceAndPath("minecolonies", "textures/gui/modules/map.png");
+        return ResourceLocation.fromNamespaceAndPath(com.asteain.airline.Airline.MOD_ID, "textures/gui/modules/aircraft.png");
     }
 
     @Override

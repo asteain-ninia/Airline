@@ -24,6 +24,8 @@ public final class AircraftBlockEntity extends BlockEntity {
     /** What the aircraft is doing. Saved by name. */
     public enum Phase {
         PARKED, BOARDING, CLIMB, CRUISE, RETREAT, HOLD, ALIGN, DESCEND, DISEMBARK, WAIT,
+        /** Over a point of the network, going up or down to the height of the next line (lines are level, 2026-10-18). */
+        ALTITUDE,
         /**
          * In the air with nothing left to burn: fixed where it is, its pilot on board, its ticket kept, until somebody
          * brings fuel; then the flight goes on.

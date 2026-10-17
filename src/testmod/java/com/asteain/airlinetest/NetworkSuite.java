@@ -44,7 +44,8 @@ final class NetworkSuite {
     }
 
     private static String describe(Edge edge) {
-        return edge == null ? "no line" : edge.state() + (edge.blockedAt() == null ? "" : " at " + edge.blockedAt().toShortString()) + (edge.hasUnseenParts() ? " (unseen parts)" : "");
+        return edge == null ? "no line" : edge.state() + (edge.blockedAt() == null ? "" : " at " + edge.blockedAt().toShortString()) + (edge.hasUnseenParts() ? " (unseen parts)" : "")
+                + (edge.lift() > 0 ? ", raised " + edge.lift() : "");
     }
 
     static Script build(MinecraftServer server) {
@@ -79,17 +80,26 @@ final class NetworkSuite {
         s.until("A: the line is verified", () -> {}, () -> net.edge(a, b).state() != State.UNVERIFIED, 200);
         s.step("A: an empty line is clear", () -> {
             Edge edge = net.edge(a, b);
-            s.soft("A / a line with nothing in its tube becomes clear", edge.state() == State.CLEAR, describe(edge));
+            s.soft("A / a line with nothing in its tube becomes clear, and is not raised", edge.state() == State.CLEAR && edge.lift() == 0, describe(edge));
             s.note(String.format("OBS line A-B: length %.1f, from %s to %s", edge.length(), edge.tube().from, edge.tube().to));
             level.setBlockAndUpdate(onLine, Blocks.STONE.defaultBlockState());
-            s.soft("A / one stone on the line blocks it at once, and the network knows which block", edge.state() == State.BLOCKED && onLine.equals(edge.blockedAt()), describe(edge));
+            s.soft("A / one stone on the line has the line looked at again at once", edge.state() == State.UNVERIFIED, describe(edge));
+        });
+        s.until("A: looked at with the stone", () -> {}, () -> net.edge(a, b).state() != State.UNVERIFIED, 200);
+        s.step("A: raised over the stone", () -> {
+            Edge edge = net.edge(a, b);
+            // (2026-10-18: lines are level and pass over what is in their way.) The stone is 8 above the buoys' blocks, the
+            // line 9.5: the bottom of the tube (7 below the line) has to come above the stone's top: 7 higher.
+            s.soft("A / the line is raised over the stone, 7 blocks, and is clear", edge.state() == State.CLEAR && edge.lift() == 7 && !edge.needs(onLine.getX(), onLine.getY(), onLine.getZ())
+                    && edge.height() == a.getY() + 0.5 + RouteRules.waypointHeight() + 7, describe(edge) + ", at " + edge.height());
             level.setBlockAndUpdate(onLine, Blocks.AIR.defaultBlockState());
-            s.soft("A / taking the stone away sends the line back to not verified", edge.state() == State.UNVERIFIED, describe(edge));
+            s.soft("A / taking the stone away leaves the line where it is (it comes down when it is looked at again)", edge.state() == State.CLEAR && edge.lift() == 7, describe(edge));
+            net.recheckAll();
         });
         s.until("A: verified again", () -> {}, () -> net.edge(a, b).state() != State.UNVERIFIED, 200);
         s.step("A: clear again; the edges of the tube", () -> {
             Edge edge = net.edge(a, b);
-            s.soft("A / after the stone is gone the line is clear again", edge.state() == State.CLEAR, describe(edge));
+            s.soft("A / looked at again without the stone, the line is clear and down again", edge.state() == State.CLEAR && edge.lift() == 0, describe(edge));
             // The line runs the waypoint height above the buoys (9 since the small aircraft is 10 high; 8 before), z = 0.5. Tube: 8 to the
             // side (+ half a block), its half height up and down (7; 6.5 before) (+ half a block).
             final int over = RouteRules.waypointHeight(), half = (int) Math.ceil(RouteRules.tubeHalfHeight());
@@ -97,14 +107,12 @@ final class NetworkSuite {
                     new BlockPos(-10, Y + over, 0)};
             for (BlockPos pos : outside) {
                 level.setBlockAndUpdate(pos, Blocks.STONE.defaultBlockState());
-                s.soft("A / a stone just outside the tube does not block (" + pos.toShortString() + ")", edge.state() == State.CLEAR, describe(edge));
+                s.soft("A / a stone just outside the tube does not matter (" + pos.toShortString() + ")", edge.state() == State.CLEAR && !edge.needs(pos.getX(), pos.getY(), pos.getZ()), describe(edge));
                 level.setBlockAndUpdate(pos, Blocks.AIR.defaultBlockState());
             }
             BlockPos[] inside = {new BlockPos(40, Y + 8, 8), new BlockPos(40, Y + 15, 0), new BlockPos(40, Y + 2, 0), new BlockPos(-8, Y + 8, 0)};
             for (BlockPos pos : inside) {
-                level.setBlockAndUpdate(pos, Blocks.STONE.defaultBlockState());
-                s.soft("A / a stone just inside the tube blocks (" + pos.toShortString() + ")", edge.state() == State.BLOCKED && pos.equals(edge.blockedAt()), describe(edge));
-                level.setBlockAndUpdate(pos, Blocks.AIR.defaultBlockState());
+                s.soft("A / a place just inside the tube is in the line's way (" + pos.toShortString() + ")", edge.needs(pos.getX(), pos.getY(), pos.getZ()), describe(edge));
             }
             // Things without a collision shape are not in the way.
             level.setBlockAndUpdate(onLine, Blocks.TORCH.defaultBlockState());
@@ -121,9 +129,20 @@ final class NetworkSuite {
             s.soft("A / the command to look again finds it", net.recheckAll() == 1 && net.edge(a, b).state() == State.UNVERIFIED, describe(net.edge(a, b)));
         });
         s.until("A: scan finds the quiet stone", () -> {}, () -> net.edge(a, b).state() != State.UNVERIFIED, 200);
+        final int[] raiseBefore = new int[1];
         s.step("A: found by the scan", () -> {
             Edge edge = net.edge(a, b);
-            s.soft("A / the scan finds a stone nobody reported, and where", edge.state() == State.BLOCKED && quiet.equals(edge.blockedAt()), describe(edge));
+            s.soft("A / the scan finds a stone nobody reported, and raises the line over it (8)", edge.state() == State.CLEAR && edge.lift() == 8 && !edge.needs(quiet.getX(), quiet.getY(), quiet.getZ()), describe(edge));
+            // Where lines may not be raised, the stone blocks the line.
+            raiseBefore[0] = RouteRules.lineRaiseSetting().get();
+            RouteRules.lineRaiseSetting().set(0);
+            net.recheckAll();
+        });
+        s.until("A: looked at, not raised", () -> {}, () -> net.edge(a, b).state() != State.UNVERIFIED, 200);
+        s.step("A: blocked where lines may not be raised", () -> {
+            Edge edge = net.edge(a, b);
+            s.soft("A / when lines may not be raised, the stone blocks the line, and the network knows which block", edge.state() == State.BLOCKED && quiet.equals(edge.blockedAt()) && edge.lift() == 0, describe(edge));
+            RouteRules.lineRaiseSetting().set(raiseBefore[0]);
             level.setBlock(quiet, Blocks.AIR.defaultBlockState(), 2);
             net.recheckAll();
         });
@@ -168,6 +187,9 @@ final class NetworkSuite {
 
         // ---- save and load -----------------------------------------------------------------------------------
         s.step("A: save and load", () -> {
+            // (The save and section B are about blocked lines and the ways round them: there, lines are not raised over a stone.)
+            raiseBefore[0] = RouteRules.lineRaiseSetting().get();
+            RouteRules.lineRaiseSetting().set(0);
             level.setBlockAndUpdate(onLine, Blocks.STONE.defaultBlockState());
             CompoundTag saved = net.save(new CompoundTag(), level.registryAccess());
             RouteNetwork copy = RouteNetwork.load(saved, level.registryAccess());
@@ -264,6 +286,7 @@ final class NetworkSuite {
         s.step("B: back to the short way", () -> {
             List<BlockPos> way = net.route(start, end, ShipClass.SMALL);
             s.soft("B / with the stones gone and the lines looked at again, the short way is back", way.equals(List.of(start, mid, end)), String.valueOf(way));
+            RouteRules.lineRaiseSetting().set(raiseBefore[0]);
         });
 
         // ---- C: grades ------------------------------------------------------------------------------------------
@@ -337,8 +360,8 @@ final class NetworkSuite {
         });
         s.until("D: looked at again", () -> {}, () -> net.pending() == 0, 400);
         s.step("D: the scan checks the shaft and the tube", () -> {
-            s.soft("D / with the shaft free again a block 20 out, 7 below the line (inside its tube), blocks it", net.edge(padA, between).state() == State.BLOCKED && underLine.equals(net.edge(padA, between).blockedAt()),
-                    describe(net.edge(padA, between)));
+            s.soft("D / with the shaft free again, a block 20 out, 7 below the line (inside its tube): the line is raised over it (1) and is clear", net.edge(padA, between).state() == State.CLEAR
+                    && net.edge(padA, between).lift() == 1 && !net.edge(padA, between).needs(underLine.getX(), underLine.getY(), underLine.getZ()), describe(net.edge(padA, between)));
             level.setBlockAndUpdate(underLine, Blocks.AIR.defaultBlockState());
             // The scan itself (not the block change) has to find a block in the shaft too.
             level.setBlock(inShaft, Blocks.STONE.defaultBlockState(), 2);
@@ -364,30 +387,41 @@ final class NetworkSuite {
             s.soft("E / with the third pad gone the first two are still joined", net.route(padA, padB, ShipClass.SMALL).size() == 3, String.valueOf(net.route(padA, padB, ShipClass.SMALL)));
         });
 
-        // ---- F: no line may come low over a landing pad (an aircraft may stand there) ----
-        // Two buoys at the height of the pad's floor, west and east of it: their line would pass 9.5 above the floor.
+        // ---- F: lines pass over landing pads (an aircraft may stand there) ----
+        // (2026-10-18: lines are level and are raised over the pads on their way, by 32 at most.) Two buoys a block above the
+        // pad's floor, west and east of it: their line would pass 9.5 above the floor; it has to pass 17 above it, so it is
+        // raised by 7. Two buoys 40 below the floor would need a line raised by 48: they are not joined.
         // The high buoys are passed as high as the pad's own lines begin (pad 18 - buoy 9; 16 - 8 before the small aircraft was 10 high).
         final int highBuoyLift = RouteRules.airfieldWaypointHeight() - RouteRules.waypointHeight();
         BlockPos lowWest = padA.offset(-14, 1, 0), lowEast = padA.offset(30, 1, 0), highWest = padA.offset(-14, highBuoyLift, 3), highEast = padA.offset(30, highBuoyLift, 3);
-        s.step("F: a line low over a pad", () -> {
+        BlockPos deepWest = padA.offset(-14, -40, 0), deepEast = padA.offset(30, -40, 0);
+        s.step("F: a line low over a pad, and one far below it", () -> {
             level.setBlockAndUpdate(lowWest, buoy(1).defaultBlockState());
             level.setBlockAndUpdate(lowEast, buoy(1).defaultBlockState());
             Edge low = net.edge(lowWest, lowEast);
-            s.soft("F / a line that passes low over a landing pad is not used: it counts as blocked by that pad from the moment it is made", low != null && low.state() == State.BLOCKED && padA.equals(low.blockedAt()) && padA.equals(low.barredBy()),
-                    describe(low) + ", needs " + RouteRules.padClearance() + " above the floor within " + String.format("%.1f", RouteRules.padReach()) + " blocks");
-            s.soft("F / the lines that end on the pad itself are not barred by it", net.edge(lowWest, padA) != null && net.edge(lowWest, padA).barredBy() == null && net.edge(lowEast, padA).barredBy() == null,
+            s.soft("F / a line that would pass low over a landing pad is raised over it from the moment it is made: 7, to 17 above the floor", low != null && low.barredBy() == null && low.lift() == 7
+                    && low.height() >= padA.getY() + RouteRules.padClearance(), describe(low) + ", at " + (low == null ? "?" : low.height() - padA.getY()) + " above the floor; needs " + RouteRules.padClearance()
+                    + " within " + String.format("%.1f", RouteRules.padReach()) + " blocks");
+            s.soft("F / the lines that end on the pad itself are not raised for it", net.edge(lowWest, padA) != null && net.edge(lowWest, padA).lift() == 0 && net.edge(lowEast, padA).lift() == 0,
                     describe(net.edge(lowWest, padA)) + " / " + describe(net.edge(lowEast, padA)));
-            List<String> said = net.describe(level, lowWest, false).stream().map(line -> line.getString()).toList();
-            s.soft("F / the buoy says which line is not used, and names the pad", said.stream().anyMatch(line -> line.contains(lowEast.getX() + " " + lowEast.getY() + " " + lowEast.getZ()) && line.contains(padA.getX() + " " + padA.getY() + " " + padA.getZ())), String.valueOf(said));
+            level.setBlockAndUpdate(deepWest, buoy(1).defaultBlockState());
+            level.setBlockAndUpdate(deepEast, buoy(1).defaultBlockState());
+            Edge deep = net.edge(deepWest, deepEast);
+            s.soft("F / a line that would have to be raised more than 32 to pass over the pad is not used: it counts as blocked by that pad from the moment it is made",
+                    deep != null && deep.state() == State.BLOCKED && padA.equals(deep.blockedAt()) && padA.equals(deep.barredBy()), describe(deep));
+            List<String> said = net.describe(level, deepWest, false).stream().map(line -> line.getString()).toList();
+            s.soft("F / the buoy says which line is not used, and names the pad", said.stream().anyMatch(line -> line.contains(deepEast.getX() + " " + deepEast.getY() + " " + deepEast.getZ()) && line.contains(padA.getX() + " " + padA.getY() + " " + padA.getZ())), String.valueOf(said));
             // Nothing a scan or a flight learns changes that.
-            net.recheck(lowWest);
-            net.confirmClear(low);
-            s.soft("F / looking at the line again does not open it", low.state() == State.BLOCKED && padA.equals(low.blockedAt()), describe(low));
+            net.recheck(deepWest);
+            net.confirmClear(deep);
+            s.soft("F / looking at the line again does not open it", deep.state() == State.BLOCKED && padA.equals(deep.blockedAt()), describe(deep));
         });
         s.until("F: looked at", () -> {}, () -> net.pending() == 0, 600);
-        s.step("F: still barred; buoys as high as the lines over the pad", () -> {
-            Edge low = net.edge(lowWest, lowEast);
-            s.soft("F / after every line was looked at the low line is still barred by the pad", low != null && low.state() == State.BLOCKED && padA.equals(low.blockedAt()), describe(low));
+        s.step("F: raised and clear, or barred; buoys as high as the lines over the pad", () -> {
+            Edge low = net.edge(lowWest, lowEast), deep = net.edge(deepWest, deepEast);
+            // (8: the scan raises it a block more, over the roof set down in D, 9 out from the pad and 10 up.)
+            s.soft("F / after every line was looked at, the line over the pad is clear (raised by 8, over the pad and the roof of D), and the one far below it still barred by the pad",
+                    low != null && low.state() == State.CLEAR && low.lift() == 8 && deep != null && deep.state() == State.BLOCKED && padA.equals(deep.blockedAt()), describe(low) + " / " + describe(deep));
             level.setBlockAndUpdate(lowWest, Blocks.AIR.defaultBlockState());
             level.setBlockAndUpdate(lowEast, Blocks.AIR.defaultBlockState());
             level.setBlockAndUpdate(highWest, buoy(1).defaultBlockState());
@@ -396,17 +430,17 @@ final class NetworkSuite {
         s.until("F: the high line is looked at", () -> {}, () -> net.pending() == 0, 600);
         s.step("F: a line high over a pad", () -> {
             Edge high = net.edge(highWest, highEast);
-            s.soft("F / a line that passes as high over the pad as the pad's own lines begin is clear", high != null && high.barredBy() == null && high.state() == State.CLEAR && net.route(highWest, highEast, ShipClass.SMALL).equals(List.of(highWest, highEast)),
-                    describe(high) + ", way " + net.route(highWest, highEast, ShipClass.SMALL));
+            s.soft("F / a line that passes as high over the pad as the pad's own lines begin is clear and not raised", high != null && high.barredBy() == null && high.state() == State.CLEAR && high.lift() == 0
+                    && net.route(highWest, highEast, ShipClass.SMALL).equals(List.of(highWest, highEast)), describe(high) + ", way " + net.route(highWest, highEast, ShipClass.SMALL));
             // When the pad goes, a line it barred is looked at like any other.
             level.setBlockAndUpdate(highWest, Blocks.AIR.defaultBlockState());
             level.setBlockAndUpdate(highEast, Blocks.AIR.defaultBlockState());
-            level.setBlockAndUpdate(lowWest, buoy(1).defaultBlockState());
-            level.setBlockAndUpdate(lowEast, buoy(1).defaultBlockState());
-            boolean barred = net.edge(lowWest, lowEast).barredBy() != null;
+            boolean barred = net.edge(deepWest, deepEast).barredBy() != null;
             net.remove(padA);
-            Edge low = net.edge(lowWest, lowEast);
-            s.soft("F / when the pad leaves the network, the line it barred is no longer barred and is looked at again", barred && low != null && low.barredBy() == null && low.state() == State.UNVERIFIED, describe(low));
+            Edge deep = net.edge(deepWest, deepEast);
+            s.soft("F / when the pad leaves the network, the line it barred is no longer barred and is looked at again", barred && deep != null && deep.barredBy() == null && deep.state() == State.UNVERIFIED, describe(deep));
+            level.setBlockAndUpdate(deepWest, Blocks.AIR.defaultBlockState());
+            level.setBlockAndUpdate(deepEast, Blocks.AIR.defaultBlockState());
         });
 
         // ---- G: an airfield reaches further the higher its level, on the scale of colonies (direct flights between neighbours) ----

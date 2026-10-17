@@ -674,7 +674,10 @@ final class FlightController {
         };
         Vec3 at = here;
         for (int i = Math.max(0, first); i < be.route.size(); i++) {
-            final Vec3 point = net.waypoint(be.route.get(i));
+            // Toward a point at the height of the line that ends there; on the pad, on the way back to the point behind and
+            // over a point, at the height of the line from there on (lines are level; heights change over the points only).
+            final double y = i == 0 || (i == first && first == be.leg) ? legHeight(net, be.route, i) : legHeight(net, be.route, i - 1);
+            final Vec3 point = overPoint(net, be.route.get(i), y);
             final double flat = Math.hypot(point.x - at.x, point.z - at.z);
             final long way = Math.round(Math.max(flat / c.type.topSpeed, Math.abs(point.y - at.y) / c.type.climbSpeed) * 20.0);
             if (flat < 1.0) {
@@ -689,6 +692,15 @@ final class FlightController {
                 plan.then(point, way + half);
             }
             at = point;
+            if (i + 1 < be.route.size()) {
+                // Over a point where the next line lies higher or lower: up or down there first.
+                final double next = legHeight(net, be.route, i);
+                if (Math.abs(next - at.y) > 1.5) {
+                    final Vec3 shifted = new Vec3(at.x, next, at.z);
+                    plan.then(shifted, Math.round(Math.abs(next - at.y) / Math.max(0.1, next > at.y ? c.type.climbSpeed : c.type.descentRate) * 20.0));
+                    at = shifted;
+                }
+            }
         }
         if (be.destination != null) {
             // Placed over the pad (beside the pier at an anchorage), then down onto it.
@@ -901,7 +913,7 @@ final class FlightController {
         rt.pilot.resetHeight();
         rt.pilot.hover();
         // (A design with a climbing rate has its target raised step by step from where it stands; see the climb.)
-        rt.pilot.altTarget = c.type.climbRate > 0 ? c.pos().y : RouteNetwork.get(c.level).waypoint(be.route.get(0)).y;
+        rt.pilot.altTarget = c.type.climbRate > 0 ? c.pos().y : legHeight(RouteNetwork.get(c.level), be.route, 0);
         be.phase = Phase.CLIMB;
         be.setChanged();
     }
@@ -1017,11 +1029,16 @@ final class FlightController {
         switch (be.phase) {
             case CLIMB -> {
                 ap.hover();
-                ap.altTarget = c.type.climbRate > 0 ? c.pos().y : net.waypoint(be.route.get(0)).y;
+                ap.altTarget = c.type.climbRate > 0 ? c.pos().y : legHeight(net, be.route, be.leg);
             }
             case CRUISE -> startLeg(be, rt, net);
+            case ALTITUDE -> {
+                ap.hover();
+                startLeg(be, rt, net);
+            }
             case RETREAT, HOLD -> {
-                rt.from = net.waypoint(be.route.get(be.leg));
+                // Back to the point behind at the height it is at (the line may have been raised meanwhile): heights change over points only.
+                rt.from = overPoint(net, be.route.get(be.leg), c.pos().y);
                 retreat(be, rt);
             }
             default -> beginAlign(be, rt, net);
@@ -1037,10 +1054,27 @@ final class FlightController {
         final boolean decide = rt.age % c.type.period == 0;
         switch (be.phase) {
             case CLIMB -> {
-                final double line = net.waypoint(be.route.get(0)).y;
+                final double line = legHeight(net, be.route, be.leg);
                 ap.climbToward(line);
                 ap.tick();
                 if (ap.atHeight(line)) startLeg(be, rt, net);
+            }
+            case ALTITUDE -> {
+                // Over a point, up or down to the height of the line ahead (set by startLeg); down as slowly as onto a pad.
+                final Edge ahead = be.leg + 1 < be.route.size() ? net.edge(be.route.get(be.leg), be.route.get(be.leg + 1)) : null;
+                if (decide && ahead != null && !ahead.opens(shipClass(be))) {
+                    // The line ahead was closed meanwhile (something in its shaft): stay at this height and look for another way
+                    // (and, with none, wait here at this height).
+                    ap.altTarget = c.pos().y;
+                    rt.from = overPoint(net, be.route.get(be.leg), c.pos().y);
+                    reroute(be, rt, net);
+                    return;
+                }
+                final double line = rt.from.y;
+                if (line >= ap.altTarget) ap.climbToward(line);
+                else ap.altTarget = Math.max(line, ap.altTarget - c.type.descentRate / 20.0);
+                ap.tick();
+                if (ap.atHeight(line)) cruise(be, rt);
             }
             case CRUISE -> {
                 // The height follows the line from one passing point to the next.
@@ -1058,7 +1092,7 @@ final class FlightController {
                         if (whole.progress(known.getX() + 0.5, known.getZ() + 0.5) > whole.progress(c.pos().x, c.pos().z)) seen = known;
                     }
                     if (seen != null) {
-                        if (edge != null) net.reportBlocked(edge, seen, shipClass(be));
+                        if (edge != null) net.reportBlocked(level, edge, seen);
                         tell(be, "flight.note.blocked", seen.getX(), seen.getY(), seen.getZ());
                         retreat(be, rt);
                         return;
@@ -1181,14 +1215,49 @@ final class FlightController {
             beginAlign(be, rt, net);
             return;
         }
-        rt.from = net.waypoint(be.route.get(be.leg));
-        rt.to = net.waypoint(be.route.get(be.leg + 1));
+        // Lines are level (2026-10-18): the whole leg at the height of its line.
+        final double y = legHeight(net, be.route, be.leg);
+        rt.from = overPoint(net, be.route.get(be.leg), y);
+        rt.to = overPoint(net, be.route.get(be.leg + 1), y);
+        final Vec3 here = rt.craft.pos();
+        if (Math.abs(here.y - y) > 2.0) {
+            if (Math.hypot(here.x - rt.from.x, here.z - rt.from.z) >= 4.0) {
+                // Away from the point at another height (the line was raised or lowered while the aircraft was on it): back
+                // to the point at the height it is at, and up or down there.
+                rt.from = overPoint(net, be.route.get(be.leg), here.y);
+                retreat(be, rt);
+                return;
+            }
+            // The line lies higher or lower than the aircraft is: up or down over the point first, in its shaft.
+            rt.pilot.hover();
+            be.phase = Phase.ALTITUDE;
+            be.setChanged();
+            replan(be, rt, 0);
+            return;
+        }
+        cruise(be, rt);
+    }
+
+    /** Along the leg from {@code rt.from} to {@code rt.to}. */
+    private static void cruise(AircraftBlockEntity be, Runtime rt) {
         rt.pilot.leg(rt.from.x, rt.from.z, rt.to.x, rt.to.z);
         rt.tries = 0;
         rt.toldWaiting = false;
         be.phase = Phase.CRUISE;
         be.setChanged();
         replan(be, rt, 0);
+    }
+
+    /** The height of the line from the i-th point of a way to the next (lines are level); at the last point, where lines pass over it. */
+    private static double legHeight(RouteNetwork net, List<BlockPos> way, int i) {
+        if (way.isEmpty()) return 0.0;
+        return i + 1 < way.size() ? net.height(way.get(i), way.get(i + 1)) : net.waypoint(way.get(Math.min(i, way.size() - 1))).y;
+    }
+
+    /** The place over a point of the network at the height {@code y}. */
+    private static Vec3 overPoint(RouteNetwork net, BlockPos point, double y) {
+        final Vec3 over = net.waypoint(point);
+        return new Vec3(over.x, y, over.z);
     }
 
     /** The end of a leg: the line just flown is clear; on to the next point, or down when this was the last. */
@@ -2121,7 +2190,7 @@ final class FlightController {
         final Craft c = rt.craft;
         final boolean atHome = be.at != null && be.at.equals(be.home);
         switch (be.phase) {
-            case CLIMB, CRUISE, RETREAT, HOLD -> {
+            case CLIMB, CRUISE, ALTITUDE, RETREAT, HOLD -> {
                 if (be.cancelled || be.returning || be.origin == null) return new Answer(false, "flight.cancel.too_late");
                 be.cancelled = true;
                 be.cancelNote = "flight.note.called_off";
@@ -2133,6 +2202,9 @@ final class FlightController {
                     rt.pilot.altTarget = Math.max(c.pos().y, be.origin.getY() + 2 + be.restOffset);
                 } else if (be.phase == Phase.CRUISE) {
                     retreat(be, rt);
+                } else if (be.phase == Phase.ALTITUDE) {
+                    // Over a point of the way: from there back.
+                    reroute(be, rt, RouteNetwork.get(level));
                 } else if (be.phase == Phase.HOLD) {
                     rt.resume = Phase.RETREAT;
                 }

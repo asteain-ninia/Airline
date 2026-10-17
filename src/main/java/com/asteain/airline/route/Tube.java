@@ -99,6 +99,11 @@ public final class Tube {
 
     private long[] chunks;
 
+    /** When {@code other} takes up the same columns (it lies higher or lower, nothing else), its list of chunks is this one's. */
+    void sameColumnsAs(Tube other) {
+        if (chunks == null && other.chunks != null && other.from.x == from.x && other.from.z == from.z && other.to.x == to.x && other.to.z == to.z && other.radius == radius) chunks = other.chunks;
+    }
+
     /**
      * The chunks that hold at least one column of this tube, in order from one end of the line to the other. They are
      * found by walking along the line, so a line of several thousand blocks costs what its own length is worth and not
