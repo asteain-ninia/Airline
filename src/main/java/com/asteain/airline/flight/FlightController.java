@@ -1071,6 +1071,21 @@ final class FlightController {
                     return;
                 }
                 final double line = rt.from.y;
+                if (decide) {
+                    // Something solid in the way up or down (set there while the aircraft was on its way): it stays at this
+                    // height, the lines over this point are told, and it waits and looks for another way.
+                    final BlockPos seen = firstSolid(level, upOrDown(c, line));
+                    if (seen != null) {
+                        if (ahead != null) net.reportBlocked(level, ahead, seen);
+                        final Edge behind = be.leg > 0 ? net.edge(be.route.get(be.leg - 1), be.route.get(be.leg)) : null;
+                        if (behind != null) net.reportBlocked(level, behind, seen);
+                        tell(be, "flight.note.blocked", seen.getX(), seen.getY(), seen.getZ());
+                        ap.altTarget = c.pos().y;
+                        rt.from = overPoint(net, be.route.get(be.leg), c.pos().y);
+                        hold(be, rt, Phase.RETREAT);
+                        return;
+                    }
+                }
                 if (line >= ap.altTarget) ap.climbToward(line);
                 else ap.altTarget = Math.max(line, ap.altTarget - c.type.descentRate / 20.0);
                 ap.tick();
@@ -1272,7 +1287,8 @@ final class FlightController {
         rt.shipHolds = 0;
         rt.avoid.clear();      // a line was flown to its end: whatever was in the way elsewhere may be gone by now
         final Edge edge = net.edge(be.route.get(be.leg), be.route.get(be.leg + 1));
-        if (edge != null) net.confirmClear(edge);
+        // (Only a line flown at the height it has now: one raised meanwhile is still to be looked at up there.)
+        if (edge != null && Math.abs(edge.height() - rt.from.y) < 0.5) net.confirmClear(edge);
         be.leg++;
         startLeg(be, rt, net);
     }
@@ -1900,7 +1916,19 @@ final class FlightController {
     /** The first solid block in the tube ahead, in chunks that are loaded (the ship's ticket keeps its surroundings loaded). */
     @Nullable
     private static BlockPos lookAhead(ServerLevel level, Craft c, Runtime rt, Vec3 target) {
-        final Tube tube = ahead(c, rt, target);
+        return firstSolid(level, ahead(c, rt, target));
+    }
+
+    /** The upright piece of the shaft over a point the aircraft goes up or down in next, toward {@code goal}, as far as it looks ahead. */
+    private static Tube upOrDown(Craft c, double goal) {
+        final Vec3 p = c.pos();
+        final double step = Math.max(-RouteRules.lookAhead(), Math.min(RouteRules.lookAhead(), goal - p.y));
+        return new Tube(p, new Vec3(p.x, p.y + step, p.z), RouteRules.tubeRadius(c.type.shipClass), RouteRules.tubeHalfHeight(c.type.shipClass));
+    }
+
+    /** The first solid block in a tube, in chunks that are loaded. */
+    @Nullable
+    private static BlockPos firstSolid(ServerLevel level, Tube tube) {
         final int minY = level.getMinBuildHeight(), maxY = level.getMaxBuildHeight() - 1;
         final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         for (int x = tube.minX(); x <= tube.maxX(); x++) {

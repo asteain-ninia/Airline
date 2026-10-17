@@ -267,9 +267,12 @@ public final class RouteNetwork extends SavedData {
 
         /** Once more along the whole line, raised by {@code lift}. */
         void restart(List<List<Tube>> spacesByClass, int raised) {
+            final List<Tube> before = spaces;
             byClass = spacesByClass;
             lift = raised;
             spaces = byClass.get(limit - 1);
+            // (A line that only went up takes up the columns it took up: their lists of chunks are not made again.)
+            if (before != null) for (final Tube now : spaces) for (final Tube was : before) now.sameColumnsAs(was);
             part = 0;
             tube = spaces.get(0);
             chunks = tube.chunks();
@@ -695,6 +698,8 @@ public final class RouteNetwork extends SavedData {
     /** A line was flown from end to end without meeting anything: it is clear, even if it could not be scanned before. */
     public void confirmClear(Edge edge) {
         if (edge.state != State.UNVERIFIED) return;
+        // (Not while a look has the line at another height than it was flown: that look decides.)
+        if (edge.queued && edge.scan != null && edge.scan.lift != edge.lift) return;
         edge.version++;
         edge.gaps = false;
         set(edge, State.CLEAR, null);
@@ -739,11 +744,12 @@ public final class RouteNetwork extends SavedData {
             if (edge.state != State.BLOCKED) reportBlocked(edge, at);
             return;
         }
+        // A look under way may have passed that place already: its end must not open the line again (see the tick). Also
+        // when the class is kept off already: what keeps it off now may be gone by the end of that look.
+        if (edge.queued) edge.again = true;
         if (edge.blockedFrom != null && edge.blockedFrom.ordinal() <= from.ordinal()) return;
         edge.blockedFrom = from;
         edge.blockedFromAt = at.immutable();
-        // A look under way may have passed that place already: its end must not open the line again (see the tick).
-        if (edge.queued) edge.again = true;
         linksDue = true;
         setDirty();
     }
@@ -1304,6 +1310,7 @@ public final class RouteNetwork extends SavedData {
             line.putString("state", edge.state.name());
             if (edge.blockedAt != null) line.putLong("blockedAt", edge.blockedAt.asLong());
             if (edge.blockedFrom != null) line.putString("blockedFrom", edge.blockedFrom.name());
+            if (edge.blockedFrom != null && edge.blockedFromAt != null) line.putLong("blockedFromAt", edge.blockedFromAt.asLong());
             if (edge.lift > edge.padLift) line.putInt("lift", edge.lift);
             lines.add(line);
         }
@@ -1351,6 +1358,7 @@ public final class RouteNetwork extends SavedData {
             edge.blockedAt = edge.state == State.BLOCKED && line.contains("blockedAt") ? BlockPos.of(line.getLong("blockedAt")) : null;
             edge.blockedFrom = line.contains("blockedFrom") ? ShipClass.of(line.getString("blockedFrom").toLowerCase(java.util.Locale.ROOT)) : null;
             if (edge.blockedFrom == ShipClass.SMALL) edge.blockedFrom = null;
+            edge.blockedFromAt = edge.blockedFrom != null && line.contains("blockedFromAt") ? BlockPos.of(line.getLong("blockedFromAt")) : null;
             // As high as it was found to pass over the blocks on its way (relink() made it as high as the pads ask for).
             if (line.getInt("lift") > edge.lift) network.reshape(edge, line.getInt("lift"));
         }
