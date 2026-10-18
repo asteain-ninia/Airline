@@ -168,6 +168,7 @@ final class Shipyard {
                 be.lacks.clear();
                 be.setChanged();
             }
+            be.lacksKnown = true;
             return new int[2];
         }
         final net.neoforged.neoforge.items.IItemHandler racks = Cargo.racks(airfield), store = Cargo.importStore(level, airfield);
@@ -208,6 +209,7 @@ final class Shipyard {
             }
         }
         if (restored > 0) c.dial();
+        be.lacksKnown = true;
         if (!lacks.equals(be.lacks)) {
             be.lacks.clear();
             be.lacks.putAll(lacks);

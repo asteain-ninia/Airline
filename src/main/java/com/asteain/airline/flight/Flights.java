@@ -296,6 +296,34 @@ public final class Flights {
         return Fuel.need(AircraftType.of(aircraft.type), flightTicks);
     }
 
+    /**
+     * The parts that the aircraft whose racks are this airfield's lack (their homes are its pads, or anchorages whose
+     * racks are its racks): item to count. {@code complete} is false while one of them has not been looked over since it
+     * was loaded (then nothing is withdrawn). Null when none of them is loaded: nothing is known.
+     */
+    @Nullable
+    public static PartsWanted partsWanted(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield) {
+        if (!available()) return null;
+        final java.util.Map<net.minecraft.world.item.Item, Integer> items = new java.util.LinkedHashMap<>();
+        boolean any = false, complete = true;
+        for (final AircraftBlockEntity aircraft : FlightController.loaded(level)) {
+            if (aircraft.home == null) continue;
+            final com.asteain.airline.colony.BuildingAirfield home = Cargo.airfieldAt(level, aircraft.home);
+            if (home == null || Cargo.storeOf(home) != airfield) continue;
+            any = true;
+            complete &= aircraft.lacksKnown;
+            for (final java.util.Map.Entry<String, Integer> lack : aircraft.lacks.entrySet()) {
+                final net.minecraft.world.item.Item item = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(net.minecraft.resources.ResourceLocation.parse(lack.getKey())).asItem();
+                if (item != net.minecraft.world.item.Items.AIR) items.merge(item, lack.getValue(), Integer::sum);
+            }
+        }
+        return any ? new PartsWanted(items, complete) : null;
+    }
+
+    /** See {@link #partsWanted}. */
+    public record PartsWanted(java.util.Map<net.minecraft.world.item.Item, Integer> items, boolean complete) {
+    }
+
     /** Looks an aircraft that stands at home over now (it is done every ten seconds anyway): {blocks put right, blocks taken out}. */
     public static int[] maintain(ServerLevel level, AircraftBlockEntity aircraft) {
         final FlightController.Runtime rt = available() ? FlightController.runtime(aircraft) : null;

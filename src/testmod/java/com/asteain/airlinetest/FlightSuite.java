@@ -1277,8 +1277,19 @@ final class FlightSuite {
                     done[0] == 0 && Integer.valueOf(1).equals(a.aircraft.lacks.get(deckKey)) && !refused.ok() && refused.text().getString().contains(deckBlock.getName().getString())
                             && !refused.text().getString().contains("minecraft:"),
                     "lacks " + a.aircraft.lacks + "; a flight: " + refused.text().getString());
+            // Asked for like anything a building asks for (2026-10-18): one request for the part, not two when asked again.
+            final int exportBefore = partRequests(a.airfield, false).size();
+            a.airfield.askForParts();
+            a.airfield.askForParts();
+            final java.util.List<Stack> asked = partRequests(a.airfield, true);
+            s.soft("yard / the missing part is asked for like anything a building asks for: one request for it, also when asked again; the export table's requests are not touched",
+                    asked.size() == 1 && asked.get(0).getStack().is(deckItem) && asked.get(0).getCount() == 1 && partRequests(a.airfield, false).size() == exportBefore,
+                    "part requests " + asked.stream().map(r -> r.getCount() + " x " + r.getStack().getItem()).toList() + ", export " + exportBefore + " -> " + partRequests(a.airfield, false).size());
             Fixture.stock(rack[0], deckItem, 1);
             done = Flights.maintain(level, a.aircraft);
+            a.airfield.askForParts();
+            s.soft("yard / once the part is in, no request for parts is left open", partRequests(a.airfield, true).isEmpty(),
+                    "part requests " + partRequests(a.airfield, true).stream().map(r -> r.getCount() + " x " + r.getStack().getItem()).toList());
             s.soft("yard / with the part on the racks it is put in at the next look, and nothing is lacking any more", done[0] == 1 && a.aircraft.lacks.isEmpty() && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(deckBlock),
                     "put right " + done[0] + ", lacks " + a.aircraft.lacks);
             // Being changed by hand with the design tools (2026-10-16; it was self-repair switched off at the airfield before):
@@ -2964,6 +2975,14 @@ final class FlightSuite {
     }
 
     /** The colony's (first) airfield, found among its buildings. */
+    /** The airfield's own open Stack requests: those it may fill itself (parts for its aircraft), or the export table's. */
+    private static java.util.List<Stack> partRequests(BuildingAirfield airfield, boolean own) {
+        final java.util.List<Stack> out = new java.util.ArrayList<>();
+        for (var open : airfield.getOpenRequestsOfType(-1, com.google.common.reflect.TypeToken.of(Stack.class)))
+            if (open.getRequest().canBeResolvedByBuilding() == own) out.add(open.getRequest());
+        return out;
+    }
+
     private static BuildingAirfield airfieldOf(IColony colony) {
         for (final com.minecolonies.api.colony.buildings.IBuilding building : colony.getServerBuildingManager().getBuildings().values())
             if (building instanceof BuildingAirfield airfield && airfield.facility().airfield()) return airfield;

@@ -58,7 +58,7 @@
   "message.airline.yard.design": "Building this design instead: %s (%s blocks to go).",
   "message.airline.yard.done": "The aircraft is finished: %s, on the landing pad at %s %s %s.",
   "message.airline.yard.pad_taken": "An aircraft stands on that landing pad, is expected there, or has its home there.",
-  "message.airline.yard.lacks": "The aircraft is missing parts and cannot fly until it is repaired: put %s into the airfield's racks.",
+  "message.airline.yard.lacks": "The aircraft is missing parts and cannot fly until it is repaired: %s. The airfield has asked the colony for them (it is repaired when they arrive; putting them into the airfield's racks works as well).",
   "message.airline.fuel.put": "%s put into the tank. It now holds %s minutes of flight.",
   "message.airline.fuel.full": "The tank is full (%2$s minutes of flight).",
   "message.airline.fuel.request": "Fuel for the aircraft (coal or charcoal)",

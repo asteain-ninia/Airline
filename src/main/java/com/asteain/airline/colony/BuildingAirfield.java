@@ -129,6 +129,42 @@ public class BuildingAirfield extends AbstractBuilding {
         super.onColonyTick(colony);
         registerPad();
         askForFuel();
+        askForParts();
+    }
+
+    /**
+     * The parts its aircraft lack are asked for like anything else a building asks for (2026-10-18, the user's
+     * "飛行場で機体の修復に使う資材、普通のアイテム要求で要求するようにして欲しい"): couriers bring them to the racks, and the
+     * aircraft is put right from there at its next look (every ten seconds). One request per kind of part for what is
+     * lacking and not on the racks yet; a request for a part that is no longer lacking is withdrawn. These requests are
+     * the building's own {@code Stack} requests that the building may fill itself; those of the export table
+     * ({@link ExportStockModule}) are the ones it may not, and the two never touch each other's.
+     */
+    public void askForParts() {
+        if (!facility.airfield() || !(getColony().getWorld() instanceof ServerLevel level)) return;
+        final com.asteain.airline.flight.Flights.PartsWanted wanted = com.asteain.airline.flight.Flights.partsWanted(level, this);
+        if (wanted == null) return;
+        final java.util.Map<net.minecraft.world.item.Item, Integer> asked = new java.util.HashMap<>();
+        final com.google.common.reflect.TypeToken<com.minecolonies.api.colony.requestsystem.requestable.Stack> kind =
+                com.google.common.reflect.TypeToken.of(com.minecolonies.api.colony.requestsystem.requestable.Stack.class);
+        for (final com.minecolonies.api.colony.requestsystem.request.IRequest<? extends com.minecolonies.api.colony.requestsystem.requestable.Stack> open : getOpenRequestsOfType(-1, kind)) {
+            final com.minecolonies.api.colony.requestsystem.requestable.Stack stack = open.getRequest();
+            if (!stack.canBeResolvedByBuilding()) continue;
+            final net.minecraft.world.item.Item item = stack.getStack().getItem();
+            if (!wanted.items().containsKey(item)) {
+                if (wanted.complete()) getColony().getRequestManager().updateRequestState(open.getId(), com.minecolonies.api.colony.requestsystem.request.RequestState.CANCELLED);
+                continue;
+            }
+            asked.merge(item, stack.getCount(), Integer::sum);
+        }
+        for (final java.util.Map.Entry<net.minecraft.world.item.Item, Integer> part : wanted.items().entrySet()) {
+            final net.minecraft.world.item.Item item = part.getKey();
+            final int onRacks = com.minecolonies.api.util.InventoryUtils.getItemCountInItemHandler(getItemHandlerCap(), stack -> stack.is(item));
+            final int more = part.getValue() - asked.getOrDefault(item, 0) - onRacks;
+            if (more <= 0) continue;
+            createRequest(new com.minecolonies.api.colony.requestsystem.requestable.Stack(new net.minecraft.world.item.ItemStack(item), false, true,
+                    net.minecraft.world.item.ItemStack.EMPTY, more, 1, true), true);
+        }
     }
 
     /**

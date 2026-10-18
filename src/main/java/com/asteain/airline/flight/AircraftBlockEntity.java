@@ -154,6 +154,11 @@ public final class AircraftBlockEntity extends BlockEntity {
      * racks do not have, block name to count. An aircraft that lacks a part does not fly. See {@link Shipyard#maintain}.
      */
     public final java.util.Map<String, Integer> lacks = new java.util.LinkedHashMap<>();
+    /**
+     * Not saved: whether {@link #lacks} has been worked out since the aircraft was loaded (until then it is empty because
+     * nobody has looked, not because nothing is lacking; the airfield's requests for parts are not withdrawn on it).
+     */
+    public boolean lacksKnown;
     /** Not saved: the controller's working state for this aircraft. */
     @Nullable Object runtime;
 

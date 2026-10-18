@@ -58,7 +58,7 @@
   "message.airline.yard.design": "建造する型を替えました:%s(あと %s ブロック)。",
   "message.airline.yard.done": "機体ができました:%s(%s %s %s の発着場)。",
   "message.airline.yard.pad_taken": "その発着場では建造できません。機体が止まっているか、来る予定の機体があるか、ほかの機体の母港です。",
-  "message.airline.yard.lacks": "機体に欠けた部品があり、直すまで飛べません:%s を飛行場の棚に入れてください。",
+  "message.airline.yard.lacks": "機体に欠けた部品があり、直すまで飛べません:%s。飛行場が村に頼みました(倉庫から届けば直します。飛行場の棚に入れても直ります)。",
   "message.airline.fuel.put": "燃料庫に %s 個入れました。いまの燃料で %s 分飛べます。",
   "message.airline.fuel.full": "燃料庫はいっぱいです(%2$s 分飛べます)。",
   "message.airline.fuel.request": "機体の燃料(石炭か木炭)",
