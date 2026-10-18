@@ -423,6 +423,23 @@ public final class Flights {
         return available() ? FlightController.readings(aircraft) : null;
     }
 
+    /** What a pilot is about, from what its aircraft does now (see PilotState). */
+    public static com.asteain.airline.colony.PilotState pilotState(net.minecraft.world.entity.Entity pilot) {
+        if (!available() || !(pilot.level() instanceof ServerLevel level)) return com.asteain.airline.colony.PilotState.PILOT_WAITING;
+        for (final AircraftBlockEntity aircraft : FlightController.loaded(level)) {
+            if (!pilot.getUUID().equals(aircraft.pilot)) continue;
+            return switch (aircraft.phase) {
+                case LOAD -> com.asteain.airline.colony.PilotState.PILOT_LOADING;
+                case BOARDING -> com.asteain.airline.colony.PilotState.PILOT_BOARDING;
+                case DISEMBARK -> com.asteain.airline.colony.PilotState.PILOT_DISEMBARKING;
+                case UNLOAD -> com.asteain.airline.colony.PilotState.PILOT_UNLOADING;
+                case PARKED, WAIT, STRANDED -> com.asteain.airline.colony.PilotState.PILOT_WAITING;
+                default -> aircraft.flying() ? com.asteain.airline.colony.PilotState.PILOT_FLYING : com.asteain.airline.colony.PilotState.PILOT_WAITING;
+            };
+        }
+        return com.asteain.airline.colony.PilotState.PILOT_WAITING;
+    }
+
     /** For the checks: whether a connector of the aircraft's hull is joined to another one now (at an anchorage: the pier's). */
     public static boolean docked(AircraftBlockEntity aircraft) {
         return available() && FlightController.docked(aircraft);

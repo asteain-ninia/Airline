@@ -335,7 +335,7 @@ def design(mod_id="airline", level=1):
         put(*spot, RACK % facing)
         racks.append(spot)
     stash = (2, 1, 19)
-    put(*stash, "minecolonies:blockstash[facing=east]")
+    put(*stash, "minecolonies:blockstash[facing=west]")             # 前が通路の側(2026-10-18 のご指摘で東から直した)
     put(9, 1, 23, "minecraft:%s_door[facing=south,half=lower,hinge=left,open=false,powered=false]" % wood)
     put(9, 2, 23, "minecraft:%s_door[facing=south,half=upper,hinge=left,open=false,powered=false]" % wood)
     put(12, 1, 20, fence)                                               # 机

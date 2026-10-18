@@ -1,4 +1,4 @@
 {
   "replace": false,
-  "values": [ "airline:blockhutairfield" ]
+  "values": [ "airline:blockhutairfield", "airline:blockhutmediumairfield", "airline:blockhutlargeairfield", "airline:blockhutanchorage" ]
 }

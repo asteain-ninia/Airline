@@ -231,5 +231,11 @@
   "commands.airline.flight.note.pad_gone": "%s %s %s の発着場が使えなくなりました(飛行場が取り壊されたか、泊地の村に飛行場がなくなりました)。機体は出発地へ戻り、便は欠航にします。",
   "commands.airline.flight.note.pad_gone_stranded": "%s %s %s の発着場が使えなくなり、戻る航路もありません。機体はその上の空中に止めてあります。見に来てください。",
   "commands.airline.flight.note.cancelled_pad": "欠航:行き先の発着場に降りられませんでした。機体は出発地に戻りました。",
-  "commands.airline.flight.anchorage_no_home": "泊地には機体を作れません(機体の母港は飛行場です)。"
+  "commands.airline.flight.anchorage_no_home": "泊地には機体を作れません(機体の母港は飛行場です)。",
+  "colonypatch.state.PILOT_WAITING": "待機",
+  "colonypatch.state.PILOT_LOADING": "荷積み",
+  "colonypatch.state.PILOT_BOARDING": "乗り込み",
+  "colonypatch.state.PILOT_FLYING": "操縦中",
+  "colonypatch.state.PILOT_DISEMBARKING": "降りる",
+  "colonypatch.state.PILOT_UNLOADING": "荷下ろし"
 }

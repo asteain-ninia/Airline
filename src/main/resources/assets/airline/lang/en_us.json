@@ -231,5 +231,11 @@
   "commands.airline.flight.note.pad_gone": "The pad at %s %s %s left the air network (its airfield was taken down, or the anchorage's colony has no airfield any more). The aircraft returns to where it started; the flight is cancelled.",
   "commands.airline.flight.note.pad_gone_stranded": "The pad at %s %s %s left the air network and there is no way back. The aircraft is fixed in the air above it. Have a look.",
   "commands.airline.flight.note.cancelled_pad": "Flight cancelled: it could not land at the destination's pad; the aircraft is back where it started.",
-  "commands.airline.flight.anchorage_no_home": "No aircraft can be made at an anchorage (an aircraft's home is an airfield)."
+  "commands.airline.flight.anchorage_no_home": "No aircraft can be made at an anchorage (an aircraft's home is an airfield).",
+  "colonypatch.state.PILOT_WAITING": "Waiting",
+  "colonypatch.state.PILOT_LOADING": "Loading",
+  "colonypatch.state.PILOT_BOARDING": "Boarding",
+  "colonypatch.state.PILOT_FLYING": "Flying",
+  "colonypatch.state.PILOT_DISEMBARKING": "Getting off",
+  "colonypatch.state.PILOT_UNLOADING": "Unloading"
 }

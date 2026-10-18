@@ -50,7 +50,10 @@ final class RouteOverlays {
             shownIn = dimension;
             api.removeAll(Airline.MOD_ID);
             int i = 0;
-            for (final RouteMap.Line line : RouteMapClient.lines(dimension.location())) api.show(overlay(dimension, line, i++));
+            for (final RouteMap.Line line : RouteMapClient.lines(dimension.location())) {
+                for (final MapPolygon piece : pieces(line.a(), line.b())) api.show(overlay(dimension, line, piece, i));
+                i++;
+            }
         } catch (Throwable t) {
             failed = true;
             LOGGER.error("[Airline/map] drawing the air network on JourneyMap failed; it is not drawn any more in this session", t);
@@ -68,11 +71,11 @@ final class RouteOverlays {
         shownIn = null;
     }
 
-    private static PolygonOverlay overlay(ResourceKey<Level> dimension, RouteMap.Line line, int index) {
+    private static PolygonOverlay overlay(ResourceKey<Level> dimension, RouteMap.Line line, MapPolygon piece, int index) {
         final boolean unverified = line.state() == 0, blocked = line.open() < 0;
         final int colour = unverified ? UNVERIFIED : blocked ? BLOCKED : COLOURS[Math.min(line.open(), COLOURS.length - 1)];
         final ShapeProperties shape = new ShapeProperties().setStrokeColor(colour).setFillColor(colour).setStrokeOpacity(0.9f).setFillOpacity(blocked ? 0.35f : 0.55f).setStrokeWidth(1.0f);
-        final PolygonOverlay overlay = new PolygonOverlay(Airline.MOD_ID, dimension, shape, band(line.a(), line.b()));
+        final PolygonOverlay overlay = new PolygonOverlay(Airline.MOD_ID, dimension, shape, piece);
         final long length = Math.round(Math.sqrt(line.a().distSqr(line.b())));
         final String title = unverified ? I18n.get("journeymap.airline.line.unverified", length)
                 : blocked ? I18n.get("journeymap.airline.line.blocked", length)
@@ -83,13 +86,33 @@ final class RouteOverlays {
         return overlay;
     }
 
-    /** A band along the line, from the middle of one point to the middle of the other. */
-    private static MapPolygon band(BlockPos a, BlockPos b) {
+    /**
+     * The band along the line in pieces (2026-10-18, the user: the name came up far from a line on the full map).
+     * JourneyMap shows a shape's name wherever the mouse is inside the box around the shape, and the box around a long
+     * slanting band is wide: a slanting line is drawn in pieces short enough that the box of each stays within a few
+     * blocks of the line. A line along the x or z axis is one piece.
+     */
+    private static java.util.List<MapPolygon> pieces(BlockPos a, BlockPos b) {
         final double ax = a.getX() + 0.5, az = a.getZ() + 0.5, bx = b.getX() + 0.5, bz = b.getZ() + 0.5;
         final double length = Math.max(1.0e-6, Math.hypot(bx - ax, bz - az));
-        final double px = -(bz - az) / length * HALF_WIDTH, pz = (bx - ax) / length * HALF_WIDTH;
-        final int y = Math.max(a.getY(), b.getY());
-        return new MapPolygon(BlockPos.containing(ax + px, y, az + pz), BlockPos.containing(bx + px, y, bz + pz),
-                BlockPos.containing(bx - px, y, bz - pz), BlockPos.containing(ax - px, y, az - pz));
+        final double slant = Math.min(Math.abs(bx - ax), Math.abs(bz - az)) / length;
+        final int count = slant < 1.0e-3 ? 1 : (int) Math.max(1, Math.ceil(length * slant / PIECE_SPREAD));
+        final java.util.List<MapPolygon> pieces = new java.util.ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            final double t0 = (double) i / count, t1 = (double) (i + 1) / count;
+            pieces.add(band(ax + (bx - ax) * t0, az + (bz - az) * t0, ax + (bx - ax) * t1, az + (bz - az) * t1, Math.max(a.getY(), b.getY())));
+        }
+        return pieces;
+    }
+
+    /** How far a piece of a slanting line may reach sideways (the shorter side of its box, apart from the band's width), in blocks. */
+    private static final double PIECE_SPREAD = 4.0;
+
+    /** A band along a piece of a line, from x0, z0 to x1, z1. */
+    private static MapPolygon band(double x0, double z0, double x1, double z1, int y) {
+        final double length = Math.max(1.0e-6, Math.hypot(x1 - x0, z1 - z0));
+        final double px = -(z1 - z0) / length * HALF_WIDTH, pz = (x1 - x0) / length * HALF_WIDTH;
+        return new MapPolygon(BlockPos.containing(x0 + px, y, z0 + pz), BlockPos.containing(x1 + px, y, z1 + pz),
+                BlockPos.containing(x1 - px, y, z1 - pz), BlockPos.containing(x0 - px, y, z0 - pz));
     }
 }

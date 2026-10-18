@@ -32,6 +32,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Containers;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.Item;
@@ -138,6 +139,8 @@ final class FlightController {
          * over, joined or not), and ticks spent letting go of it before leaving.
          */
         int dockTicks, undockTicks;
+        /** The lever moves the pilot was last shown making (see the arm in the tick), and when. */
+        int writesSeen, swungAt;
         int shipHolds;
         /** Lines it found another ship on and goes round, until it has flown a line to its end or landed. */
         final java.util.Set<Edge> avoid = new java.util.HashSet<>();
@@ -649,6 +652,15 @@ final class FlightController {
                     rt.paused = false;
                 }
                 fly(level, be, rt, net);
+                // The pilot works the levers (2026-10-18, the user's wish): an arm moved when the autopilot set one, not
+                // more than twice a second.
+                if (c.writes != rt.writesSeen) {
+                    rt.writesSeen = c.writes;
+                    if (rt.age - rt.swungAt >= 10) {
+                        pilot.swing(InteractionHand.MAIN_HAND);
+                        rt.swungAt = rt.age;
+                    }
+                }
             }
         }
     }

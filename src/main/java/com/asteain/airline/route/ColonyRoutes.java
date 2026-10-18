@@ -156,10 +156,7 @@ public final class ColonyRoutes extends SavedData {
 
     /** Why a line may not be flown by this class: something in the way (one place), a pad it crosses, or not looked at yet. */
     private static Component why(ServerLevel level, RouteNetwork net, RouteNetwork.Edge edge, ShipClass ship, MutableComponent name) {
-        if (edge.state() == RouteNetwork.State.UNVERIFIED) {
-            final BlockPos middle = BlockPos.containing((edge.a.getX() + edge.b.getX()) / 2.0, (edge.a.getY() + edge.b.getY()) / 2.0, (edge.a.getZ() + edge.b.getZ()) / 2.0);
-            return edge.hasUnseenParts() ? Component.translatable(STATUS + "unloaded", name, at(middle)) : Component.translatable(STATUS + "checking", name);
-        }
+        // (What keeps this class off the line comes first: a line that is still being looked at may be closed to it already.)
         // A landing pad on the way that the line would have to be raised too far to pass over (for the small class, or for this class).
         final BlockPos pad = edge.barredBy() != null ? edge.barredBy() : edge.barredFrom() != null && ship.atLeast(edge.barredFrom()) ? edge.barredFromAt() : null;
         if (pad != null) {
@@ -167,8 +164,13 @@ public final class ColonyRoutes extends SavedData {
             final String colony = airfield == null ? "?" : airfield.getColony().getName();
             return Component.translatable(STATUS + "crosses_pad", name, colony, RouteRules.lineRaiseMax(), at(pad));
         }
-        final BlockPos block = edge.state() == RouteNetwork.State.BLOCKED ? edge.blockedAt() : edge.blockedFromAt();
-        if (block == null) return Component.translatable(STATUS + "checking", name);
+        final BlockPos block = edge.state() == RouteNetwork.State.BLOCKED ? edge.blockedAt()
+                : edge.closedFrom() != null && ship.atLeast(edge.closedFrom()) ? edge.blockedFromAt() : null;
+        if (block == null) {
+            if (edge.state() != RouteNetwork.State.UNVERIFIED) return Component.translatable(STATUS + "checking", name);
+            final BlockPos middle = BlockPos.containing((edge.a.getX() + edge.b.getX()) / 2.0, (edge.a.getY() + edge.b.getY()) / 2.0, (edge.a.getZ() + edge.b.getZ()) / 2.0);
+            return edge.hasUnseenParts() ? Component.translatable(STATUS + "unloaded", name, at(middle)) : Component.translatable(STATUS + "checking", name);
+        }
         if (level.isLoaded(block)) {
             final BlockState state = level.getBlockState(block);
             if (state.isAir()) {

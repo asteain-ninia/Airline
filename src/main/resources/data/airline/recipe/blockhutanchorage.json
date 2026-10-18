@@ -1,0 +1,7 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": { "P": { "tag": "minecraft:planks" }, "C": { "item": "minecraft:chain" } },
+  "pattern": [ "PPP", "PCP", "PPP" ],
+  "result": { "count": 1, "id": "airline:blockhutanchorage" }
+}

@@ -1,0 +1,7 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": { "P": { "tag": "minecraft:planks" }, "B": { "item": "minecraft:iron_block" }, "H": { "item": "airline:blockhutmediumairfield" } },
+  "pattern": [ "PBP", "BHB", "PBP" ],
+  "result": { "count": 1, "id": "airline:blockhutlargeairfield" }
+}

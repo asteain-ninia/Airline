@@ -731,7 +731,7 @@ public final class RouteNetwork extends SavedData {
         final ShipClass kept = edge.keepsOut(pos.getX(), pos.getY(), pos.getZ());
         if (shaft != null && (kept == null || kept.ordinal() >= shaft.ordinal())) return;
         final LevelChunk chunk = kept == null ? null : level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
-        if (chunk != null && passOver(level, chunk, edge.byClass.get(kept.ordinal()).get(0), edge.base, edge.lift, pos.getX(), pos.getZ(), new int[1]) > RouteRules.lineRaiseMax()) {
+        if (chunk != null && passOver(level, chunk::getBlockState, false, edge.byClass.get(kept.ordinal()).get(0), edge.base, edge.lift, pos.getX(), pos.getZ(), new int[1]) > RouteRules.lineRaiseMax()) {
             keepOut(edge, kept, pos);
         } else {
             lookAgain(edge);
@@ -812,9 +812,13 @@ public final class RouteNetwork extends SavedData {
         return !state.isAir() && !(state.getBlock() instanceof BuoyBlock) && !state.getCollisionShape(level, pos).isEmpty();
     }
 
-    /** In the way of a line: solid, and not part of an aircraft that is being built on a landing pad. */
-    private boolean inTheWay(ServerLevel level, BlockPos pos, BlockState state) {
-        if (!solid(level, pos, state)) return false;
+    /**
+     * In the way of a line: solid, and not part of an aircraft that is being built on a landing pad. For a block read
+     * from the save ({@code saved}) its shape is taken without asking the world (asking about a place that is not loaded
+     * would load it).
+     */
+    private boolean inTheWay(ServerLevel level, BlockPos pos, BlockState state, boolean saved) {
+        if (saved ? state.isAir() || state.getBlock() instanceof BuoyBlock || state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, pos).isEmpty() : !solid(level, pos, state)) return false;
         if (sites.isEmpty()) return true;
         for (final Site site : sites.values()) if (site.box().isInside(pos)) return false;
         return true;
@@ -1021,7 +1025,7 @@ public final class RouteNetwork extends SavedData {
         setDirty();
     }
 
-    /** Looks at as many columns as the budget allows. Only chunks that are loaded right now are read. */
+    /** Looks at as many columns as the budget allows. Chunks that are not loaded are read from the save (see {@link Saved}). */
     private int step(ServerLevel level, Scan scan, int budget) {
         final int minY = level.getMinBuildHeight(), maxY = level.getMaxBuildHeight() - 1;
         final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
@@ -1035,14 +1039,23 @@ public final class RouteNetwork extends SavedData {
             }
             final long key = scan.chunks[scan.chunk];
             final int chunkX = ChunkPos.getX(key), chunkZ = ChunkPos.getZ(key);
-            final LevelChunk chunk = level.getChunkSource().getChunkNow(chunkX, chunkZ);
-            if (chunk == null) {
-                // Every chunk in the list holds a column of the space, so this part of the line was not seen.
-                budget--;
-                scan.gaps = true;
-                scan.chunk++;
-                scan.column = 0;
-                continue;
+            final LevelChunk loaded = level.getChunkSource().getChunkNow(chunkX, chunkZ);
+            final View chunk;
+            if (loaded != null) {
+                chunk = loaded::getBlockState;
+            } else {
+                // Not loaded: read from the save (2026-10-18), without loading it into the world.
+                final Saved saved = fromSave(level, key);
+                if (saved == WAITING) return budget;      // being read: looked at again next tick
+                if (saved.none) {
+                    // Never made (or not readable): this part of the line was not seen (every chunk in the list holds a column of the space).
+                    budget--;
+                    scan.gaps = true;
+                    scan.chunk++;
+                    scan.column = 0;
+                    continue;
+                }
+                chunk = saved;
             }
             final Tube tube = scan.tube;
             while (budget > 0 && scan.column < 256) {
@@ -1054,8 +1067,8 @@ public final class RouteNetwork extends SavedData {
                 final int from = Math.max(minY, (int) Math.ceil(low - 0.5)), to = Math.min(maxY, (int) Math.floor(high - 0.5));
                 for (int y = from; y <= to; y++) {
                     budget--;
-                    final BlockState state = chunk.getBlockState(pos.set(x, y, z));
-                    if (!inTheWay(level, pos, state)) continue;
+                    final BlockState state = chunk.state(pos.set(x, y, z));
+                    if (!inTheWay(level, pos, state, loaded == null)) continue;
                     // Over one of the line's ends (in a shaft) nothing is passed over: it keeps off the classes whose shaft holds it.
                     final int shaft = scan.shaftFrom(x, y, z);
                     if (shaft < scan.limit) {
@@ -1069,7 +1082,7 @@ public final class RouteNetwork extends SavedData {
                     }
                     if (scan.part == 0) {
                         // In the line itself: how much higher each class would pass over this column (the rest of it is looked at for that).
-                        budget -= over(level, chunk, scan, x, z, pos.immutable());
+                        budget -= over(level, chunk, loaded == null, scan, x, z, pos.immutable());
                         break;
                     }
                 }
@@ -1088,12 +1101,12 @@ public final class RouteNetwork extends SavedData {
      * raised over the highest block in its way, and looked at again there, until it is free or higher than lines are
      * raised). Returns how many block positions were read.
      */
-    private int over(ServerLevel level, LevelChunk chunk, Scan scan, int x, int z, BlockPos hit) {
+    private int over(ServerLevel level, View chunk, boolean saved, Scan scan, int x, int z, BlockPos hit) {
         final int[] reads = new int[1];
         for (int c = 0; c < scan.limit; c++) {
             final Tube line = scan.byClass.get(c).get(0);
             if (!line.touchesColumn(x, z)) continue;
-            final int lift = passOver(level, chunk, line, scan.base, scan.lift, x, z, reads);
+            final int lift = passOver(level, chunk, saved, line, scan.base, scan.lift, x, z, reads);
             if (lift > scan.need[c]) {
                 scan.need[c] = lift;
                 scan.needAt[c] = hit;
@@ -1107,7 +1120,7 @@ public final class RouteNetwork extends SavedData {
      * everything in the column x, z: raised over the highest block in its way and looked at again there, until it is
      * free or higher than lines are raised. {@code reads[0]} counts the block positions read.
      */
-    private int passOver(ServerLevel level, LevelChunk chunk, Tube line, double base, int lift, int x, int z, int[] reads) {
+    private int passOver(ServerLevel level, View chunk, boolean saved, Tube line, double base, int lift, int x, int z, int[] reads) {
         final int minY = level.getMinBuildHeight(), maxY = level.getMaxBuildHeight() - 1, cap = RouteRules.lineRaiseMax();
         final BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         while (lift <= cap) {
@@ -1118,7 +1131,7 @@ public final class RouteNetwork extends SavedData {
             for (int at = to; at >= from; at--) {
                 reads[0]++;
                 pos.set(x, at, z);
-                if (inTheWay(level, pos, chunk.getBlockState(pos))) {
+                if (inTheWay(level, pos, chunk.state(pos), saved)) {
                     top = at;
                     break;
                 }
@@ -1150,6 +1163,91 @@ public final class RouteNetwork extends SavedData {
         if (lift <= scan.lift) return false;
         scan.restart(build(scan.edge, lift), lift);
         return true;
+    }
+
+    /** The blocks of one chunk as a scan reads them: a loaded chunk, or one read from the save. */
+    @FunctionalInterface
+    private interface View {
+        BlockState state(BlockPos pos);
+    }
+
+    /**
+     * A chunk as it was saved (2026-10-18, the user: lines stayed "being looked at"; lines over land nobody was near
+     * could not be seen at all): its blocks, read from the region file without loading the chunk into the world (no
+     * ticking, nothing made). {@code none}: there is nothing to read (never made, or saved by another version).
+     */
+    private static final class Saved implements View {
+        final boolean none;
+        final long readAt;
+        final int minSection;
+        final net.minecraft.world.level.chunk.PalettedContainer<BlockState>[] sections;
+
+        @SuppressWarnings("unchecked")
+        Saved(boolean none, long readAt, int minSection, int count) {
+            this.none = none;
+            this.readAt = readAt;
+            this.minSection = minSection;
+            this.sections = new net.minecraft.world.level.chunk.PalettedContainer[none ? 0 : count];
+        }
+
+        @Override
+        public BlockState state(BlockPos pos) {
+            final int i = (pos.getY() >> 4) - minSection;
+            final net.minecraft.world.level.chunk.PalettedContainer<BlockState> section = i < 0 || i >= sections.length ? null : sections[i];
+            return section == null ? net.minecraft.world.level.block.Blocks.AIR.defaultBlockState() : section.get(pos.getX() & 15, pos.getY() & 15, pos.getZ() & 15);
+        }
+    }
+
+    private static final Saved WAITING = new Saved(true, 0, 0, 0);
+    /** How long a chunk read from the save is used (it may be loaded, changed and saved again meanwhile). */
+    private static final int SAVED_TICKS = 1200;
+    private static final com.mojang.serialization.Codec<net.minecraft.world.level.chunk.PalettedContainer<BlockState>> SECTION_STATES =
+            net.minecraft.world.level.chunk.PalettedContainer.codecRW(net.minecraft.world.level.block.Block.BLOCK_STATE_REGISTRY, BlockState.CODEC,
+                    net.minecraft.world.level.chunk.PalettedContainer.Strategy.SECTION_STATES, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+    /** Chunks read from the save (the last few hundred), and the reads under way. Not saved. */
+    private final Map<Long, Saved> saved = new java.util.LinkedHashMap<>(64, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<Long, Saved> eldest) {
+            return size() > 512;
+        }
+    };
+    private final Map<Long, java.util.concurrent.CompletableFuture<java.util.Optional<CompoundTag>>> reading = new HashMap<>();
+
+    /** A chunk that is not loaded, as it was saved; {@link #WAITING} while it is being read (the region files are read on their own thread). */
+    private Saved fromSave(ServerLevel level, long key) {
+        final long now = level.getGameTime();
+        final Saved known = saved.get(key);
+        if (known != null && now - known.readAt < SAVED_TICKS) return known;
+        final java.util.concurrent.CompletableFuture<java.util.Optional<CompoundTag>> read = reading.get(key);
+        if (read == null) {
+            reading.put(key, level.getChunkSource().chunkMap.read(new ChunkPos(key)));
+            return WAITING;
+        }
+        if (!read.isDone()) return WAITING;
+        reading.remove(key);
+        Saved got;
+        try {
+            got = decode(level, read.getNow(java.util.Optional.empty()).orElse(null), now);
+        } catch (RuntimeException unreadable) {
+            got = new Saved(true, now, 0, 0);
+        }
+        saved.put(key, got);
+        return got;
+    }
+
+    /** The blocks of a saved chunk; "none" unless it was saved complete by this version of the game. */
+    private static Saved decode(ServerLevel level, @Nullable CompoundTag chunk, long now) {
+        if (chunk == null || chunk.getInt("DataVersion") != net.minecraft.SharedConstants.getCurrentVersion().getDataVersion().getVersion()
+                || !chunk.getString("Status").endsWith("full")) return new Saved(true, now, 0, 0);
+        final Saved out = new Saved(false, now, level.getMinSection(), level.getSectionsCount());
+        final ListTag sections = chunk.getList("sections", Tag.TAG_COMPOUND);
+        for (int i = 0; i < sections.size(); i++) {
+            final CompoundTag section = sections.getCompound(i);
+            final int index = section.getByte("Y") - out.minSection;
+            if (index < 0 || index >= out.sections.length || !section.contains("block_states", Tag.TAG_COMPOUND)) continue;
+            out.sections[index] = SECTION_STATES.parse(net.minecraft.nbt.NbtOps.INSTANCE, section.getCompound("block_states")).result().orElse(null);
+        }
+        return out;
     }
 
     /** Now and then: lines that could not be seen completely are tried again, and buoys whose block is gone are dropped. */
@@ -1186,7 +1284,7 @@ public final class RouteNetwork extends SavedData {
     public void blockChanged(ServerLevel level, BlockPos pos, BlockState now) {
         final List<Edge> near = byChunk.get(ChunkPos.asLong(pos.getX() >> 4, pos.getZ() >> 4));
         if (near == null) return;
-        final boolean solid = inTheWay(level, pos, now);
+        final boolean solid = inTheWay(level, pos, now, false);
         for (final Edge edge : new ArrayList<>(near)) {
             // A look under way that has raised the line looks at places the line does not take up yet: what changes there
             // has the line looked at once more.

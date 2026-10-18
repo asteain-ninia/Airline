@@ -43,6 +43,11 @@ final class NetworkSuite {
         }
     }
 
+    /** Lets the chunks go again (they are saved and unloaded when nothing else holds them). */
+    private static void release(ServerLevel level, int minX, int maxX, int minZ, int maxZ) {
+        for (int cx = minX >> 4; cx <= maxX >> 4; cx++) for (int cz = minZ >> 4; cz <= maxZ >> 4; cz++) level.setChunkForced(cx, cz, false);
+    }
+
     private static String describe(Edge edge) {
         return edge == null ? "no line" : edge.state() + (edge.blockedAt() == null ? "" : " at " + edge.blockedAt().toShortString()) + (edge.hasUnseenParts() ? " (unseen parts)" : "")
                 + (edge.lift() > 0 ? ", raised " + edge.lift() : "");
@@ -310,6 +315,35 @@ final class NetworkSuite {
         s.step("C: long lines over chunks that are not loaded", () -> {
             long unverified = net.edges().stream().filter(e -> e.state() == State.UNVERIFIED).count();
             s.soft("C / the long lines stay not verified, the server keeps running", unverified >= 2, unverified + " lines not verified, " + net.pending() + " waiting");
+        });
+
+        // ---- C2: land that is not loaded is read from the save (2026-10-18, the user: lines stayed "being looked at") ----
+        int z5 = 2600;
+        BlockPos savedA = new BlockPos(0, Y, z5), savedB = new BlockPos(90, Y, z5), savedStone = new BlockPos(45, Y + 9, z5);
+        s.step("C2: two buoys and a stone half way between them, the land loaded", () -> {
+            force(level, -24, 114, z5 - 24, z5 + 24);
+            level.setBlockAndUpdate(savedA, buoy(1).defaultBlockState());
+            level.setBlockAndUpdate(savedB, buoy(1).defaultBlockState());
+            level.setBlockAndUpdate(savedStone, Blocks.STONE.defaultBlockState());
+        });
+        s.until("C2: looked at with the land loaded", () -> {}, () -> net.edge(savedA, savedB) != null && net.edge(savedA, savedB).state() == State.CLEAR, 600);
+        s.step("C2: raised over the stone; the land is let go", () -> {
+            Edge line = net.edge(savedA, savedB);
+            s.soft("C2 / with the land loaded the line is raised over the stone (7) and clear", line.lift() == 7 && line.state() == State.CLEAR, describe(line));
+            release(level, -24, 114, z5 - 24, z5 + 24);
+        });
+        s.until("C2: the land is not loaded any more", () -> {}, () -> level.getChunkSource().getChunkNow(savedStone.getX() >> 4, savedStone.getZ() >> 4) == null
+                && level.getChunkSource().getChunkNow(savedA.getX() >> 4, savedA.getZ() >> 4) == null, 4800);
+        s.step("C2: looked at again with the land not loaded", () -> {
+            net.recheck(savedA);
+            s.soft("C2 / the line goes back to not verified", net.edge(savedA, savedB).state() == State.UNVERIFIED, describe(net.edge(savedA, savedB)));
+        });
+        s.until("C2: looked at from the save", () -> {}, () -> net.edge(savedA, savedB).state() != State.UNVERIFIED || net.edge(savedA, savedB).hasUnseenParts(), 2400);
+        s.step("C2: read from the save", () -> {
+            Edge line = net.edge(savedA, savedB);
+            final boolean stillNotLoaded = level.getChunkSource().getChunkNow(savedStone.getX() >> 4, savedStone.getZ() >> 4) == null;
+            s.soft("C2 / with the land not loaded, the line is looked at from the save: raised over the stone (7), clear, nothing unseen; the land was not loaded for it",
+                    line.state() == State.CLEAR && line.lift() == 7 && !line.hasUnseenParts() && stillNotLoaded, describe(line) + ", land loaded now: " + !stillNotLoaded);
         });
 
         // ---- D: landing pads (rulings of 2026-10-11): higher lines, the shaft over the pad, what a buoy says, links ----

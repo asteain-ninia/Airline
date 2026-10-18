@@ -18,6 +18,8 @@ public class EntityAIWorkPilot extends AbstractEntityAIBasic<JobPilot, BuildingA
         super.registerTargets(
                 new AITarget<IAIState>(IDLE, START_WORKING, 1),
                 new AITarget<IAIState>(START_WORKING, this::stayAtAirfield, TICKS_SECOND));
+        // The same work in every state; the state only says what the pilot's aircraft is doing.
+        for (final PilotState state : PilotState.values()) super.registerTargets(new AITarget<IAIState>(state, this::stayAtAirfield, TICKS_SECOND));
     }
 
     @Override
@@ -30,6 +32,6 @@ public class EntityAIWorkPilot extends AbstractEntityAIBasic<JobPilot, BuildingA
         // Away from home the pilot must not try to walk back to its own airfield: that is a flight away.
         if (post != null) EntityNavigationUtils.walkToPos(worker, post, 3, false);
         else walkToBuilding();
-        return START_WORKING;
+        return com.asteain.airline.flight.Flights.pilotState(worker);
     }
 }
