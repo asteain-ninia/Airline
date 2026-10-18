@@ -54,6 +54,37 @@ public final class AircraftType {
     public com.asteain.airline.route.ShipClass shipClass = com.asteain.airline.route.ShipClass.SMALL;
     /** Block states in the text form of commands ("create:shaft[axis=x]"). The aircraft's own block is not in this map. */
     public final Map<BlockPos, String> parts = new LinkedHashMap<>();
+    /**
+     * The materials of the parts that are made of others (Domum Ornamentum's blocks; 2026-10-18, the pillars of the user's
+     * 大凪号): a picture's slot to the block it is made of, as Domum Ornamentum keeps it ("textureData"). In a design file
+     * after the state: {@code "domum_ornamentum:squarepillar[column=pillar_base]|minecraft:block/oak_planks=minecraft:spruce_log"}
+     * (several slots apart with ";"), the way the airfields' blueprint tools write them.
+     */
+    public final Map<BlockPos, Map<String, String>> materials = new LinkedHashMap<>();
+
+    /** The materials of a part as Domum Ornamentum keeps them in its block entity; null for a part that is not made of others. */
+    @org.jetbrains.annotations.Nullable
+    public net.minecraft.nbt.CompoundTag materialTag(BlockPos part) {
+        final Map<String, String> made = materials.get(part);
+        if (made == null) return null;
+        final net.minecraft.nbt.CompoundTag texture = new net.minecraft.nbt.CompoundTag();
+        for (final Map.Entry<String, String> slot : made.entrySet()) texture.putString(slot.getKey(), slot.getValue());
+        final net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
+        tag.put("textureData", texture);
+        return tag;
+    }
+
+    /** Gives a part that was just put up the materials the design has for it (nothing for any other part). */
+    public void applyMaterials(net.minecraft.world.level.Level level, BlockPos part, BlockPos at) {
+        final net.minecraft.nbt.CompoundTag made = materialTag(part);
+        final net.minecraft.world.level.block.entity.BlockEntity entity = made == null ? null : level.getBlockEntity(at);
+        if (entity == null) return;
+        final net.minecraft.nbt.CompoundTag tag = entity.saveWithoutMetadata(level.registryAccess());
+        tag.merge(made);
+        entity.loadWithComponents(tag, level.registryAccess());
+        entity.setChanged();
+        level.sendBlockUpdated(at, level.getBlockState(at), level.getBlockState(at), 3);
+    }
 
     /**
      * How far the deck reaches to either side of the aircraft's own block (the widest of its blocks at the deck's height):
@@ -308,7 +339,7 @@ public final class AircraftType {
         }
         if (new java.util.HashSet<>(levers).size() != levers.size()) return "a lever is named twice";
         for (final Map.Entry<String, Dock> dock : docks.entrySet()) {
-            if (!dock.getKey().equals("port") && !dock.getKey().equals("starboard")) return "a connector is on the side '" + dock.getKey() + "' (port or starboard)";
+            if (!dock.getKey().equals("port") && !dock.getKey().equals("starboard") && !dock.getKey().equals("bottom")) return "a connector is on the side '" + dock.getKey() + "' (port, starboard or bottom)";
             if (!String.valueOf(parts.get(dock.getValue().connector())).startsWith("simulated:docking_connector")) return "no connector at " + dock.getValue().connector().toShortString();
             if (dock.getKey().equals("bottom") && !String.valueOf(parts.get(dock.getValue().connector())).contains("facing=down")) return "the bottom connector at " + dock.getValue().connector().toShortString() + " does not face down";
             if (!String.valueOf(parts.get(dock.getValue().lever())).startsWith("simulated:throttle_lever") && !String.valueOf(parts.get(dock.getValue().lever())).startsWith("minecraft:lever"))
@@ -345,10 +376,21 @@ public final class AircraftType {
 
     private void readBlocks(JsonObject file) {
         parts.clear();
+        materials.clear();
         for (final JsonElement each : file.getAsJsonArray("blocks")) {
             final JsonArray block = each.getAsJsonArray();
             final BlockPos at = pos(block);
-            if (!at.equals(BlockPos.ZERO)) parts.put(at, block.get(3).getAsString());
+            if (at.equals(BlockPos.ZERO)) continue;
+            final String text = block.get(3).getAsString();
+            final int bar = text.indexOf('|');
+            parts.put(at, bar < 0 ? text : text.substring(0, bar));
+            if (bar < 0) continue;
+            final Map<String, String> made = new LinkedHashMap<>();
+            for (final String slot : text.substring(bar + 1).split(";")) {
+                final int is = slot.indexOf('=');
+                if (is > 0) made.put(slot.substring(0, is), slot.substring(is + 1));
+            }
+            materials.put(at, made);
         }
     }
 

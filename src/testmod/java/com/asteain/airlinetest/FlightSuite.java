@@ -378,6 +378,13 @@ final class FlightSuite {
                 final com.asteain.airline.flight.AircraftType type = com.asteain.airline.flight.AircraftType.of(name);
                 final java.util.Map<String, String> asked = new java.util.TreeMap<>();
                 final java.util.List<String> free = new java.util.ArrayList<>(), belts = new java.util.ArrayList<>(), failed = new java.util.ArrayList<>();
+                // (A part made of others asks for what Domum Ornamentum asks for with its materials, as a builder reads the blueprint.)
+                final java.util.Map<String, net.minecraft.nbt.CompoundTag> madeOf = new java.util.HashMap<>();
+                for (final BlockPos part : type.materials.keySet()) {
+                    final net.minecraft.nbt.CompoundTag tag = type.materialTag(part);
+                    tag.putString("id", "domum_ornamentum:materially_retexturable");
+                    madeOf.put(type.parts.get(part), tag);
+                }
                 for (final String text : new java.util.TreeSet<>(type.parts.values())) {
                     final net.minecraft.world.level.block.state.BlockState state;
                     try {
@@ -388,7 +395,7 @@ final class FlightSuite {
                     }
                     final java.util.List<ItemStack> items;
                     try {
-                        items = com.ldtteam.structurize.placement.handlers.placement.PlacementHandlers.getRequiredItemsForState(level, at, state, null, context);
+                        items = com.ldtteam.structurize.placement.handlers.placement.PlacementHandlers.getRequiredItemsForState(level, at, state, madeOf.get(text), context);
                     } catch (RuntimeException e) {
                         failed.add(text + " (" + e + ")");
                         continue;
@@ -497,6 +504,8 @@ final class FlightSuite {
         });
         s.until("facilities: fleet: the medium aircraft moves to an anchorage", () -> {}, () -> fm.aircraft.home != null && !fm.aircraft.home.equals(was[0])
                 && fm.aircraft.phase == Phase.PARKED && fm.aircraft.home.equals(fm.aircraft.at), 12000);
+        // Its pilot walks off onto the pier (2026-10-18: from the seat of the user's 丸太号 that takes a while longer).
+        s.until("facilities: fleet: its pilot off", () -> {}, () -> Boarding.state(fm.pilot) == Boarding.State.NONE, 600);
         s.step("facilities: fleet: result", () -> {
             final BlockPos woodPad = wood.building().pad(), mirroredPad = mirrored.building().pad();
             s.soft("facilities / fleet: built, the medium aircraft took the nearest free anchorage of its colony (the wooden one) as its home and flew there; its pilot got off onto the pier",

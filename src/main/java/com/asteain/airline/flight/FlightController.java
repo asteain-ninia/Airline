@@ -1476,6 +1476,9 @@ final class FlightController {
                         // Down onto the pad with the aircraft's own block kept over the middle of the pad: left to itself
                         // for the half minute of the descent a ship drifts (a third of a block was measured).
                         ap.placeAt(rt.heading, middle.x, middle.z, true);
+                        // Kept over its place as closely as ever on the way down (2026-10-18: kept only to the coarse half
+                        // block, the heavy 丸太号 drifted a block off the pier during its long descent and did not dock).
+                        ap.placeWithin = c.type.placeWithin;
                         be.phase = Phase.DESCEND;
                         rt.still = 0;
                     }
@@ -2367,6 +2370,7 @@ final class FlightController {
         for (final Map.Entry<BlockPos, BlockState> part : order) {
             final BlockPos world = deck.offset(part.getKey());
             level.setBlock(world, part.getValue(), 3);
+            type.applyMaterials(level, part.getKey(), world);
             blocks.add(world);
         }
         // Fences, panes and stairs of the hull take the shape their neighbours give them (a design names them without it).

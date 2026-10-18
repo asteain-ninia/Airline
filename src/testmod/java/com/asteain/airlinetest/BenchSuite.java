@@ -498,7 +498,9 @@ final class BenchSuite {
                 }
                 case DOCK_SETUP -> {   // a connector of the world right under the ship's own, four blocks below it; both switched on
                     dockPart = null;
-                    for (java.util.Map.Entry<BlockPos, String> part : type.parts.entrySet()) if (part.getValue().startsWith("simulated:docking_connector")) dockPart = part.getKey();
+                    // The one that faces down (2026-10-18: the user's designs have one on each side as well).
+                    for (java.util.Map.Entry<BlockPos, String> part : type.parts.entrySet())
+                        if (part.getValue().startsWith("simulated:docking_connector") && part.getValue().contains("facing=down")) dockPart = part.getKey();
                     if (dockPart == null) {
                         fail("the design has no docking connector (simulated:docking_connector[facing=down])");
                         return true;

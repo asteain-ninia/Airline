@@ -214,6 +214,7 @@ final class Shipyard {
             final net.minecraft.world.item.Item item = wanted.state().getBlock().asItem();
             if (item != net.minecraft.world.item.Items.AIR && take(racks, item)) {
                 level.setBlock(at, wanted.state(), 3);
+                c.type.applyMaterials(level, part, at);
                 restored++;
             } else {
                 lacks.merge(wanted.state().getBlock().builtInRegistryHolder().key().location().toString(), 1, Integer::sum);

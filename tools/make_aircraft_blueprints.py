@@ -51,6 +51,15 @@ def write(name, parts):
         if state not in index:
             index[state] = len(palette)
             palette.append(make_blueprint.parse(state))
+    # Domum Ornamentum のブロックは、場所ごとに、材料を書いたブロックエンティティを持つ(飛行場の設計図と同じ書き方)。
+    entities = []
+    for (x, y, z), state in sorted(blocks.items()):
+        made_of = make_blueprint.materials(state)
+        if made_of:
+            entities.append(Compound({
+                "id": String(make_blueprint.MATERIAL_ENTITY), "x": Short(x - x0), "y": Short(y - y0), "z": Short(z - z0),
+                "textureData": Compound({slot: String(material) for slot, material in made_of.items()}),
+            }))
     # 並びは y → z → x。short を 2 個ずつ int に詰める(上位 16 ビットが先)。
     shorts = [index[blocks[(x, y, z)]] if (x, y, z) in blocks else 0 for y in range(y0, y1 + 1) for z in range(z0, z1 + 1) for x in range(x0, x1 + 1)]
     ints = []
@@ -63,7 +72,7 @@ def write(name, parts):
         "size_x": Short(sx), "size_y": Short(sy), "size_z": Short(sz),
         "palette": List[Compound](palette),
         "blocks": IntArray(ints),
-        "tile_entities": List[Compound]([]),
+        "tile_entities": List[Compound](entities),
         "entities": List[Compound]([]),
         "required_mods": List[String]([String(mod) for mod in ["minecolonies"] + mods]),
         "name": String(name),
