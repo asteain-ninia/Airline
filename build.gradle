@@ -55,7 +55,7 @@ dependencies {
 // The flying part (stage 4) needs Sable and ColonyPatchServer at run time; both are optional, and neither goes into the jar.
 // Sable: the jar of the play instance, shared with ColonyPatchServer, plus the companion library nested inside it.
 def sableJarFile = file("${sharedTestJars}/sable-neoforge-1.21.1-2.0.5.jar")
-def colonyPatchServerJar = file('../ColonyPatchServer/build/libs/colonypatch_server-1.2.1.jar')
+def colonyPatchServerJar = file('../ColonyPatchServer/build/libs/colonypatch_server-1.4.0.jar')
 def sableCompileDir = layout.buildDirectory.dir('sable-compile')
 
 def extractSableCompileJars = tasks.register('extractSableCompileJars', Copy) {
@@ -296,8 +296,8 @@ tasks.named('runFlight').configure {
         // A fresh world, except for the later starts of the two reopen chains (reopen1-3: a plain flight; reopenc1-4: a cargo
         // flight stopped while loading, flying and unloading), which continue on the world of the start before.
         if (!(scene in ['reopen2', 'reopen3', 'reopenc2', 'reopenc3', 'reopenc4', 'reopenprobe'])) delete file("${dirName}/world")
-        def patch = file('../ColonyPatchServer/build/libs/colonypatch_server-1.2.1.jar')
-        if (!patch.isFile()) throw new GradleException("Missing ${patch}: build ColonyPatchServer 1.2.1 first")
+        def patch = file('../ColonyPatchServer/build/libs/colonypatch_server-1.4.0.jar')
+        if (!patch.isFile()) throw new GradleException("Missing ${patch}: build ColonyPatchServer 1.4.0 first")
         prepareRun(dirName, mineColoniesJars + physicsJars + [patch.name], 25632, 'Airline flight', [patch])
     }
     doLast { verifyResult(dirName, 'flight ' + scene) }
@@ -307,8 +307,8 @@ tasks.named('runBench').configure {
     doFirst {
         delete file('run-bench/airline-result.txt')
         delete file('run-bench/world')
-        def patch = file('../ColonyPatchServer/build/libs/colonypatch_server-1.2.1.jar')
-        if (!patch.isFile()) throw new GradleException("Missing ${patch}: build ColonyPatchServer 1.2.1 first")
+        def patch = file('../ColonyPatchServer/build/libs/colonypatch_server-1.4.0.jar')
+        if (!patch.isFile()) throw new GradleException("Missing ${patch}: build ColonyPatchServer 1.4.0 first")
         prepareRun('run-bench', mineColoniesJars + physicsJars + [patch.name], 25633, 'Airline bench', [patch])
     }
     doLast { verifyResult('run-bench', 'bench') }

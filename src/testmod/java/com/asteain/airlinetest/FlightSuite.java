@@ -170,12 +170,30 @@ final class FlightSuite {
         }
         if (found[0] == null) {
             // A design whose deck has no plank with nothing on it (koeda, 2026-10-15): another deck block with nothing on it.
+            // (Since 2026-10-18 koeda has none of those either: its last one is the bottom connector, with its lever on it.
+            // Then any deck block, and the free place over another one.)
             for (final java.util.Map.Entry<BlockPos, String> part : parts.entrySet()) {
                 final BlockPos at = part.getKey();
                 final String name = part.getValue().split("\\[")[0];
                 if (at.getY() == 0 && (name.endsWith("_planks") || name.endsWith("_slab") || name.endsWith("_stairs")) && !parts.containsKey(at.above()) && !at.above().equals(BlockPos.ZERO)) {
                     found[0] = at;
                     found[3] = at.above();
+                    break;
+                }
+            }
+        }
+        if (found[0] == null) {
+            for (final java.util.Map.Entry<BlockPos, String> part : parts.entrySet()) {
+                final String name = part.getValue().split("\\[")[0];
+                if (part.getKey().getY() == 0 && (name.endsWith("_planks") || name.endsWith("_slab") || name.endsWith("_stairs"))) {
+                    found[0] = part.getKey();
+                    break;
+                }
+            }
+            for (final BlockPos at : parts.keySet()) {
+                final BlockPos over = at.above();
+                if (found[0] != null && at.getY() == 0 && !parts.containsKey(over) && !over.equals(BlockPos.ZERO) && !at.equals(found[0])) {
+                    found[3] = over;
                     break;
                 }
             }

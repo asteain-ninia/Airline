@@ -1494,6 +1494,15 @@ final class FlightController {
                 ap.altTarget = Math.max(held ? rest : rest - 0.4, ap.altTarget - rate / 20.0);
                 // Over a floor's connector: the bottom connector is let out on the way down, and the two pull each other
                 // into place (2026-10-18, the user's ruling "位置合わせに使う").
+                // Out over the floor's connector, but it does not come down to rest (its head sits on the edge of the pit):
+                // taken in again after a while, and down onto the floor.
+                if (!held && rt.floorDock == 1 && ap.altTarget <= rest - 0.39 && c.pos().y >= rest + 0.12 && ++rt.floorDockTicks > DOCK_TICKS) {
+                    final AircraftType.Dock bottom = c.type.docks.get("bottom");
+                    if (bottom != null) c.dockLever(bottom.lever(), 0);
+                    LOGGER.info("[Airline/flight] over the floor's connector at {} the aircraft does not come down; the bottom connector is taken in.", be.destination);
+                    note(be, "the connectors did not join; down onto the floor");
+                    rt.floorDock = -2;
+                }
                 if (!held && rt.floorDock == 0 && ap.altTarget - rest < FLOOR_DOCK_FROM) {
                     final AircraftType.Dock bottom = floorDock(c.level, net, be.destination, c.type);
                     if (bottom != null) {
@@ -1696,12 +1705,10 @@ final class FlightController {
         rt.acrossHeading = Math.abs(Autopilot.wrap(rt.heading + 90 - rt.craft.yaw())) <= 90 ? rt.heading + 90 : rt.heading - 90;
         rt.acrossAim = 0;
         rt.alignRounds = 0;
-        // Beside a pier the connectors pull the aircraft into its place: it is placed less closely (2026-10-18, the user's ruling).
-        // Over a floor's connector as well (its pull puts the aircraft over the pad's middle).
-        final boolean pulled = be.destination != null && (airborne(net, be.destination)
-                ? rt.craft.type.docks.containsKey("port") || rt.craft.type.docks.containsKey("starboard")
-                : floorDock(level, net, be.destination, rt.craft.type) != null);
-        rt.pilot.placeWithin = pulled ? Math.max(rt.craft.type.placeWithin, rt.craft.type.anchoragePlaceWithin) : rt.craft.type.placeWithin;
+        // As closely as ever, beside a pier and over a floor's connector as well (2026-10-18: placed only to half a block, the
+        // pier's connector head came down on the edge of the notch in the deck of the user's 丸太号 and pushed it a block
+        // away from the pier; the connectors' pull does not reach that far).
+        rt.pilot.placeWithin = rt.craft.type.placeWithin;
         rt.floorDock = 0;
         rt.floorDockTicks = 0;
         placeAcross(rt, Vec3.atBottomCenterOf(be.destination == null ? BlockPos.containing(rt.craft.pos()) : berthBlock(level, net, be.destination, AircraftType.of(be.type)).below()));

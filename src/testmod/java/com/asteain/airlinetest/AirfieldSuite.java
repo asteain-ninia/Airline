@@ -384,7 +384,8 @@ final class AirfieldSuite {
             int stashes = 0;
             for (var info : bp.getBlockInfoAsList()) if (info.getState() != null && info.getState().getBlock() == ModBlocks.blockStash) stashes++;
             s.check(racks == 4 && stashes == 1, "it contains four export racks and one import stash (" + racks + ", " + stashes + ")");
-            s.check(bp.getSizeX() == 34 && bp.getSizeY() == 9 && bp.getSizeZ() == 25, "its size is 34x9x25 (the whole plot, as at every level: landing pad, forecourt and hangar in the west, an empty lot in the east): " + bp.getSizeX() + "x" + bp.getSizeY() + "x" + bp.getSizeZ());
+            // (11 high since 2026-10-18: two layers under the floor for the pit of the floor's connector, the ground kept as it is.)
+            s.check(bp.getSizeX() == 34 && bp.getSizeY() == 11 && bp.getSizeZ() == 25, "its size is 34x11x25 (the whole plot, as at every level: landing pad, forecourt and hangar in the west, an empty lot in the east; two layers under the floor): " + bp.getSizeX() + "x" + bp.getSizeY() + "x" + bp.getSizeZ());
             // The rules of the network and the shape of the blueprint have to agree: nothing of it stands in the shaft over the pad or as high as the lines.
             BlockPos hutAt = bp.getPrimaryBlockOffset(), padAt = hutAt.offset(RouteRules.PAD_FROM_HUT);
             com.asteain.airline.route.Tube shaft = RouteRules.shaft(padAt);
@@ -465,7 +466,7 @@ final class AirfieldSuite {
             }
             s.check(bp.getBlockState(hutAt).getBlock() == Airline.AIRFIELD_HUT.get() && hutAt.equals(first.getPrimaryBlockOffset()), "its anchor is the airfield hut, at the same place as in level 1: " + hutAt);
             s.check(bp.getSizeX() == first.getSizeX() && bp.getSizeY() == first.getSizeY() && bp.getSizeZ() == first.getSizeZ() && racks == 8 && stashes == 1 && tooHigh == 0,
-                    "it has the same plot as level 1 (34x9x25), eight export racks and one import stash, and stays below the lines: " + bp.getSizeX() + "x" + bp.getSizeY() + "x" + bp.getSizeZ() + ", racks " + racks + ", stashes " + stashes + ", too high " + tooHigh);
+                    "it has the same plot as level 1 (34x11x25), eight export racks and one import stash, and stays below the lines: " + bp.getSizeX() + "x" + bp.getSizeY() + "x" + bp.getSizeZ() + ", racks " + racks + ", stashes " + stashes + ", too high " + tooHigh);
             for (BlockPos fromHut : List.of(RouteRules.PAD_FROM_HUT, RouteRules.GUEST_PAD_FROM_HUT)) {
                 BlockPos padAt = hutAt.offset(fromHut);
                 com.asteain.airline.route.Tube shaft = RouteRules.shaft(padAt);
@@ -612,7 +613,8 @@ final class AirfieldSuite {
                         if (shaft.contains(at.getX(), at.getY(), at.getZ())) inShaft++;
                         if (at.getY() == padAt.getY() && Math.abs(at.getX() - padAt.getX()) <= RouteRules.PAD_HALF_SIZE && Math.abs(at.getZ() - padAt.getZ()) <= RouteRules.PAD_HALF_SIZE) floor++;
                     }
-                    pads &= inShaft == 0 && floor == 169;
+                    // From level 3 the floor has the 3x3 pit of its connector (2026-10-18), three south of the middle.
+                    pads &= inShaft == 0 && floor == (n >= 3 ? 169 - 9 : 169);
                 }
                 s.check(bp.getSizeX() == lower.getSizeX() && bp.getSizeY() == lower.getSizeY() && bp.getSizeZ() == lower.getSizeZ() && hutAt.equals(lower.getPrimaryBlockOffset())
                                 && bp.getBlockState(hutAt).getBlock() == Airline.AIRFIELD_HUT.get() && racks == racksAt[n] && stashes == 1 && tooHigh == 0 && pads,

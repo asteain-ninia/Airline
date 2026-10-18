@@ -715,8 +715,12 @@ def with_pits(name, level, made):
             px, pz = cx + PIT_FROM_PAD[0], cz + PIT_FROM_PAD[1]
             floor = PIT_LIFT
             assert (px, floor, pz) in out, (name, level, "no floor where the pit goes")
-            del out[(px, floor, pz)]                                     # 穴(床の段)
-            del out[(px, floor - 1, pz)]                                 # 穴(その下)
+            for dx in (-1, 0, 1):                                        # 穴(床の段は 3×3: 機体の連結器の頭が少しずれても入る)
+                for dz in (-1, 0, 1):
+                    out.pop((px + dx, floor, pz + dz), None)
+                    if dx or dz:
+                        out[(px + dx, floor - 1, pz + dz)] = PIT_WALL     # くぼみの底
+            del out[(px, floor - 1, pz)]                                 # 穴(その下は 1×1)
             out[(px, 0, pz)] = "simulated:docking_connector[extended=false,facing=up,powered=true]"
             out[(px + 1, 0, pz)] = "minecraft:redstone_wall_torch[facing=west,lit=true]"   # 東どなりの石に付く
             for spot in ((px + 2, 0, pz), (px - 1, 0, pz), (px, 0, pz - 1), (px, 0, pz + 1),

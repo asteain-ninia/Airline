@@ -181,8 +181,6 @@ public final class AircraftType {
      * that it is put down as softly and as exactly).
      */
     public double fastDescentRate = 0.8, slowDescentWithin = 3.0;
-    /** At an anchorage the connectors pull the aircraft into its place: it is placed only this closely (blocks) before it docks. */
-    public double anchoragePlaceWithin = 0.5;
     /**
      * 1: the throttle levers are moved a few steps at a time only into and out of the manoeuvres under way (ahead,
      * astern, the gentle turns); a turn on the spot and a slow push set them at once (2026-10-18: in the user's 丸太号 and

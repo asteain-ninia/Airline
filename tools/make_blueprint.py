@@ -468,8 +468,12 @@ def with_pits(level, made):
         for cx, _, cz in pads(level):
             px, pz = cx + PIT_FROM_PAD[0], cz + PIT_FROM_PAD[1]
             assert (px, PIT_LIFT, pz) in out, (level, "no floor where the pit goes")
-            del out[(px, PIT_LIFT, pz)]
-            del out[(px, PIT_LIFT - 1, pz)]
+            for dx in (-1, 0, 1):                                        # 穴(床の段は 3×3: 機体の連結器の頭が少しずれても入る)
+                for dz in (-1, 0, 1):
+                    out.pop((px + dx, PIT_LIFT, pz + dz), None)
+                    if dx or dz:
+                        out[(px + dx, PIT_LIFT - 1, pz + dz)] = PIT_WALL     # くぼみの底
+            del out[(px, PIT_LIFT - 1, pz)]                              # 穴(その下は 1×1)
             out[(px, 0, pz)] = "simulated:docking_connector[extended=false,facing=up,powered=true]"
             out[(px + 1, 0, pz)] = "minecraft:redstone_wall_torch[facing=west,lit=true]"
             for spot in ((px + 2, 0, pz), (px - 1, 0, pz), (px, 0, pz - 1), (px, 0, pz + 1),
@@ -486,11 +490,11 @@ def check_levels(lower, upper):
     for spot in racks + [stash, anchor]:
         assert after.get(spot) == blocks[spot], "the next level moves %s at %s (it has %s there)" % (blocks[spot], spot, after.get(spot))
     px, _, pz = PAD
-    pit = (px + PIT_FROM_PAD[0], PIT_LIFT, pz + PIT_FROM_PAD[1])
+    qx, qz = px + PIT_FROM_PAD[0], pz + PIT_FROM_PAD[1]
     for x in range(px - PAD_HALF, px + PAD_HALF + 1):
         for z in range(pz - PAD_HALF, pz + PAD_HALF + 1):
-            if (x, PIT_LIFT, z) == pit:
-                continue                                     # 床の穴の連結器(レベル 3 から)
+            if abs(x - qx) <= 1 and abs(z - qz) <= 1:
+                continue                                     # 床の穴の連結器(レベル 3 から。床の段は 3×3)
             assert (x, PIT_LIFT, z) in after and (x, PIT_LIFT, z) in blocks, "the pad's floor has a hole at %s" % ((x, PIT_LIFT, z),)
     same = sum(1 for spot, state in blocks.items() if after.get(spot) == state)
     return same, len(blocks), len(after)
