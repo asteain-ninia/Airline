@@ -1154,7 +1154,9 @@ final class FlightController {
                 // The aircraft stays fixed and waits. After twice the limit it is at least free for the next order.
                 if (be.timer < 2 * LEAVING_LIMIT) return;
             }
-            post(pilot, be.at.equals(be.home) ? null : leaveSpot(level, net, be, be.at, false));
+            // At home the pilot goes back to its airfield; at an anchorage that is the aircraft's home it waits on the pier
+            // (2026-10-18: walking back to the airfield, it was too far away to board in time for the next flight).
+            post(pilot, be.at.equals(be.home) && !airborne(net, be.home) ? null : leaveSpot(level, net, be, be.at, false));
         }
         // The ticket is kept until here: a landed aircraft at a pad nobody else keeps loaded would stop in the middle of
         // letting its pilot off. It goes when the order is over; for a round trip it stays for the wait and the way back.
