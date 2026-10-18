@@ -68,7 +68,7 @@ public final class AircraftType {
     /** The burners, the lever beside each (the height is held with these levers, all set alike), and the setting of each burner's own dial. */
     public BlockPos[] burners = {}, burnerLevers = {};
     public int[] burnerValues = {};
-    /** The hold: containers (barrels) that carry the cargo. */
+    /** The hold: containers that carry the cargo (barrels, or MineColonies racks: 2026-10-18, the user's 丸太号 and 大凪号). */
     public final List<BlockPos> cargo = new ArrayList<>();
     /** Places on the deck where somebody can stand to work the hold (the block the feet are in). */
     public final List<BlockPos> access = new ArrayList<>();
@@ -141,8 +141,24 @@ public final class AircraftType {
     public double turnCoastSeconds = 1.5, turnTicksPerDegree = 1.1, turnDeadband = 1.0;
     /** Before landing the ship is placed over the middle of the pad to within this many blocks, along each of two axes. */
     public double placeWithin = 0.2;
-    /** Blocks per second the height target is lowered when landing. */
+    /** Blocks per second the height target is lowered for the last blocks of a landing ({@link #slowDescentWithin}). */
     public double descentRate = 0.4;
+    /**
+     * Blocks per second the height target is lowered higher up: while landing until it is {@link #slowDescentWithin} blocks
+     * above where the aircraft comes to rest, and over a point down to a lower line (2026-10-18, the user's ruling
+     * "速くする": the way down took 40 seconds of a short flight of koeda's; the last blocks stay as slow as they were, so
+     * that it is put down as softly and as exactly).
+     */
+    public double fastDescentRate = 0.8, slowDescentWithin = 3.0;
+    /** At an anchorage the connectors pull the aircraft into its place: it is placed only this closely (blocks) before it docks. */
+    public double anchoragePlaceWithin = 0.5;
+    /**
+     * 1: the throttle levers are moved a few steps at a time only into and out of the manoeuvres under way (ahead,
+     * astern, the gentle turns); a turn on the spot and a slow push set them at once (2026-10-18: in the user's 丸太号 and
+     * 大凪号 the throttle levers do the turns and the slow pushes as well, which a lever of their own set at once before;
+     * moved step by step, every short push lasted a decision too long and the aircraft was never placed). 0: always.
+     */
+    public int throttleCruiseOnly = 0;
     /** Top speed (blocks per second), for looking ahead. */
     public double topSpeed = 1.9;
     /** Seconds a flight takes besides the way itself: climbing to the line, being placed over the pad, going down. */
@@ -274,7 +290,10 @@ public final class AircraftType {
         if (driveLevers.length == 0) return "no drive lever";
         for (final BlockPos at : burners) if (!String.valueOf(parts.get(at)).startsWith("aeronautics:adjustable_burner")) return "no burner at " + at.toShortString();
         for (final BlockPos at : engines) if (!String.valueOf(parts.get(at)).contains("portable_engine")) return "no engine at " + at.toShortString();
-        for (final BlockPos at : cargo) if (!String.valueOf(parts.get(at)).startsWith("minecraft:barrel")) return "no barrel at " + at.toShortString();
+        for (final BlockPos at : cargo) {
+            final String part = String.valueOf(parts.get(at));
+            if (!part.startsWith("minecraft:barrel") && !part.startsWith("minecolonies:blockminecoloniesrack")) return "no barrel or rack at " + at.toShortString();
+        }
         final List<BlockPos> levers = new ArrayList<>(List.of(burnerLevers));
         levers.addAll(List.of(driveLevers));
         // The burners' levers hold the height step by step: throttle levers. A drive lever may be a plain lever when it is
@@ -291,6 +310,7 @@ public final class AircraftType {
         for (final Map.Entry<String, Dock> dock : docks.entrySet()) {
             if (!dock.getKey().equals("port") && !dock.getKey().equals("starboard")) return "a connector is on the side '" + dock.getKey() + "' (port or starboard)";
             if (!String.valueOf(parts.get(dock.getValue().connector())).startsWith("simulated:docking_connector")) return "no connector at " + dock.getValue().connector().toShortString();
+            if (dock.getKey().equals("bottom") && !String.valueOf(parts.get(dock.getValue().connector())).contains("facing=down")) return "the bottom connector at " + dock.getValue().connector().toShortString() + " does not face down";
             if (!String.valueOf(parts.get(dock.getValue().lever())).startsWith("simulated:throttle_lever") && !String.valueOf(parts.get(dock.getValue().lever())).startsWith("minecraft:lever"))
                 return "no lever at " + dock.getValue().lever().toShortString();
             if (levers.contains(dock.getValue().lever())) return "the lever of a connector is a lever of the burners or the drives";
@@ -367,8 +387,9 @@ public final class AircraftType {
             final AircraftType t = own ? new AircraftType(name) : core(name);
             if (file.has("class")) t.shipClass = com.asteain.airline.route.ShipClass.of(file.get("class").getAsString());
             if (own) {
-                // A design of its own climbs to the line with its target raised a block a second (the measured designs go on as they were measured).
-                t.climbRate = 1.0;
+                // A design of its own climbs to the line with its target raised two blocks a second (2026-10-18, the user's
+                // ruling "速くする"; it was one: 15 seconds of a short flight); a design's own number goes first.
+                t.climbRate = 2.0;
                 t.readBlocks(file);
                 t.seat = pos(file.get("seat"));
                 for (final JsonElement each : file.getAsJsonArray("cargo")) t.cargo.add(pos(each));

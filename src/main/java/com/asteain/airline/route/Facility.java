@@ -86,8 +86,9 @@ public enum Facility {
         return this == SMALL_AIRFIELD ? level >= 3 : this == MEDIUM_AIRFIELD;
     }
 
+    /** The anchorage's pier. (The large airfield had two at the sides of its pad, which no aircraft reached: taken out on 2026-10-18, the user's ruling.) */
     public boolean sideConnector() {
-        return this == LARGE_AIRFIELD || this == ANCHORAGE;
+        return this == ANCHORAGE;
     }
 
     public int padHalfSize() {

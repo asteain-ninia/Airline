@@ -57,7 +57,11 @@ final class Autopilot {
     Autopilot(Craft craft) {
         this.c = craft;
         this.t = craft.type;
+        this.placeWithin = craft.type.placeWithin;
     }
+
+    /** How closely the ship is placed (blocks along each axis): the design's own, or less closely beside a pier (its connectors pull). */
+    double placeWithin;
 
     /**
      * What the drives are to do from now on. In the middle of a decision this only notes it (the levers are moved once,
@@ -397,8 +401,8 @@ final class Autopilot {
         final double yaw = Math.toRadians(c.yaw()), cos = Math.cos(yaw), sin = Math.sin(yaw);
         final double along = (placeX - p.x) * cos + (placeZ - p.z) * sin - (placeByBlock ? fore : 0), speed = v.x * cos + v.z * sin;
         final double left = along - speed * t.coastSeconds;      // what will be left once it has coasted to rest
-        placed = Math.abs(along) < t.placeWithin && Math.abs(speed) < 0.03 && Math.abs(headingError()) < 2.0;
-        if (placed || Math.abs(left) < t.placeWithin * 0.75 || Math.abs(headingError()) > 3.0) return;
+        placed = Math.abs(along) < placeWithin && Math.abs(speed) < 0.03 && Math.abs(headingError()) < 2.0;
+        if (placed || Math.abs(left) < placeWithin * 0.75 || Math.abs(headingError()) > 3.0) return;
         final int length = (int) Math.max(2, Math.min(t.period, Math.round(Math.abs(left) / (slow() / 20.0) * 0.8)));
         drive(left > 0 ? AircraftType.Drive.AHEAD_SLOW : AircraftType.Drive.ASTERN_SLOW);
         pushes++;

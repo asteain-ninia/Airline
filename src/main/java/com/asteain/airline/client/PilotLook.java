@@ -34,7 +34,13 @@ public final class PilotLook {
 
     public static void hook() {
         NeoForge.EVENT_BUS.addListener(PilotLook::onTick);
+        // (Not about the pilot's look: the structure pack under MineColonies' heading on the client as well, see PackPlace.)
+        NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> {
+            if (++packLook % 100 == 0) com.asteain.airline.PackPlace.mend();
+        });
     }
+
+    private static int packLook;
 
     private static void onTick(ClientTickEvent.Pre event) {
         try {

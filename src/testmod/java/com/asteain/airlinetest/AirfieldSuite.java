@@ -108,6 +108,10 @@ final class AirfieldSuite {
             s.note("OBS world spawn=" + spawn + " origin=" + origin + " colonies before=" + Fixture.existing());
         });
         s.until("structure pack is discovered", () -> {}, () -> StructurePacks.hasPack(Airline.PACK_NAME), 1200);
+        s.until("the pack under MineColonies' heading", () -> {}, () -> com.asteain.airline.PackPlace.OWNER.equals(StructurePacks.getStructurePack(Airline.PACK_NAME).getOwner()), 400);
+        s.step("the pack's heading", () -> s.soft("pack / in Structurize's window of packs the mod's pack stands under MineColonies' heading, not one of its own; its blueprints are still found",
+                com.asteain.airline.PackPlace.OWNER.equals(StructurePacks.getStructurePack(Airline.PACK_NAME).getOwner()) && StructurePacks.getStructurePack(Airline.PACK_NAME).getPath() != null,
+                StructurePacks.getStructurePack(Airline.PACK_NAME).getOwner()));
         s.step("registries", () -> {
             s.check(StructurePacks.hasPack(Airline.PACK_NAME), "structure pack '" + Airline.PACK_NAME + "' is registered from the mod's resources");
             s.check(IMinecoloniesAPI.getInstance().getBuildingRegistry().containsKey(Airline.id(Airline.BUILDING_NAME)), "building registry has " + Airline.id(Airline.BUILDING_NAME));

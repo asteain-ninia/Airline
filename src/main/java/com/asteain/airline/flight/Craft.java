@@ -185,6 +185,14 @@ final class Craft {
     void drive(AircraftType.Drive manoeuvre) {
         final int[] values = type.drive[manoeuvre.ordinal()];
         for (int i = 0; i < type.driveLevers.length; i++) lever(type.driveLevers[i], values[i]);
+        lastDrive = manoeuvre;
+    }
+
+    /** The manoeuvre the levers were last brought to (see {@link AircraftType#throttleCruiseOnly}). */
+    private AircraftType.Drive lastDrive = AircraftType.Drive.OFF;
+
+    private static boolean underWay(AircraftType.Drive manoeuvre) {
+        return manoeuvre == AircraftType.Drive.AHEAD || manoeuvre == AircraftType.Drive.ASTERN || manoeuvre == AircraftType.Drive.AHEAD_LEFT || manoeuvre == AircraftType.Drive.AHEAD_RIGHT;
     }
 
     void drivesOff() {
@@ -200,10 +208,13 @@ final class Craft {
     boolean driveToward(AircraftType.Drive manoeuvre) {
         final boolean[] throttle = type.throttle;
         final int step = type.throttleStep;
-        if (throttle == null || step <= 0) {
+        if (throttle == null || step <= 0 || (type.throttleCruiseOnly != 0 && !underWay(manoeuvre) && !underWay(lastDrive))) {
             drive(manoeuvre);
             return true;
         }
+        // Into a manoeuvre under way the throttles go step by step; out of one into a turn on the spot or a slow push they
+        // are closed step by step, and then set at once.
+        final boolean ramp = type.throttleCruiseOnly == 0 || underWay(manoeuvre);
         final int[] want = type.drive[manoeuvre.ordinal()], off = type.drive[AircraftType.Drive.OFF.ordinal()];
         final int[] now = new int[want.length];
         boolean shift = false, open = false;
@@ -219,10 +230,11 @@ final class Craft {
         }
         boolean there = true;
         for (int i = 0; i < want.length; i++) {
-            final int next = throttle[i] ? toward(now[i], want[i], step) : want[i];
+            final int next = throttle[i] && ramp ? toward(now[i], want[i], step) : want[i];
             lever(type.driveLevers[i], next);
             there &= next == want[i];
         }
+        if (there) lastDrive = manoeuvre;
         return there;
     }
 

@@ -271,6 +271,10 @@ public final class Airline {
         modBus.addListener(Airline::registerPayloads);
         NeoForge.EVENT_BUS.addListener((RegisterCommandsEvent event) -> AirlineCommand.register(event.getDispatcher(), event.getBuildContext()));
         NeoForge.EVENT_BUS.addListener(RouteNetwork::onLevelTick);
+        // The structure pack under MineColonies' heading (see PackPlace), now and then.
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) -> {
+            if (event.getServer().getTickCount() % 100 == 0) PackPlace.mend();
+        });
         NeoForge.EVENT_BUS.addListener(RouteNetwork::onNeighborNotify);
         // The lines of the network for the players' maps (JourneyMap, when they have it).
         NeoForge.EVENT_BUS.addListener(com.asteain.airline.route.RouteMap::onServerTick);

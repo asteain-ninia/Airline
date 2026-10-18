@@ -794,12 +794,13 @@ final class FlightSuite {
                     right &= switch (place) {
                         case SMALL_AIRFIELD -> floor == (lv >= 3) && !side;
                         case MEDIUM_AIRFIELD -> floor && !side;
-                        case LARGE_AIRFIELD, ANCHORAGE -> !floor && side;
+                        case LARGE_AIRFIELD -> !floor && !side;
+                        case ANCHORAGE -> !floor && side;
                     };
                     seen.append(place).append(lv).append(floor ? "F" : "-").append(side ? "S" : "-").append(' ');
                 }
             }
-            s.soft("classes / connectors: a small airfield has one in the floor from level 3, a medium airfield always; a large airfield and an anchorage have side connectors and none in the floor", right, seen.toString());
+            s.soft("classes / connectors: a small airfield has one in the floor from level 3, a medium airfield always; a large airfield none; an anchorage one at its pier", right, seen.toString());
             final String builds = java.util.Arrays.stream(places).map(p -> p + ":" + java.util.Arrays.stream(sizes).filter(p::builds).map(Enum::name).toList()).toList().toString();
             s.soft("classes / what each kind of place builds: small airfield small; medium airfield small and medium; large airfield medium and large; anchorage nothing",
                     builds.equals("[SMALL_AIRFIELD:[SMALL], MEDIUM_AIRFIELD:[SMALL, MEDIUM], LARGE_AIRFIELD:[MEDIUM, LARGE], ANCHORAGE:[]]"), builds);

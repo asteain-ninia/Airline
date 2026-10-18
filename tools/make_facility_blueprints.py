@@ -121,8 +121,8 @@ PIERS = ("anchorage", "anchoragestone")
 # 機体を船にするときは、機体をいったん機首を東へ向けて置いてから台の向きへ回すので、前後 25 の大型機がその連結器にぶつかった
 # (2026-10-15、場面 facilities)。前後の長さ(中心から 12)の外へ。機体の連結器とつなぐときに、位置を見直す。
 CONNECTORS = {
-    "mediumairfield": [((0, 0, 3), "up")],
-    "largeairfield": [((-13, 1, 0), "east"), ((13, 1, 0), "west")],
+    "mediumairfield": [],  # 床置きは、下の PIT(床の穴)に(2026-10-18)
+    "largeairfield": [],   # 2026-10-18 に外した(ご裁定「いまの形、連結器を外す」。どの機体とも届かず、飾りだった)
     "anchorage": [((-8, 1, 0), "east"), ((8, 1, 0), "west")],
 }
 CONNECTOR = "simulated:docking_connector[extended=false,facing=%s,powered=false]"
@@ -679,18 +679,68 @@ def design(name, level=1, mod_id="airline"):
     return b, racks, stash
 
 
+# 床の穴の連結器(2026-10-18、ご裁定「位置合わせに使う」、ご指摘「発着場側の連結器は穴を掘ったほうがいいのでは？　着陸時に機体が浮いてしまいます」)。
+# 機体は発着場で設計図の北を向いて止まり、底の連結器は機体のブロックから艫へ 3 なので、台の中心から南へ 3 の真下。
+# 床に 1×1 の穴(床の段と、その下の段)、その下(床の 2 マス下)に上向きの連結器、東どなりの壁付きレッドストーントーチでいつも伸ばす。
+# 機体の連結器(床の 1 段上)とは中心で 3 マス、間の 2 マスに両方の頭が入る。そのため設計図は床の下に 2 段を足す(地面はそのまま残す)。
+PIT_LIFT = 2
+PIT_FROM_PAD = (0, 3)
+VOID = "minecraft:structure_void"
+PIT_WALL = "minecraft:stone_bricks"
+
+
+def pit_at(name, level):
+    """床の穴の連結器があるか(Facility.floorConnector と同じ: 小型飛行場はレベル 3 から、中型飛行場はいつも)。"""
+    return name == "mediumairfield" or (name == "airfield" and level >= 3)
+
+
+def lifted(name):
+    """床の下に 2 段を足す設計図(穴のあるレベルが 1 つでもある飛行場は、全部のレベルで足す。改築で小屋の位置が動かないように)。"""
+    return name in ("airfield", "mediumairfield")
+
+
+def with_pits(name, level, made):
+    """床の下に 2 段を足し、穴と連結器を作る。"""
+    blocks, racks, stash = made
+    site = Site(name)
+    up = lambda p: (p[0], p[1] + PIT_LIFT, p[2])
+    out = {up(p): s for p, s in blocks.items()}
+    sx, sy, sz = site.size
+    for x in range(sx):
+        for z in range(sz):
+            for y in range(PIT_LIFT):
+                out[(x, y, z)] = VOID
+    if pit_at(name, level):
+        for cx, _, cz in site.pads(level):
+            px, pz = cx + PIT_FROM_PAD[0], cz + PIT_FROM_PAD[1]
+            floor = PIT_LIFT
+            assert (px, floor, pz) in out, (name, level, "no floor where the pit goes")
+            del out[(px, floor, pz)]                                     # 穴(床の段)
+            del out[(px, floor - 1, pz)]                                 # 穴(その下)
+            out[(px, 0, pz)] = "simulated:docking_connector[extended=false,facing=up,powered=true]"
+            out[(px + 1, 0, pz)] = "minecraft:redstone_wall_torch[facing=west,lit=true]"   # 東どなりの石に付く
+            for spot in ((px + 2, 0, pz), (px - 1, 0, pz), (px, 0, pz - 1), (px, 0, pz + 1),
+                         (px + 1, 1, pz), (px - 1, 1, pz), (px, 1, pz - 1), (px, 1, pz + 1)):
+                out[spot] = PIT_WALL
+    return out, [up(r) for r in racks], up(stash) if stash else None
+
+
 def check_levels(name, lower, upper):
     """改築で、棚・回収箱・小屋が同じ場所にある。"""
     site = Site(name)
     blocks, racks, stash = lower
     after = upper[0]
-    for spot in racks + ([stash] if stash else []) + [site.anchor]:
+    anchor = (site.anchor[0], site.anchor[1] + PIT_LIFT, site.anchor[2]) if lifted(name) else site.anchor
+    for spot in racks + ([stash] if stash else []) + [anchor]:
         assert after.get(spot) == blocks[spot], "%s: the next level moves %s at %s (it has %s there)" % (name, blocks[spot], spot, after.get(spot))
 
 
 def write(name, level, blocks, stash, mod_id="airline"):
     site = Site(name)
     sx, sy, sz = site.size
+    if lifted(name):
+        sy += PIT_LIFT
+        site.anchor = (site.anchor[0], site.anchor[1] + PIT_LIFT, site.anchor[2])
     schematic = "%s%d" % (name, level)
     out = os.path.join(ROOT, "src", "main", "resources", "blueprints", mod_id, "airfield", "infrastructure", schematic + ".blueprint")
     palette, index = [Compound({"Name": String("minecraft:air")})], {}
@@ -731,7 +781,7 @@ def write(name, level, blocks, stash, mod_id="airline"):
                                                "posTagMap": List[Compound]([])}),
         }))
     for (x, y, z), state in sorted(blocks.items()):
-        made_of = mb.materials(state)
+        made_of = mb.materials(state) if state != VOID else None
         if made_of:
             entities.append(Compound({
                 "id": String(mb.MATERIAL_ENTITY), "x": Short(x), "y": Short(y), "z": Short(z),
@@ -771,6 +821,8 @@ def main():
             levels = tuple(int(v) for v in a.split("=", 1)[1].split(","))
     for name in names:
         designs = {level: design(name, level) for level in (levels if name not in PIERS else (1,))}
+        if lifted(name):
+            designs = {level: with_pits(name, level, made) for level, made in designs.items()}
         levels_here = sorted(designs)
         for lower, upper in zip(levels_here, levels_here[1:]):
             check_levels(name, designs[lower], designs[upper])

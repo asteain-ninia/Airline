@@ -446,16 +446,52 @@ def design(mod_id="airline", level=1):
     return b, racks, stash
 
 
+# 床の穴の連結器(2026-10-18、ご裁定「位置合わせに使う」、ご指摘「発着場側の連結器は穴を掘ったほうがいいのでは？」)。レベル 3 から。
+# 形は make_facility_blueprints.py の with_pits と同じ: 台の中心から南へ 3 に、床の段とその下の段の穴、床の 2 マス下に上向きの連結器、
+# 東どなりの壁付きレッドストーントーチでいつも伸ばす。設計図は、全部のレベルで床の下に 2 段を足す(地面はそのまま残す)。
+PIT_LIFT = 2
+PIT_FROM_PAD = (0, 3)
+PIT_LEVEL = 3
+VOID = "minecraft:structure_void"
+PIT_WALL = "minecraft:stone_bricks"
+
+
+def with_pits(level, made):
+    blocks, racks, stash = made
+    up = lambda q: (q[0], q[1] + PIT_LIFT, q[2])
+    out = {up(q): state for q, state in blocks.items()}
+    for x in range(SIZE_X):
+        for z in range(SIZE_Z):
+            for y in range(PIT_LIFT):
+                out[(x, y, z)] = VOID
+    if level >= PIT_LEVEL:
+        for cx, _, cz in pads(level):
+            px, pz = cx + PIT_FROM_PAD[0], cz + PIT_FROM_PAD[1]
+            assert (px, PIT_LIFT, pz) in out, (level, "no floor where the pit goes")
+            del out[(px, PIT_LIFT, pz)]
+            del out[(px, PIT_LIFT - 1, pz)]
+            out[(px, 0, pz)] = "simulated:docking_connector[extended=false,facing=up,powered=true]"
+            out[(px + 1, 0, pz)] = "minecraft:redstone_wall_torch[facing=west,lit=true]"
+            for spot in ((px + 2, 0, pz), (px - 1, 0, pz), (px, 0, pz - 1), (px, 0, pz + 1),
+                         (px + 1, 1, pz), (px - 1, 1, pz), (px, 1, pz - 1), (px, 1, pz + 1)):
+                out[spot] = PIT_WALL
+    return out, [up(r) for r in racks], up(stash)
+
+
 def check_levels(lower, upper):
     """改築で、中の品物と台が残ること: 前のレベルの棚、回収箱、小屋は、次のレベルでも同じ場所に同じ向きである。台の床は、どのレベルでも全部ある。"""
     blocks, racks, stash = lower
     after = upper[0]
-    for spot in racks + [stash, ANCHOR]:
+    anchor = (ANCHOR[0], ANCHOR[1] + PIT_LIFT, ANCHOR[2])
+    for spot in racks + [stash, anchor]:
         assert after.get(spot) == blocks[spot], "the next level moves %s at %s (it has %s there)" % (blocks[spot], spot, after.get(spot))
     px, _, pz = PAD
+    pit = (px + PIT_FROM_PAD[0], PIT_LIFT, pz + PIT_FROM_PAD[1])
     for x in range(px - PAD_HALF, px + PAD_HALF + 1):
         for z in range(pz - PAD_HALF, pz + PAD_HALF + 1):
-            assert (x, 0, z) in after and (x, 0, z) in blocks, "the pad's floor has a hole at %s" % ((x, 0, z),)
+            if (x, PIT_LIFT, z) == pit:
+                continue                                     # 床の穴の連結器(レベル 3 から)
+            assert (x, PIT_LIFT, z) in after and (x, PIT_LIFT, z) in blocks, "the pad's floor has a hole at %s" % ((x, PIT_LIFT, z),)
     same = sum(1 for spot, state in blocks.items() if after.get(spot) == state)
     return same, len(blocks), len(after)
 
@@ -508,7 +544,7 @@ def write(mod_id, level, blocks, racks, stash):
             palette.append(parse(state))
 
     # 並びは y → z → x。short を 2 個ずつ int に詰める(上位 16 ビットが先)。
-    shorts = [index.get(blocks.get((x, y, z)), 0) if (x, y, z) in blocks else 0 for y in range(SIZE_Y) for z in range(SIZE_Z) for x in range(width)]
+    shorts = [index.get(blocks.get((x, y, z)), 0) if (x, y, z) in blocks else 0 for y in range(SIZE_Y + PIT_LIFT) for z in range(SIZE_Z) for x in range(width)]
     ints = []
     for i in range(0, len(shorts), 2):
         hi = shorts[i]
@@ -518,7 +554,7 @@ def write(mod_id, level, blocks, racks, stash):
             value -= 1 << 32
         ints.append(value)
 
-    ax, ay, az = ANCHOR
+    ax, ay, az = ANCHOR[0], ANCHOR[1] + PIT_LIFT, ANCHOR[2]
     hut_entity = Compound({
         "id": String(mod_id + ":airfield"),          # ブロックエンティティ型の登録名
         "x": Short(ax), "y": Short(ay), "z": Short(az),
@@ -530,7 +566,7 @@ def write(mod_id, level, blocks, racks, stash):
         "blueprintDataProvider": Compound({
             "schematicName": String(schematic),
             "corner1": pos(-ax, -ay, -az),
-            "corner2": pos(width - 1 - ax, SIZE_Y - 1 - ay, SIZE_Z - 1 - az),
+            "corner2": pos(width - 1 - ax, SIZE_Y + PIT_LIFT - 1 - ay, SIZE_Z - 1 - az),
             "posTagMap": List[Compound]([]),
         }),
     })
@@ -553,17 +589,18 @@ def write(mod_id, level, blocks, racks, stash):
     # Domum Ornamentum のブロックは、場所ごとに、材料を書いたブロックエンティティを持つ。
     entities = [hut_entity, stash_entity]
     for (x, y, z), state in sorted(blocks.items()):
-        made_of = materials(state)
+        made_of = materials(state) if state != VOID else None
         if made_of:
             entities.append(Compound({
                 "id": String(MATERIAL_ENTITY), "x": Short(x), "y": Short(y), "z": Short(z),
                 "textureData": Compound({slot: String(material) for slot, material in made_of.items()}),
             }))
-    mods = ["minecolonies", mod_id] + (["domum_ornamentum"] if any(state.startswith(DO) for state in blocks.values()) else [])
+    mods = ["minecolonies", mod_id] + (["domum_ornamentum"] if any(state.startswith(DO) for state in blocks.values()) else []) + \
+        (["simulated"] if any(state.startswith("simulated:") for state in blocks.values()) else [])
 
     blueprint = nbtlib.File({
         "version": Byte(1),
-        "size_x": Short(width), "size_y": Short(SIZE_Y), "size_z": Short(SIZE_Z),
+        "size_x": Short(width), "size_y": Short(SIZE_Y + PIT_LIFT), "size_z": Short(SIZE_Z),
         "palette": List[Compound](palette),
         "blocks": IntArray(ints),
         "tile_entities": List[Compound](entities),
@@ -583,7 +620,7 @@ def write(mod_id, level, blocks, racks, stash):
         counts[state.split("[")[0].split("|")[0]] = counts.get(state.split("[")[0].split("|")[0], 0) + 1
     print("wrote", out, os.path.getsize(out), "bytes; size", width, SIZE_Y, SIZE_Z, "; palette", len(check["palette"]), "; blocks", len(blocks))
     print("  materials:", ", ".join("%s %d" % (name.split(":")[1], n) for name, n in sorted(counts.items(), key=lambda kv: -kv[1])))
-    print("  pads from hut:", [(x - ax, y - ay, z - az) for x, y, z in pads(level)], "; racks from hut:", [(x - ax, y - ay, z - az) for x, y, z in racks],
+    print("  pads from hut:", [(x - ax, y + PIT_LIFT - ay, z - az) for x, y, z in pads(level)], "; racks from hut:", [(x - ax, y - ay, z - az) for x, y, z in racks],
           "; stash from hut:", (sx - ax, sy - ay, sz - az))
 
 
@@ -591,6 +628,7 @@ def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     mod_id = args[0] if args else "airline"
     designs = {level: design(mod_id, level) for level in LEVELS}
+    designs = {level: with_pits(level, made) for level, made in designs.items()}
     for lower, upper in zip(LEVELS, LEVELS[1:]):
         same, before, after = check_levels(designs[lower], designs[upper])
         print("level %d -> %d: %d of %d blocks stay as they were; the new level has %d blocks" % (lower, upper, same, before, after))

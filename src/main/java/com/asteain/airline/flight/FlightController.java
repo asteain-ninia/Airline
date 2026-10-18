@@ -140,6 +140,11 @@ final class FlightController {
          * over, joined or not), and ticks spent letting go of it before leaving.
          */
         int dockTicks, undockTicks;
+        /**
+         * Joining the floor's connector on a pad (2026-10-18): 0 not looked at yet in this descent, 1 the bottom connector
+         * is out, -1 none there or joined, -2 not joined and taken in again; and the ticks it has been out at rest.
+         */
+        int floorDock, floorDockTicks;
         /** The lever moves the pilot was last shown making (see the arm in the tick), and when. */
         int writesSeen, swungAt;
         int shipHolds;
@@ -507,6 +512,68 @@ final class FlightController {
         return true;
     }
 
+    /** How high above the place it comes to rest the bottom connector is let out over a floor's connector (blocks). */
+    private static final double FLOOR_DOCK_FROM = 3.0;
+
+    /**
+     * Where a pad's floor connector is under the aircraft's bottom connector once it rests on the pad: the hull's place
+     * {@code local} turned to the pad's heading, two blocks under the floor (the two connectors are three apart when joined).
+     */
+    static BlockPos floorConnectorAt(RouteNetwork net, BlockPos pad, BlockPos local) {
+        final RouteNetwork.Node node = net.node(pad);
+        final double heading = Math.toRadians(node == null ? 0 : node.heading());
+        final int ax = (int) Math.round(Math.cos(heading)), az = (int) Math.round(Math.sin(heading));
+        // Ahead is (ax, az), the right (-az, ax); the hull's +z is its right.
+        return pad.offset(local.getX() * ax - local.getZ() * az, local.getY() - 2, local.getX() * az + local.getZ() * ax);
+    }
+
+    /**
+     * The aircraft's bottom connector, on a pad whose floor has a connector that is out under it (in a pit, kept out by a
+     * redstone torch: the small airfield from level 3, the medium airfield); null when there is nothing to join.
+     */
+    @Nullable
+    static AircraftType.Dock floorDock(ServerLevel level, RouteNetwork net, @Nullable BlockPos pad, AircraftType type) {
+        final AircraftType.Dock bottom = type.docks.get("bottom");
+        if (bottom == null || pad == null || airborne(net, pad)) return null;
+        final BlockPos below = floorConnectorAt(net, pad, bottom.connector());
+        if (level.getChunkSource().getChunkNow(below.getX() >> 4, below.getZ() >> 4) == null) return null;
+        if (Craft.connector(level, below, "isExtended")) return bottom;
+        // Signalled but not out (built from the blueprint, its torch came after it): told to look again, as at a pier.
+        if (level.hasNeighborSignal(below) && level.getBlockEntity(below) != null && level.getBlockEntity(below).getClass().getSimpleName().startsWith("DockingConnector")) {
+            level.neighborChanged(below, level.getBlockState(below).getBlock(), below.relative(Direction.UP));
+            return bottom;
+        }
+        return null;
+    }
+
+    /**
+     * At rest on a pad with the bottom connector out: true while it waits for the two connectors to join (then the
+     * aircraft lies exactly over the pad's middle, square with it). Not joined in time, the connector is taken in again
+     * and the aircraft is left to settle onto the floor (it may have come down on the connector's head beside the pit).
+     */
+    private static boolean floorJoining(AircraftBlockEntity be, Runtime rt) {
+        final Craft c = rt.craft;
+        final AircraftType.Dock bottom = c.type.docks.get("bottom");
+        if (bottom == null) {
+            rt.floorDock = -1;
+            return false;
+        }
+        if (c.connectorLocked(bottom.connector())) {
+            LOGGER.info("[Airline/flight] joined the floor's connector at {} after {} ticks at rest.", be.destination, rt.floorDockTicks);
+            rt.floorDock = -1;
+            return false;
+        }
+        if (++rt.floorDockTicks > DOCK_TICKS) {
+            c.dockLever(bottom.lever(), 0);
+            LOGGER.info("[Airline/flight] the connectors at {} did not join; the bottom connector is taken in and the aircraft settles on the floor.", be.destination);
+            note(be, "the connectors did not join; down onto the floor");
+            rt.floorDock = -2;
+            rt.still = 0;
+            return true;
+        }
+        return true;
+    }
+
     /** The connector being let out (on the pier's side); null when that cannot be told any more. */
     @Nullable
     private static AircraftType.Dock dockOn(Craft c, RouteNetwork net, AircraftBlockEntity be) {
@@ -816,7 +883,7 @@ final class FlightController {
                 final double next = legHeight(net, be.route, i);
                 if (Math.abs(next - at.y) > 1.5) {
                     final Vec3 shifted = new Vec3(at.x, next, at.z);
-                    plan.then(shifted, Math.round(Math.abs(next - at.y) / Math.max(0.1, next > at.y ? c.type.climbSpeed : c.type.descentRate) * 20.0));
+                    plan.then(shifted, Math.round(Math.abs(next - at.y) / Math.max(0.1, next > at.y ? c.type.climbSpeed : c.type.fastDescentRate) * 20.0));
                     at = shifted;
                 }
             }
@@ -827,7 +894,8 @@ final class FlightController {
             final Vec3 over = new Vec3(spot.getX() + 0.5, at.y, spot.getZ() + 0.5);
             if (be.phase != Phase.DESCEND) plan.then(over, Math.round(c.type.alignSeconds * 20.0));
             final double rest = be.destination.getY() + 1 + be.restOffset;
-            plan.then(new Vec3(over.x, rest, over.z), Math.round(Math.max(0, at.y - rest) / c.type.descentRate * 20.0) + 60);
+            final double down = Math.max(0, at.y - rest), slowly = Math.min(down, c.type.slowDescentWithin);
+            plan.then(new Vec3(over.x, rest, over.z), Math.round(((down - slowly) / c.type.fastDescentRate + slowly / c.type.descentRate) * 20.0) + 60);
         }
         return plan.build(c.id(), c.level.dimension().location().toString(), now);
     }
@@ -1112,6 +1180,8 @@ final class FlightController {
     private static void takeOff(AircraftBlockEntity be, Runtime rt) {
         final Craft c = rt.craft;
         rt.dockTicks = 0;
+        rt.floorDock = 0;
+        rt.floorDockTicks = 0;
         c.ticket(true);
         c.lock(false);
         be.at = null;
@@ -1295,7 +1365,7 @@ final class FlightController {
                     }
                 }
                 if (line >= ap.altTarget) ap.climbToward(line);
-                else ap.altTarget = Math.max(line, ap.altTarget - c.type.descentRate / 20.0);
+                else ap.altTarget = Math.max(line, ap.altTarget - c.type.fastDescentRate / 20.0);
                 ap.tick();
                 if (ap.atHeight(line)) cruise(be, rt);
             }
@@ -1379,7 +1449,7 @@ final class FlightController {
                     final boolean forced = redoAcrossNext && rt.placeStep == 1 && ap.placed && !airborne(net, be.destination);
                     if (forced) redoAcrossNext = false;
                     final double off = forced ? 0.5 : across(c, rt.heading, middle);
-                    if (rt.placeStep == 1 && ap.placed && Math.abs(off) > c.type.placeWithin && rt.alignRounds < 2 && !airborne(net, be.destination)) {
+                    if (rt.placeStep == 1 && ap.placed && Math.abs(off) > ap.placeWithin && rt.alignRounds < 2 && !airborne(net, be.destination)) {
                         acrossRedone++;
                         // Turning from across onto the pad's heading carries a ship sideways (koeda, 2026-10-16: 0.3 to 0.4 of a
                         // block at full turning speed, up to 0.2 with the slow turn), and going along the heading cannot take it
@@ -1416,7 +1486,22 @@ final class FlightController {
                 // At an anchorage there is no floor to come down onto: the aircraft is brought to rest at the pier's height
                 // and held there (and fixed, as on a pad), the controller kept on.
                 final boolean held = airborne(net, be.destination);
-                ap.altTarget = Math.max(held ? rest : rest - 0.4, ap.altTarget - c.type.descentRate / 20.0);
+                // Fast while high, the last blocks as slowly as before (2026-10-18).
+                final double rate = ap.altTarget - rest > c.type.slowDescentWithin ? c.type.fastDescentRate : c.type.descentRate;
+                ap.altTarget = Math.max(held ? rest : rest - 0.4, ap.altTarget - rate / 20.0);
+                // Over a floor's connector: the bottom connector is let out on the way down, and the two pull each other
+                // into place (2026-10-18, the user's ruling "位置合わせに使う").
+                if (!held && rt.floorDock == 0 && ap.altTarget - rest < FLOOR_DOCK_FROM) {
+                    final AircraftType.Dock bottom = floorDock(c.level, net, be.destination, c.type);
+                    if (bottom != null) {
+                        c.dockLever(bottom.lever(), 15);
+                        rt.floorDock = 1;
+                        rt.floorDockTicks = 0;
+                        note(be, "joining the floor's connector");
+                    } else {
+                        rt.floorDock = -1;
+                    }
+                }
                 if (held ? Math.abs(c.pos().y - rest) < 0.15 : c.pos().y < rest + 0.12) {
                     if (rt.still++ == 0 && !held) ap.hover();      // touching the pad: no more pushes
                 } else {
@@ -1428,6 +1513,7 @@ final class FlightController {
                 }
                 ap.tick();
                 if (rt.still > 40 && held && docking(be, rt, net)) return;
+                if (rt.still > 40 && !held && rt.floorDock == 1 && floorJoining(be, rt)) return;
                 if (rt.still > 40) landed(be, rt, net);
             }
             default -> { }
@@ -1607,6 +1693,14 @@ final class FlightController {
         rt.acrossHeading = Math.abs(Autopilot.wrap(rt.heading + 90 - rt.craft.yaw())) <= 90 ? rt.heading + 90 : rt.heading - 90;
         rt.acrossAim = 0;
         rt.alignRounds = 0;
+        // Beside a pier the connectors pull the aircraft into its place: it is placed less closely (2026-10-18, the user's ruling).
+        // Over a floor's connector as well (its pull puts the aircraft over the pad's middle).
+        final boolean pulled = be.destination != null && (airborne(net, be.destination)
+                ? rt.craft.type.docks.containsKey("port") || rt.craft.type.docks.containsKey("starboard")
+                : floorDock(level, net, be.destination, rt.craft.type) != null);
+        rt.pilot.placeWithin = pulled ? Math.max(rt.craft.type.placeWithin, rt.craft.type.anchoragePlaceWithin) : rt.craft.type.placeWithin;
+        rt.floorDock = 0;
+        rt.floorDockTicks = 0;
         placeAcross(rt, Vec3.atBottomCenterOf(be.destination == null ? BlockPos.containing(rt.craft.pos()) : berthBlock(level, net, be.destination, AircraftType.of(be.type)).below()));
         rt.placeStep = 0;
         be.phase = Phase.ALIGN;

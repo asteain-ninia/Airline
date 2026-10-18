@@ -274,8 +274,11 @@ public final class Cargo {
     /** The hold of an aircraft: its barrels, as one inventory. */
     static IItemHandler hold(Craft c) {
         final List<IItemHandlerModifiable> parts = new ArrayList<>();
-        for (final BlockPos barrel : c.type.cargo) {
-            if (c.level.getBlockEntity(c.inShip(barrel)) instanceof Container container) parts.add(new InvWrapper(container));
+        for (final BlockPos place : c.type.cargo) {
+            final net.minecraft.world.level.block.entity.BlockEntity entity = c.level.getBlockEntity(c.inShip(place));
+            if (entity instanceof Container container) parts.add(new InvWrapper(container));
+            // A rack: its own slots (not those of the pair it may make with the rack beside it, which is in the hold as well).
+            else if (entity instanceof com.minecolonies.api.tileentities.AbstractTileEntityRack rack) parts.add(rack.getInventory());
         }
         return new CombinedInvWrapper(parts.toArray(new IItemHandlerModifiable[0]));
     }

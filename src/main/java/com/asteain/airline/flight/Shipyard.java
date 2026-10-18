@@ -62,10 +62,15 @@ final class Shipyard {
             return true;
         }
 
-        /** A part of the drive or of what the autopilot works: it only does its work turned the way the design has it. */
+        /**
+         * A part of the drive or of what the autopilot works: it only does its work turned the way the design has it. Not a
+         * MineColonies rack of the hold: it changes how it looks by itself (empty or full, and two side by side become one
+         * double rack, the second of them drawn as nothing), which would be "turned back" again and again, and a rack built by
+         * the colony's builders would never count as standing as the design has it.
+         */
         boolean device() {
             final String namespace = state.getBlock().builtInRegistryHolder().key().location().getNamespace();
-            return !"minecraft".equals(namespace) && !Airline.MOD_ID.equals(namespace);
+            return !"minecraft".equals(namespace) && !Airline.MOD_ID.equals(namespace) && !"minecolonies".equals(namespace);
         }
 
         private static <T extends Comparable<T>> String name(BlockState state, Property<T> property) {
@@ -193,6 +198,12 @@ final class Shipyard {
                 final net.minecraft.world.level.block.entity.BlockEntity entity = level.getBlockEntity(at);
                 if (entity instanceof net.minecraft.world.Container container) {
                     for (int slot = 0; slot < container.getContainerSize(); slot++) keep(level, be, store, container.removeItemNoUpdate(slot));
+                } else if (entity instanceof com.minecolonies.api.tileentities.AbstractTileEntityRack rack) {
+                    final net.neoforged.neoforge.items.IItemHandlerModifiable inside = rack.getInventory();
+                    for (int slot = 0; slot < inside.getSlots(); slot++) {
+                        keep(level, be, store, inside.getStackInSlot(slot).copy());
+                        inside.setStackInSlot(slot, net.minecraft.world.item.ItemStack.EMPTY);
+                    }
                 }
                 // It comes back as the block it is (whatever tool it would take to break it).
                 keep(level, be, store, new net.minecraft.world.item.ItemStack(there.getBlock().asItem()));
