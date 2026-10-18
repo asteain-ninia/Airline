@@ -277,12 +277,22 @@ public final class AircraftType {
         for (final BlockPos at : cargo) if (!String.valueOf(parts.get(at)).startsWith("minecraft:barrel")) return "no barrel at " + at.toShortString();
         final List<BlockPos> levers = new ArrayList<>(List.of(burnerLevers));
         levers.addAll(List.of(driveLevers));
-        for (final BlockPos at : levers) if (!String.valueOf(parts.get(at)).startsWith("simulated:throttle_lever")) return "no lever at " + at.toShortString();
+        // The burners' levers hold the height step by step: throttle levers. A drive lever may be a plain lever when it is
+        // only ever on or off (0 or 15) and is no throttle (2026-10-18: the user's "レバーでいいところをスロットルにしてる").
+        for (final BlockPos at : burnerLevers) if (!String.valueOf(parts.get(at)).startsWith("simulated:throttle_lever")) return "no throttle lever at " + at.toShortString();
+        for (int i = 0; i < driveLevers.length; i++) {
+            final String part = String.valueOf(parts.get(driveLevers[i]));
+            if (part.startsWith("simulated:throttle_lever")) continue;
+            if (!part.startsWith("minecraft:lever")) return "no lever at " + driveLevers[i].toShortString();
+            if (throttle != null && throttle[i]) return "the plain lever at " + driveLevers[i].toShortString() + " is a throttle (throttles are throttle levers)";
+            for (final int[] values : drive) if (values != null && values[i] != 0 && values[i] != 15) return "the plain lever at " + driveLevers[i].toShortString() + " is set to " + values[i] + " (a plain lever is only on or off)";
+        }
         if (new java.util.HashSet<>(levers).size() != levers.size()) return "a lever is named twice";
         for (final Map.Entry<String, Dock> dock : docks.entrySet()) {
             if (!dock.getKey().equals("port") && !dock.getKey().equals("starboard")) return "a connector is on the side '" + dock.getKey() + "' (port or starboard)";
             if (!String.valueOf(parts.get(dock.getValue().connector())).startsWith("simulated:docking_connector")) return "no connector at " + dock.getValue().connector().toShortString();
-            if (!String.valueOf(parts.get(dock.getValue().lever())).startsWith("simulated:throttle_lever")) return "no lever at " + dock.getValue().lever().toShortString();
+            if (!String.valueOf(parts.get(dock.getValue().lever())).startsWith("simulated:throttle_lever") && !String.valueOf(parts.get(dock.getValue().lever())).startsWith("minecraft:lever"))
+                return "no lever at " + dock.getValue().lever().toShortString();
             if (levers.contains(dock.getValue().lever())) return "the lever of a connector is a lever of the burners or the drives";
         }
         for (final Drive which : Drive.values()) {

@@ -485,6 +485,8 @@ final class FlightSuite {
      */
     private static void fleet(Script s, ServerLevel level, Site medium, Site wood, Site mirrored, Site large, Field fm) {
         final BlockPos[] was = new BlockPos[1];
+        final AircraftBlockEntity[] second2 = new AircraftBlockEntity[1];
+        final com.minecolonies.api.colony.ICitizenData[] secondPilot = new com.minecolonies.api.colony.ICitizenData[1];
         s.step("facilities: fleet: pilots; the medium aircraft counts as built by the builders", () -> {
             final int mediumPilots = medium.building().getFirstModuleOccurance(WorkerBuildingModule.class).getModuleMax();
             final int largePilots = large.building().getFirstModuleOccurance(WorkerBuildingModule.class).getModuleMax();
@@ -508,6 +510,35 @@ final class FlightSuite {
             s.soft("facilities / fleet: the airfield counts one aircraft whose home is one of its colony's anchorages", Flights.anchoredFleet(level, medium.building()) == 1,
                     "counted " + Flights.anchoredFleet(level, medium.building()));
             for (String l : fm.log) if (l.contains("->")) s.note("OBS facilities fleet: " + l);
+            second2[0] = made;
+            secondPilot[0] = Fixture.spawn(medium.colony, level, medium.hut.offset(3, 0, 2));
+        });
+        // ---- the buttons of the aircraft tab (2026-10-18, the user's ruling "作る"): to an anchorage, and back to the airfield
+        s.until("facilities: fleet: a second pilot", () -> {}, () -> Fixture.entity(secondPilot[0]) != null, 200);
+        s.step("facilities: fleet: hire it; the button: the second aircraft to an anchorage", () -> {
+            s.check(medium.building().getFirstModuleOccurance(WorkerBuildingModule.class).assignCitizen(secondPilot[0]), "the second pilot is hired");
+            final boolean[] can = Flights.fleetMoves(level, medium.building());
+            s.soft("facilities / fleet: the tab offers to move the airfield's aircraft to an anchorage (one is free), not to bring one back (the pad is taken)", can[0] && !can[1], can[0] + ", " + can[1]);
+            final String said = Flights.toAnchorage(level, medium.building(), null);
+            s.soft("facilities / fleet: by the button the airfield's aircraft is sent to a free anchorage", "moving".equals(said), said);
+        });
+        s.until("facilities: fleet: the second aircraft at the other anchorage", () -> {}, () -> second2[0].home != null && second2[0].home.equals(mirrored.building().pad())
+                && second2[0].phase == Phase.PARKED && second2[0].home.equals(second2[0].at), 12000);
+        s.step("facilities: fleet: the button: one back to the airfield", () -> {
+            s.soft("facilities / fleet: at the mirrored anchorage (its pier on the other side) the aircraft's other connector joined the pier's", Flights.docked(second2[0]),
+                    "home " + second2[0].home + " | " + second2[0].note);
+            final boolean[] can = Flights.fleetMoves(level, medium.building());
+            s.soft("facilities / fleet: with the pad free the tab offers to bring one back from an anchorage", !can[0] && can[1], can[0] + ", " + can[1]);
+            final String said = Flights.toAirfield(level, medium.building(), null);
+            s.soft("facilities / fleet: by the button an aircraft at an anchorage is sent back to the airfield", "returning".equals(said), said);
+        });
+        s.until("facilities: fleet: one back at the airfield", () -> {}, () -> {
+            for (AircraftBlockEntity each : Flights.aircraft(level)) if (was[0].equals(each.home) && was[0].equals(each.at) && each.phase == Phase.PARKED) return true;
+            return false;
+        }, 12000);
+        s.step("facilities: fleet: buttons, result", () -> {
+            int atAnchorages = Flights.anchoredFleet(level, medium.building());
+            s.soft("facilities / fleet: one aircraft is home at the airfield again, the other still at an anchorage", atAnchorages == 1, "at anchorages " + atAnchorages);
         });
     }
 
@@ -637,7 +668,8 @@ final class FlightSuite {
             final int[] side = {az, -ax};
             for (int along = -14; along <= 14; along++) for (int across = Facility.PIER_FROM_PAD; across <= Facility.PIER_FROM_PAD + 2; across++)
                 level.setBlockAndUpdate(floor.offset(ax * along + side[0] * across, 1, az * along + side[1] * across), Blocks.OAK_PLANKS.defaultBlockState());
-            pierConnector(level, floor.offset(side[0] * Facility.PIER_FROM_PAD, 1, side[1] * Facility.PIER_FROM_PAD), net.minecraft.core.Direction.fromDelta(-side[0], 0, -side[1]));
+            pierConnector(level, floor.offset(side[0] * Facility.PIER_FROM_PAD, 1, side[1] * Facility.PIER_FROM_PAD), net.minecraft.core.Direction.fromDelta(-side[0], 0, -side[1]),
+                    floor.offset(side[0] * (Facility.PIER_FROM_PAD + 1), 1, side[1] * (Facility.PIER_FROM_PAD + 1)));
         } else {
             final int half = facility.padHalfSize();
             for (int x = -half; x <= half; x++) for (int z = -half; z <= half; z++) level.setBlockAndUpdate(floor.offset(x, 0, z), Blocks.STONE.defaultBlockState());
@@ -652,15 +684,16 @@ final class FlightSuite {
             level.setBlockAndUpdate(new BlockPos(x, hut.getY() - 1, z), Blocks.OAK_PLANKS.defaultBlockState());
         // The pier's connector, on its east edge beside the berth, always out (as the anchorage's blueprint has it).
         final BlockPos berth = hut.offset(Facility.ANCHORAGE_BERTH);
-        pierConnector(level, new BlockPos(hut.getX() + 1, hut.getY() - 1, berth.getZ()), net.minecraft.core.Direction.EAST);
+        pierConnector(level, new BlockPos(hut.getX() + 1, hut.getY() - 1, berth.getZ()), net.minecraft.core.Direction.EAST, new BlockPos(hut.getX(), hut.getY() - 1, berth.getZ()));
     }
 
     /**
-     * A pier's connector (2026-10-18): Simulated's connector facing the berth, with a block of redstone under it, so that
-     * it is always out (as in the anchorage's blueprint).
+     * A pier's connector (2026-10-18): Simulated's connector facing the berth, and a lever (on) on the pier's floor block
+     * {@code inside} it, so that it is always out (as in the anchorage's blueprint).
      */
-    private static void pierConnector(ServerLevel level, BlockPos at, net.minecraft.core.Direction facing) {
-        level.setBlockAndUpdate(at.below(), Blocks.REDSTONE_BLOCK.defaultBlockState());
+    private static void pierConnector(ServerLevel level, BlockPos at, net.minecraft.core.Direction facing, BlockPos inside) {
+        level.setBlockAndUpdate(inside.above(), Blocks.LEVER.defaultBlockState().setValue(net.minecraft.world.level.block.LeverBlock.FACE, net.minecraft.world.level.block.state.properties.AttachFace.FLOOR)
+                .setValue(net.minecraft.world.level.block.LeverBlock.FACING, facing).setValue(net.minecraft.world.level.block.LeverBlock.POWERED, true));
         net.minecraft.world.level.block.state.BlockState connector = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(net.minecraft.resources.ResourceLocation.parse("simulated:docking_connector")).defaultBlockState();
         for (final net.minecraft.world.level.block.state.properties.Property<?> property : connector.getProperties()) {
             if (property.getName().equals("facing") && property instanceof net.minecraft.world.level.block.state.properties.DirectionProperty direction) connector = connector.setValue(direction, facing);

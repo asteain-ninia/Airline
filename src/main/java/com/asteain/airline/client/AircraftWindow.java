@@ -20,7 +20,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 public class AircraftWindow extends AbstractModuleWindow<AircraftModuleView> {
     private static final String KEY = "com." + Airline.MOD_ID + ".gui.aircraft.";
     private final Text status;
-    private final Button stopButton;
+    private final Button stopButton, toAnchorageButton, toAirfieldButton;
     private final ScrollingList list;
     private int shown = -1;
 
@@ -28,9 +28,13 @@ public class AircraftWindow extends AbstractModuleWindow<AircraftModuleView> {
         super(view, ResourceLocation.fromNamespaceAndPath(Airline.MOD_ID, "gui/layouthuts/layoutaircraft.xml"));
         status = window.findPaneOfTypeByID("status", Text.class);
         stopButton = window.findPaneOfTypeByID("stop", Button.class);
+        toAnchorageButton = window.findPaneOfTypeByID("to_anchorage", Button.class);
+        toAirfieldButton = window.findPaneOfTypeByID("to_airfield", Button.class);
         list = window.findPaneOfTypeByID("designs", ScrollingList.class);
         registerButton("build", this::build);
         registerButton("stop", this::stop);
+        registerButton("to_anchorage", () -> PacketDistributor.sendToServer(new AircraftOrderPayload(buildingView.getID(), AircraftOrderPayload.TO_ANCHORAGE, "")));
+        registerButton("to_airfield", () -> PacketDistributor.sendToServer(new AircraftOrderPayload(buildingView.getID(), AircraftOrderPayload.TO_AIRFIELD, "")));
     }
 
     @Override
@@ -70,6 +74,8 @@ public class AircraftWindow extends AbstractModuleWindow<AircraftModuleView> {
         if (v.available && v.fleet > 0) text.append(" ").append(Component.translatable(KEY + "fleet", v.fleet));
         status.setText(text);
         stopButton.setVisible(v.available && v.own == 1);
+        toAnchorageButton.setVisible(v.available && v.canToAnchorage);
+        toAirfieldButton.setVisible(v.available && v.canToAirfield);
         list.refreshElementPanes();
     }
 

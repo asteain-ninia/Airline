@@ -27,6 +27,7 @@ import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -460,7 +461,16 @@ final class FlightController {
         final AircraftType.Dock dock = type.docks.get(side[0] == -az && side[1] == ax ? "starboard" : "port");
         if (dock == null) return null;
         final int reach = com.asteain.airline.route.Facility.PIER_FROM_PAD;
-        return Craft.connector(level, pad.offset(side[0] * reach, 1, side[1] * reach), "isExtended") ? dock : null;
+        final BlockPos pier = pad.offset(side[0] * reach, 1, side[1] * reach);
+        if (Craft.connector(level, pier, "isExtended")) return dock;
+        // Signalled but not out: a connector notices its signal when something beside it changes, and in a building put up
+        // from the blueprint its lever came after it (2026-10-18: the anchorage's lever powers the floor block beside the
+        // connector). It is told to look again, and comes out within half a second; the aircraft waits for it.
+        if (level.hasNeighborSignal(pier) && level.getBlockEntity(pier) != null) {
+            level.neighborChanged(pier, level.getBlockState(pier).getBlock(), pier.relative(Direction.UP));
+            return dock;
+        }
+        return null;
     }
 
     /**
@@ -983,20 +993,7 @@ final class FlightController {
     private static void relocate(ServerLevel level, AircraftBlockEntity be, Runtime rt, RouteNetwork net) {
         if (be.at == null || !be.at.equals(be.home)) return;
         final BuildingAirfield airfield = Cargo.airfieldAt(level, be.home);
-        final com.asteain.airline.route.ShipClass cls = shipClass(be);
-        BlockPos best = null;
-        if (airfield != null && airfield.facility().airfield() && com.asteain.airline.route.Facility.ANCHORAGE.berths(cls)) {
-            double nearest = Double.MAX_VALUE;
-            for (final com.minecolonies.api.colony.buildings.IBuilding building : airfield.getColony().getServerBuildingManager().getBuildings().values()) {
-                if (!(building instanceof BuildingAirfield anchorage) || anchorage.facility() != com.asteain.airline.route.Facility.ANCHORAGE || anchorage.getBuildingLevel() < 1) continue;
-                final BlockPos pad = anchorage.pad();
-                if (pad == null || !berthsAt(net, pad, cls) || !free(level, pad, rt.craft.id()) || net.route(be.home, pad, cls).size() < 2) continue;
-                if (pad.distSqr(be.home) < nearest) {
-                    nearest = pad.distSqr(be.home);
-                    best = pad;
-                }
-            }
-        }
+        final BlockPos best = freeAnchorage(level, net, be, rt.craft.id());
         if (best == null) {
             // No anchorage free for it: its home stays the airfield's pad.
             be.newlyBuilt = false;
@@ -1011,6 +1008,100 @@ final class FlightController {
         be.homeward = true;
         note(be, "a new aircraft: its home is the anchorage at " + best.toShortString() + " (the airfield's pad is free for the next one)");
         be.setChanged();
+    }
+
+    /** The nearest free anchorage of the colony of the aircraft's home airfield that takes its class and that it has a way to; null when there is none. */
+    @Nullable
+    private static BlockPos freeAnchorage(ServerLevel level, RouteNetwork net, AircraftBlockEntity be, @Nullable UUID ship) {
+        final BuildingAirfield airfield = be.home == null ? null : Cargo.airfieldAt(level, be.home);
+        final com.asteain.airline.route.ShipClass cls = shipClass(be);
+        if (airfield == null || !airfield.facility().airfield() || !com.asteain.airline.route.Facility.ANCHORAGE.berths(cls)) return null;
+        BlockPos best = null;
+        double nearest = Double.MAX_VALUE;
+        for (final com.minecolonies.api.colony.buildings.IBuilding building : airfield.getColony().getServerBuildingManager().getBuildings().values()) {
+            if (!(building instanceof BuildingAirfield anchorage) || anchorage.facility() != com.asteain.airline.route.Facility.ANCHORAGE || anchorage.getBuildingLevel() < 1) continue;
+            final BlockPos pad = anchorage.pad();
+            if (pad == null || !berthsAt(net, pad, cls) || !free(level, pad, ship) || net.route(be.home, pad, cls).size() < 2) continue;
+            if (pad.distSqr(be.home) < nearest) {
+                nearest = pad.distSqr(be.home);
+                best = pad;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Asked for in the airfield's aircraft tab (2026-10-18, the user's ruling "作る"): the airfield's own aircraft moves
+     * to a free anchorage of the colony, which becomes its home, as a newly built one does (the nearest that takes its
+     * class and that it has a way to); the airfield's pad is free then. Only an aircraft that stands on its home pad with
+     * nothing to do.
+     */
+    static String toAnchorage(ServerLevel level, BuildingAirfield airfield, @Nullable net.minecraft.server.level.ServerPlayer player) {
+        final String say = "message." + Airline.MOD_ID + ".fleet.";
+        final BlockPos pad = airfield.pad();
+        for (final AircraftBlockEntity be : loaded(level)) {
+            if (pad == null || !pad.equals(be.home)) continue;
+            if (!com.asteain.airline.route.Facility.ANCHORAGE.berths(shipClass(be))) return said(player, say + "no_class");
+            if (be.phase != Phase.PARKED || !pad.equals(be.at) || be.cargo || be.homeward || be.modifying) return said(player, say + "busy");
+            final Runtime rt = runtime(be);
+            if (freeAnchorage(level, RouteNetwork.get(level), be, rt == null ? null : rt.craft.id()) == null) return said(player, say + "no_anchorage");
+            be.newlyBuilt = true;
+            be.setChanged();
+            return said(player, say + "moving");
+        }
+        return said(player, say + "none");
+    }
+
+    /**
+     * Asked for in the airfield's aircraft tab: an aircraft that stands at one of the colony's anchorages (its home there)
+     * flies to this airfield, whose pad becomes its home. Only when the pad is nobody's home, and only an aircraft of a
+     * class the airfield takes, with nothing to do.
+     */
+    static String toAirfield(ServerLevel level, BuildingAirfield airfield, @Nullable net.minecraft.server.level.ServerPlayer player) {
+        final String say = "message." + Airline.MOD_ID + ".fleet.";
+        final BlockPos pad = airfield.pad();
+        if (pad == null || !airfield.facility().airfield()) return said(player, say + "none_away");
+        for (final AircraftBlockEntity be : loaded(level)) if (pad.equals(be.home)) return said(player, say + "pad_taken");
+        for (final Timetable.Entry entry : Timetable.get(level.getServer()).entries()) if (pad.equals(entry.home())) return said(player, say + "pad_taken");
+        final RouteNetwork net = RouteNetwork.get(level);
+        for (final AircraftBlockEntity be : loaded(level)) {
+            if (be.home == null || be.phase != Phase.PARKED || !be.home.equals(be.at) || be.cargo || be.homeward || be.modifying) continue;
+            final BuildingAirfield anchorage = Cargo.airfieldAt(level, be.home);
+            if (anchorage == null || anchorage.facility() != com.asteain.airline.route.Facility.ANCHORAGE || anchorage.getColony().getID() != airfield.getColony().getID()) continue;
+            if (!berthsAt(net, pad, shipClass(be)) || net.route(be.home, pad, shipClass(be)).size() < 2) continue;
+            be.home = pad;
+            be.homeward = true;
+            be.setChanged();
+            LOGGER.info("[Airline/flight] the aircraft at the anchorage {} is sent back to the airfield's pad {}, its home from now.", be.at, pad);
+            return said(player, say + "returning");
+        }
+        return said(player, say + "none_away");
+    }
+
+    /** For the aircraft tab: {whether the airfield's own aircraft can be moved to an anchorage now, whether one can be brought back from an anchorage}. */
+    static boolean[] fleetMoves(ServerLevel level, BuildingAirfield airfield) {
+        final BlockPos pad = airfield.pad();
+        final boolean[] can = new boolean[2];
+        if (pad == null || !airfield.facility().airfield()) return can;
+        boolean padTaken = false;
+        final RouteNetwork net = RouteNetwork.get(level);
+        for (final AircraftBlockEntity be : loaded(level)) {
+            if (!pad.equals(be.home)) continue;
+            padTaken = true;
+            final Runtime rt = runtime(be);
+            can[0] = be.phase == Phase.PARKED && pad.equals(be.at) && !be.cargo && !be.homeward && !be.modifying
+                    && freeAnchorage(level, net, be, rt == null ? null : rt.craft.id()) != null;
+        }
+        for (final Timetable.Entry entry : Timetable.get(level.getServer()).entries()) padTaken |= pad.equals(entry.home());
+        if (!padTaken) {
+            for (final AircraftBlockEntity be : loaded(level)) {
+                if (be.home == null || be.phase != Phase.PARKED || !be.home.equals(be.at) || be.cargo || be.homeward) continue;
+                final BuildingAirfield anchorage = Cargo.airfieldAt(level, be.home);
+                if (anchorage != null && anchorage.facility() == com.asteain.airline.route.Facility.ANCHORAGE && anchorage.getColony().getID() == airfield.getColony().getID()
+                        && berthsAt(net, pad, shipClass(be))) can[1] = true;
+            }
+        }
+        return can;
     }
 
     /** Whether a creature rides a seat (Create's, or another mod's seat entity). */

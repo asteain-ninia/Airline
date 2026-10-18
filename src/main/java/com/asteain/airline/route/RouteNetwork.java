@@ -1046,7 +1046,15 @@ public final class RouteNetwork extends SavedData {
             } else {
                 // Not loaded: read from the save (2026-10-18), without loading it into the world.
                 final Saved saved = fromSave(level, key);
-                if (saved == WAITING) return budget;      // being read: looked at again next tick
+                if (saved == WAITING) {
+                    // Being read: the chunks after it that are not loaded either are asked for as well (a long line over land
+                    // nobody is near is read many chunks at a time, not one a tick), and the line is looked at again next tick.
+                    for (int i = scan.chunk + 1, asked = 0; i < scan.chunks.length && asked < READ_AHEAD; i++) {
+                        final long next = scan.chunks[i];
+                        if (level.getChunkSource().getChunkNow(ChunkPos.getX(next), ChunkPos.getZ(next)) == null && fromSave(level, next) == WAITING) asked++;
+                    }
+                    return budget;
+                }
                 if (saved.none) {
                     // Never made (or not readable): this part of the line was not seen (every chunk in the list holds a column of the space).
                     budget--;
@@ -1199,6 +1207,8 @@ public final class RouteNetwork extends SavedData {
     }
 
     private static final Saved WAITING = new Saved(true, 0, 0, 0);
+    /** How many chunks ahead are asked for at once while one is being read. */
+    private static final int READ_AHEAD = 64;
     /** How long a chunk read from the save is used (it may be loaded, changed and saved again meanwhile). */
     private static final int SAVED_TICKS = 1200;
     private static final com.mojang.serialization.Codec<net.minecraft.world.level.chunk.PalettedContainer<BlockState>> SECTION_STATES =

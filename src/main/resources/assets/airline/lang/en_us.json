@@ -237,5 +237,15 @@
   "colonypatch.state.PILOT_BOARDING": "Boarding",
   "colonypatch.state.PILOT_FLYING": "Flying",
   "colonypatch.state.PILOT_DISEMBARKING": "Getting off",
-  "colonypatch.state.PILOT_UNLOADING": "Unloading"
+  "colonypatch.state.PILOT_UNLOADING": "Unloading",
+  "com.airline.gui.aircraft.to_anchorage": "To an anchorage",
+  "com.airline.gui.aircraft.to_airfield": "Back to the airfield",
+  "message.airline.fleet.moving": "The airfield's aircraft moves to a free anchorage of the colony (as soon as a pilot is free); the anchorage becomes its home and the airfield's pad is free.",
+  "message.airline.fleet.no_class": "Aircraft of this class cannot berth at an anchorage (medium and large aircraft can).",
+  "message.airline.fleet.busy": "Only an aircraft that stands on its home pad with nothing to do can be moved.",
+  "message.airline.fleet.no_anchorage": "The colony has no free anchorage that can be flown to.",
+  "message.airline.fleet.none": "No aircraft has this airfield as its home (or it is not loaded).",
+  "message.airline.fleet.returning": "An aircraft at an anchorage comes back to this airfield; its pad is the aircraft's home from now.",
+  "message.airline.fleet.pad_taken": "This airfield's pad is the home of another aircraft.",
+  "message.airline.fleet.none_away": "No aircraft stands at the colony's anchorages that could come here (on a flight, not loaded, or of a class this airfield does not take)."
 }

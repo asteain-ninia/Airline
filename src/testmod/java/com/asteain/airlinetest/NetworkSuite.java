@@ -329,7 +329,11 @@ final class NetworkSuite {
         s.until("C2: looked at with the land loaded", () -> {}, () -> net.edge(savedA, savedB) != null && net.edge(savedA, savedB).state() == State.CLEAR, 600);
         s.step("C2: raised over the stone; the land is let go", () -> {
             Edge line = net.edge(savedA, savedB);
-            s.soft("C2 / with the land loaded the line is raised over the stone (7) and clear", line.lift() == 7 && line.state() == State.CLEAR, describe(line));
+            // (The stone is 9 above the buoys' blocks: the line, 9.5, goes 8 higher.)
+            s.soft("C2 / with the land loaded the line is raised over the stone (8) and clear", line.lift() == 8 && line.state() == State.CLEAR, describe(line));
+            // Saved now (a chunk let go is written to its region file some time after it is unloaded; land nobody was near
+            // lately is always written).
+            level.save(null, true, false);
             release(level, -24, 114, z5 - 24, z5 + 24);
         });
         s.until("C2: the land is not loaded any more", () -> {}, () -> level.getChunkSource().getChunkNow(savedStone.getX() >> 4, savedStone.getZ() >> 4) == null
@@ -342,8 +346,8 @@ final class NetworkSuite {
         s.step("C2: read from the save", () -> {
             Edge line = net.edge(savedA, savedB);
             final boolean stillNotLoaded = level.getChunkSource().getChunkNow(savedStone.getX() >> 4, savedStone.getZ() >> 4) == null;
-            s.soft("C2 / with the land not loaded, the line is looked at from the save: raised over the stone (7), clear, nothing unseen; the land was not loaded for it",
-                    line.state() == State.CLEAR && line.lift() == 7 && !line.hasUnseenParts() && stillNotLoaded, describe(line) + ", land loaded now: " + !stillNotLoaded);
+            s.soft("C2 / with the land not loaded, the line is looked at from the save: raised over the stone (8), clear, nothing unseen; the land was not loaded for it",
+                    line.state() == State.CLEAR && line.lift() == 8 && !line.hasUnseenParts() && stillNotLoaded, describe(line) + ", land loaded now: " + !stillNotLoaded);
         });
 
         // ---- D: landing pads (rulings of 2026-10-11): higher lines, the shaft over the pad, what a buoy says, links ----

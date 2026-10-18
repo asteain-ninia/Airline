@@ -120,11 +120,29 @@ final class Craft {
     // ---- levers -----------------------------------------------------------------------------------------------
 
     private void lever(BlockPos part, int value) {
-        final BlockEntity lever = level.getBlockEntity(inShip(part));
+        final BlockPos at = inShip(part);
+        final net.minecraft.world.level.block.state.BlockState state = level.getBlockState(at);
+        if (state.getBlock() instanceof net.minecraft.world.level.block.LeverBlock plain) {
+            // A plain lever (2026-10-18): on or off, anything above 0 is on. Pulled as a hand pulls it.
+            if (state.getValue(net.minecraft.world.level.block.LeverBlock.POWERED) == value > 0) return;
+            plain.pull(state, level, at, null);
+            writes++;
+            return;
+        }
+        final BlockEntity lever = level.getBlockEntity(at);
         if (lever == null) return;
         if ((int) get(lever, "state") == value) return;
         call(lever, "setSignal", value);
         writes++;
+    }
+
+    /** What a lever gives now: a throttle lever 0 to 15, a plain lever 0 or 15; {@code missing} when there is none. */
+    private int current(BlockPos part, int missing) {
+        final BlockPos at = inShip(part);
+        final net.minecraft.world.level.block.state.BlockState state = level.getBlockState(at);
+        if (state.getBlock() instanceof net.minecraft.world.level.block.LeverBlock) return state.getValue(net.minecraft.world.level.block.LeverBlock.POWERED) ? 15 : 0;
+        final BlockEntity lever = level.getBlockEntity(at);
+        return lever == null ? missing : (int) get(lever, "state");
     }
 
     /** The lever beside a connector of the hull: 15 lets the connector out (it joins one it meets), 0 takes it in. */
@@ -134,8 +152,7 @@ final class Craft {
 
     /** What a lever of the ship gives now (0 to 15); 0 when it is not there. */
     int leverValue(BlockPos part) {
-        final BlockEntity lever = level.getBlockEntity(inShip(part));
-        return lever == null ? 0 : (int) get(lever, "state");
+        return current(part, 0);
     }
 
     /** Whether a connector of the ship is joined to another and held (its claws are out); false when it is not there. */
@@ -191,8 +208,7 @@ final class Craft {
         final int[] now = new int[want.length];
         boolean shift = false, open = false;
         for (int i = 0; i < want.length; i++) {
-            final BlockEntity lever = level.getBlockEntity(inShip(type.driveLevers[i]));
-            now[i] = lever == null ? want[i] : (int) get(lever, "state");
+            now[i] = current(type.driveLevers[i], want[i]);
             if (!throttle[i]) shift |= now[i] != want[i];
             else open |= now[i] != off[i];
         }

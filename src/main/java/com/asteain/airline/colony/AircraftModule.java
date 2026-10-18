@@ -35,6 +35,10 @@ public class AircraftModule extends AbstractBuildingModule implements ITickingMo
         }
         buf.writeBoolean(Flights.available());
         buf.writeVarInt(building instanceof BuildingAirfield airfield && building.getColony().getWorld() instanceof ServerLevel level ? Flights.anchoredFleet(level, airfield) : 0);
+        // Whether the airfield's own aircraft can be moved to an anchorage, and one brought back from an anchorage (2026-10-18).
+        final boolean[] moves = building instanceof BuildingAirfield airfield && building.getColony().getWorld() instanceof ServerLevel level ? Flights.fleetMoves(level, airfield) : new boolean[2];
+        buf.writeBoolean(moves[0]);
+        buf.writeBoolean(moves[1]);
         // The airfield's own aircraft: 0 none, 1 being built (blocks still to go), 2 there is one; and its design's title.
         buf.writeByte(own[0]);
         buf.writeUtf(design[0]);

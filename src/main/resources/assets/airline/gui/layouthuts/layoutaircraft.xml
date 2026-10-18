@@ -5,6 +5,10 @@
     <text id="status" size="160 34" pos="16 30" color="black" wrap="true"/>
     <button id="stop" size="76 17" pos="14 66" color="black" label="$(com.airline.gui.aircraft.stop)"
             source="minecolonies:textures/gui/builderhut/builder_button_medium.png"/>
+    <button id="to_anchorage" size="80 17" pos="96 66" color="black" label="$(com.airline.gui.aircraft.to_anchorage)"
+            source="minecolonies:textures/gui/builderhut/builder_button_medium.png"/>
+    <button id="to_airfield" size="80 17" pos="96 66" color="black" label="$(com.airline.gui.aircraft.to_airfield)"
+            source="minecolonies:textures/gui/builderhut/builder_button_medium.png"/>
     <list id="designs" size="164 146" pos="13 88">
         <box size="100% 46" linewidth="1">
             <text id="title" size="155 11" pos="3 2" color="black"/>

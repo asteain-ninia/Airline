@@ -23,7 +23,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
  * the design is looked up by name, never taken on trust.
  */
 public record AircraftOrderPayload(BlockPos hut, String action, String design) implements CustomPacketPayload {
-    public static final String BUILD = "build", STOP = "stop", DEPART = "depart";
+    public static final String BUILD = "build", STOP = "stop", DEPART = "depart", TO_ANCHORAGE = "to_anchorage", TO_AIRFIELD = "to_airfield";
 
     public static final Type<AircraftOrderPayload> TYPE = new Type<>(Airline.id("aircraft_order"));
     public static final StreamCodec<ByteBuf, AircraftOrderPayload> STREAM_CODEC = StreamCodec.composite(
@@ -50,6 +50,8 @@ public record AircraftOrderPayload(BlockPos hut, String action, String design) i
                 case BUILD -> Flights.requestAircraft(level, airfield, order.design(), player);
                 case STOP -> Flights.stopAircraft(level, airfield, player);
                 case DEPART -> Flights.departNow(level, airfield, player);
+                case TO_ANCHORAGE -> Flights.toAnchorage(level, airfield, player);
+                case TO_AIRFIELD -> Flights.toAirfield(level, airfield, player);
                 default -> { }
             }
             airfield.markDirty();

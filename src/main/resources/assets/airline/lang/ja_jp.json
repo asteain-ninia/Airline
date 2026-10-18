@@ -237,5 +237,15 @@
   "colonypatch.state.PILOT_BOARDING": "乗り込み",
   "colonypatch.state.PILOT_FLYING": "操縦中",
   "colonypatch.state.PILOT_DISEMBARKING": "降りる",
-  "colonypatch.state.PILOT_UNLOADING": "荷下ろし"
+  "colonypatch.state.PILOT_UNLOADING": "荷下ろし",
+  "com.airline.gui.aircraft.to_anchorage": "泊地へ移す",
+  "com.airline.gui.aircraft.to_airfield": "飛行場へ戻す",
+  "message.airline.fleet.moving": "この飛行場の機体は、村の空いている泊地へ移ります(飛行士の手が空きしだい)。泊地が母港になり、この飛行場の発着場は空きます。",
+  "message.airline.fleet.no_class": "この機体の級は、泊地に泊まれません(泊まれるのは中型機と大型機)。",
+  "message.airline.fleet.busy": "機体が母港の発着場に止まっていて、便の用事が無いときだけ移せます。",
+  "message.airline.fleet.no_anchorage": "この村に、空いていて航路で行ける泊地がありません。",
+  "message.airline.fleet.none": "この飛行場を母港にする機体がいません(読み込まれていないのかもしれません)。",
+  "message.airline.fleet.returning": "泊地の機体が、この飛行場へ戻ります。この飛行場の発着場が母港になります。",
+  "message.airline.fleet.pad_taken": "この飛行場の発着場は、ほかの機体の母港です。",
+  "message.airline.fleet.none_away": "村の泊地に止まっていて、ここへ戻せる機体がいません(便の途中か、読み込まれていないか、この飛行場に泊まれない級です)。"
 }

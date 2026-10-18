@@ -343,6 +343,21 @@ public final class Flights {
         return lastBuilding = Shipyard.request(level, airfield, AircraftType.ALL.get(design), player);
     }
 
+    /** Asked for in the airfield's aircraft tab: its own aircraft moves to a free anchorage of the colony ({@link FlightController#toAnchorage}). */
+    public static String toAnchorage(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield, @Nullable net.minecraft.server.level.ServerPlayer player) {
+        return available() ? FlightController.toAnchorage(level, airfield, player) : "unavailable";
+    }
+
+    /** Asked for in the airfield's aircraft tab: an aircraft at one of the colony's anchorages comes to this airfield ({@link FlightController#toAirfield}). */
+    public static String toAirfield(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield, @Nullable net.minecraft.server.level.ServerPlayer player) {
+        return available() ? FlightController.toAirfield(level, airfield, player) : "unavailable";
+    }
+
+    /** For the aircraft tab: whether each of the two can be done now. */
+    public static boolean[] fleetMoves(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield) {
+        return available() ? FlightController.fleetMoves(level, airfield) : new boolean[2];
+    }
+
     /** Asked for in the airfield's timetable tab: the aircraft standing there leaves now ({@link FlightController#departNow}). */
     public static String departNow(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield, @Nullable net.minecraft.server.level.ServerPlayer player) {
         if (!available()) return "";
