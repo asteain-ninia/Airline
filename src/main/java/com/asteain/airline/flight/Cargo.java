@@ -347,21 +347,25 @@ public final class Cargo {
      */
     @Nullable
     static Mob freePilot(ServerLevel level, BuildingAirfield airfield, AircraftBlockEntity self) {
-        Mob first = null;
+        // Its own pilot first; then one that flies no other aircraft; only then one whose aircraft stands idle (it may stay
+        // at an anchorage far from here, 2026-10-18: a pilot was called from the anchorage to fly the airfield's aircraft).
+        Mob unbound = null, idle = null;
         for (final ICitizenData citizen : airfield.getAllAssignedCitizen()) {
             if (citizen.getEntity().isEmpty()) continue;
             final Mob mob = citizen.getEntity().get();
-            boolean busy = false;
+            boolean busy = false, bound = false;
             for (final AircraftBlockEntity other : FlightController.loaded(level)) {
                 if (other == self) continue;
                 final boolean same = mob.getUUID().equals(other.pilot) || (other.pilotColony == citizen.getColony().getID() && other.pilotCitizen == citizen.getId());
+                bound |= same;
                 if (same && (other.cargo || other.flying() || other.homeward || other.phase != AircraftBlockEntity.Phase.PARKED)) busy = true;
             }
             if (busy) continue;
             if (mob.getUUID().equals(self.pilot)) return mob;
-            if (first == null) first = mob;
+            if (!bound && unbound == null) unbound = mob;
+            if (bound && idle == null) idle = mob;
         }
-        return first;
+        return unbound != null ? unbound : idle;
     }
 
     /**
