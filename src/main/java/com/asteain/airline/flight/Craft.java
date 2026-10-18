@@ -127,6 +127,38 @@ final class Craft {
         writes++;
     }
 
+    /** The lever beside a connector of the hull: 15 lets the connector out (it joins one it meets), 0 takes it in. */
+    void dockLever(BlockPos part, int value) {
+        lever(part, value);
+    }
+
+    /** What a lever of the ship gives now (0 to 15); 0 when it is not there. */
+    int leverValue(BlockPos part) {
+        final BlockEntity lever = level.getBlockEntity(inShip(part));
+        return lever == null ? 0 : (int) get(lever, "state");
+    }
+
+    /** Whether a connector of the ship is joined to another and held (its claws are out); false when it is not there. */
+    boolean connectorLocked(BlockPos part) {
+        return connector(level, inShip(part), "isLocked");
+    }
+
+    /** Whether a connector of the ship is out (or on its way out or in); false when it is not there. */
+    boolean connectorOut(BlockPos part) {
+        return connector(level, inShip(part), "isExtended");
+    }
+
+    /** Asks a connector (of a ship or of the world) a yes-or-no question of Simulated's; false when there is none to ask. */
+    static boolean connector(net.minecraft.world.level.Level level, BlockPos at, String question) {
+        final BlockEntity connector = level.getBlockEntity(at);
+        if (connector == null || !connector.getClass().getSimpleName().startsWith("DockingConnector")) return false;
+        try {
+            return Boolean.TRUE.equals(call(connector, question));
+        } catch (RuntimeException notThere) {
+            return false;
+        }
+    }
+
     /** The levers beside the burners, all alike: 0 to 15. */
     void burner(int value) {
         for (final BlockPos lever : type.burnerLevers) lever(lever, Math.max(0, Math.min(15, value)));

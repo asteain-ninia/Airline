@@ -133,6 +133,11 @@ final class FlightController {
         long clearedAt;
         /** Seated and kept on the ground because another flight is in the way; told that no pad is free; waits on one line because of a ship. */
         boolean heldForAir, toldNoPad;
+        /**
+         * Joining the pier's connector at an anchorage: ticks since the ship's connector was let out (0: not begun; -1:
+         * over, joined or not), and ticks spent letting go of it before leaving.
+         */
+        int dockTicks, undockTicks;
         int shipHolds;
         /** Lines it found another ship on and goes round, until it has flown a line to its end or landed. */
         final java.util.Set<Edge> avoid = new java.util.HashSet<>();
@@ -423,6 +428,98 @@ final class FlightController {
         if (side == null) return pad.above();
         final int shift = com.asteain.airline.route.ShipClass.LARGE.halfWidth - type.deckReach();
         return pad.offset(side[0] * shift, 1, side[1] * shift);
+    }
+
+    /** Whether a connector of the aircraft's hull is joined to another one now. */
+    static boolean docked(AircraftBlockEntity be) {
+        final Runtime rt = runtime(be);
+        if (rt == null) return false;
+        for (final AircraftType.Dock dock : rt.craft.type.docks.values()) if (rt.craft.connectorLocked(dock.connector())) return true;
+        return false;
+    }
+
+    /** How long the ship's connector is given to join the pier's (ticks); then the aircraft is fixed where it is, as without one. */
+    private static final int DOCK_TICKS = 200;
+    /** How long it waits for its connectors to come in before it leaves all the same (ticks). */
+    private static final int UNDOCK_TICKS = 100;
+
+    /**
+     * The connector of the aircraft on the side of the pier, at an anchorage whose pier has a connector that is out (it
+     * is always out where the anchorage was built with its signal, 2026-10-18); null when there is nothing to join.
+     */
+    @Nullable
+    static AircraftType.Dock pierDock(ServerLevel level, RouteNetwork net, BlockPos pad, AircraftType type) {
+        final int[] side = pierSide(level, net, pad);
+        if (side == null || type.docks.isEmpty()) return null;
+        final double heading = Math.toRadians(net.node(pad).heading());
+        final int ax = (int) Math.round(Math.cos(heading)), az = (int) Math.round(Math.sin(heading));
+        // Looking ahead, the right is (-az, ax).
+        final AircraftType.Dock dock = type.docks.get(side[0] == -az && side[1] == ax ? "starboard" : "port");
+        if (dock == null) return null;
+        final int reach = com.asteain.airline.route.Facility.PIER_FROM_PAD;
+        return Craft.connector(level, pad.offset(side[0] * reach, 1, side[1] * reach), "isExtended") ? dock : null;
+    }
+
+    /**
+     * At an anchorage, at rest at the pier's height: the connector on the pier's side is let out and the aircraft left to
+     * it (no pushes; its height still held), until the two have joined: then the deck lies exactly against the pier, square
+     * with it. True while that goes on. Not joined in time, the connector is taken in again and the aircraft is fixed
+     * where it is, as at a pier without a connector.
+     */
+    private static boolean docking(AircraftBlockEntity be, Runtime rt, RouteNetwork net) {
+        if (rt.dockTicks < 0) return false;
+        final Craft c = rt.craft;
+        final AircraftType.Dock dock = rt.dockTicks == 0 ? pierDock(c.level, net, be.destination, c.type) : dockOn(c, net, be);
+        if (dock == null) {
+            rt.dockTicks = -1;
+            return false;
+        }
+        if (rt.dockTicks == 0) {
+            c.dockLever(dock.lever(), 15);
+            rt.pilot.hover();
+            note(be, "joining the pier's connector");
+        }
+        if (c.connectorLocked(dock.connector())) {
+            LOGGER.info("[Airline/flight] joined the pier's connector at {} after {} ticks.", be.destination, rt.dockTicks);
+            rt.dockTicks = -1;
+            return false;
+        }
+        if (++rt.dockTicks > DOCK_TICKS) {
+            c.dockLever(dock.lever(), 0);
+            LOGGER.info("[Airline/flight] the connectors at {} did not join; the aircraft is fixed where it is.", be.destination);
+            note(be, "the connectors did not join; fixed where it is");
+            rt.dockTicks = -1;
+            return false;
+        }
+        return true;
+    }
+
+    /** The connector being let out (on the pier's side); null when that cannot be told any more. */
+    @Nullable
+    private static AircraftType.Dock dockOn(Craft c, RouteNetwork net, AircraftBlockEntity be) {
+        for (final AircraftType.Dock dock : c.type.docks.values()) if (c.leverValue(dock.lever()) > 0) return dock;
+        return null;
+    }
+
+    /**
+     * Before it leaves: every connector of the hull is taken in (its lever to 0), and the aircraft waits until none is out
+     * any more (a joined connector holds the ship to the pier). True while it waits; not for ever.
+     */
+    private static boolean undocking(AircraftBlockEntity be, Runtime rt) {
+        final Craft c = rt.craft;
+        if (c.type.docks.isEmpty()) return false;
+        boolean out = false;
+        for (final AircraftType.Dock dock : c.type.docks.values()) {
+            if (c.leverValue(dock.lever()) > 0) c.dockLever(dock.lever(), 0);
+            out |= c.connectorOut(dock.connector()) || c.connectorLocked(dock.connector());
+        }
+        if (!out || rt.undockTicks++ > UNDOCK_TICKS) {
+            if (out) LOGGER.info("[Airline/flight] a connector of the aircraft is still out; it leaves all the same.");
+            rt.undockTicks = 0;
+            return false;
+        }
+        if (rt.undockTicks == 1) note(be, "letting go of the pier's connector");
+        return true;
     }
 
     /** Whether there is nothing to berth at: no floor at the pad, or at an anchorage no pier beside it; false when that is not loaded. */
@@ -772,6 +869,11 @@ final class FlightController {
         be.timer++;
         final Boarding.State state = pilot == null ? Boarding.State.NONE : Boarding.state(pilot);
         if (state == Boarding.State.SEATED) {
+            // Joined to a pier's connector: let go of it first, and wait until the connector is in.
+            if (undocking(be, rt)) {
+                be.timer = 0;
+                return;
+            }
             // It leaves when the air is free: its way must keep clear of every flight that is under way (see Airspace).
             if (rt.heldForAir && rt.age % AIR_LOOK != 0) return;
             final Airspace air = Airspace.get(rt.craft.level.getServer());
@@ -906,6 +1008,7 @@ final class FlightController {
 
     private static void takeOff(AircraftBlockEntity be, Runtime rt) {
         final Craft c = rt.craft;
+        rt.dockTicks = 0;
         c.ticket(true);
         c.lock(false);
         be.at = null;
@@ -1219,6 +1322,7 @@ final class FlightController {
                     rt.still = 0;
                 }
                 ap.tick();
+                if (rt.still > 40 && held && docking(be, rt, net)) return;
                 if (rt.still > 40) landed(be, rt, net);
             }
             default -> { }

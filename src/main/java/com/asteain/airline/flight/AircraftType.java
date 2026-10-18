@@ -78,6 +78,15 @@ public final class AircraftType {
      * that is sat down on one is taken off it again). Optional; none for most designs.
      */
     public final List<BlockPos> passengers = new ArrayList<>();
+    /**
+     * The connectors on the sides of the hull and the lever beside each (2026-10-18, the user's ruling: at an anchorage
+     * the aircraft is joined to the pier's connector, which pulls it so that its deck lies right against the pier). The
+     * key is the side: "port" to the left looking ahead (toward -z of the ship), "starboard" to the right. Optional.
+     */
+    public final Map<String, Dock> docks = new LinkedHashMap<>();
+
+    public record Dock(BlockPos connector, BlockPos lever) {}
+
     /** The engines: they burn out of the aircraft's tank. */
     public BlockPos[] engines = {};
     /** The levers of the drives, and for every manoeuvre the value (0 to 15) each of them gets. */
@@ -270,6 +279,12 @@ public final class AircraftType {
         levers.addAll(List.of(driveLevers));
         for (final BlockPos at : levers) if (!String.valueOf(parts.get(at)).startsWith("simulated:throttle_lever")) return "no lever at " + at.toShortString();
         if (new java.util.HashSet<>(levers).size() != levers.size()) return "a lever is named twice";
+        for (final Map.Entry<String, Dock> dock : docks.entrySet()) {
+            if (!dock.getKey().equals("port") && !dock.getKey().equals("starboard")) return "a connector is on the side '" + dock.getKey() + "' (port or starboard)";
+            if (!String.valueOf(parts.get(dock.getValue().connector())).startsWith("simulated:docking_connector")) return "no connector at " + dock.getValue().connector().toShortString();
+            if (!String.valueOf(parts.get(dock.getValue().lever())).startsWith("simulated:throttle_lever")) return "no lever at " + dock.getValue().lever().toShortString();
+            if (levers.contains(dock.getValue().lever())) return "the lever of a connector is a lever of the burners or the drives";
+        }
         for (final Drive which : Drive.values()) {
             final int[] values = drive[which.ordinal()];
             if (values == null || values.length != driveLevers.length) return "the manoeuvre " + which + " does not say what every drive lever gets";
@@ -349,6 +364,12 @@ public final class AircraftType {
                 for (final JsonElement each : file.getAsJsonArray("cargo")) t.cargo.add(pos(each));
                 for (final JsonElement each : file.getAsJsonArray("access")) t.access.add(pos(each));
                 if (file.has("passengers")) for (final JsonElement each : file.getAsJsonArray("passengers")) t.passengers.add(pos(each));
+                if (file.has("docks")) {
+                    for (final Map.Entry<String, JsonElement> dock : file.getAsJsonObject("docks").entrySet()) {
+                        final JsonObject one = dock.getValue().getAsJsonObject();
+                        t.docks.put(dock.getKey(), new Dock(pos(one.get("connector")), pos(one.get("lever"))));
+                    }
+                }
                 final JsonArray burners = file.getAsJsonArray("burners");
                 t.burners = new BlockPos[burners.size()];
                 t.burnerLevers = new BlockPos[burners.size()];

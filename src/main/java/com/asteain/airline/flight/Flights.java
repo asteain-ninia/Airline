@@ -423,6 +423,11 @@ public final class Flights {
         return available() ? FlightController.readings(aircraft) : null;
     }
 
+    /** For the checks: whether a connector of the aircraft's hull is joined to another one now (at an anchorage: the pier's). */
+    public static boolean docked(AircraftBlockEntity aircraft) {
+        return available() && FlightController.docked(aircraft);
+    }
+
     /** The id of the ship the aircraft block is part of, and its seat block in the ship's own coordinates (for boarding). */
     public static java.util.UUID shipId(AircraftBlockEntity aircraft) {
         final FlightController.Runtime rt = available() ? FlightController.runtime(aircraft) : null;

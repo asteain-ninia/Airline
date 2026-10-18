@@ -572,8 +572,8 @@ final class FlightSuite {
         s.step("facilities: " + name + ": hire the pilot", () -> s.check(f.airfield.getFirstModuleOccurance(WorkerBuildingModule.class).assignCitizen(f.pilotData), "the pilot is hired"));
         loaded(s, "facilities " + name, () -> f.aircraft);
         s.settle("facilities: " + name + ": the balloon fills", 320);
-        final double[] onPier = {Double.NaN, Double.NaN, Double.NaN};
-        final boolean[] fixedThere = new boolean[1];
+        final double[] onPier = {Double.NaN, Double.NaN, Double.NaN, Double.NaN};
+        final boolean[] fixedThere = new boolean[1], joinedThere = new boolean[1];
         final int[] redoneBefore = new int[1];
         s.step("facilities: " + name + ": a round trip to the anchorage", () -> {
             watch(s, f, "facilities " + name);
@@ -584,6 +584,8 @@ final class FlightSuite {
                     onPier[2] = f.pilot.getZ();
                     final double[] r = Flights.readings(f.aircraft);
                     fixedThere[0] = r != null && r[4] > 0;
+                    onPier[3] = r == null ? Double.NaN : r[6];
+                    joinedThere[0] = Flights.docked(f.aircraft);
                 }
             });
             final RouteNetwork routes = RouteNetwork.get(level);
@@ -607,6 +609,8 @@ final class FlightSuite {
             s.soft("facilities / " + name + ": at the " + anchorage.name + " the aircraft was held fixed in the air beside the pier, and the pilot got off onto the pier",
                     fixedThere[0] && onTheDeck && f.pilot.isAlive(), String.format("fixed %s; the pilot stood at (%.1f, %.1f, %.1f), %.1f across from the berth %s",
                             fixedThere[0], onPier[0], onPier[1], onPier[2], across, pad.toShortString()));
+            s.soft("facilities / " + name + ": at the " + anchorage.name + " the aircraft's connector was joined to the pier's (built from the blueprint), its own block within 0.1 of where it belongs",
+                    joinedThere[0] && onPier[3] < 0.1, "joined " + joinedThere[0] + ", " + onPier[3] + " from where its own block belongs");
             s.soft("facilities / " + name + ": then it came home with its pilot", f.pad.equals(f.aircraft.at) && f.pilot.isAlive(), "at " + f.aircraft.at);
             if (name.equals("large")) {
                 final double[] r = Flights.readings(f.aircraft);
@@ -633,6 +637,7 @@ final class FlightSuite {
             final int[] side = {az, -ax};
             for (int along = -14; along <= 14; along++) for (int across = Facility.PIER_FROM_PAD; across <= Facility.PIER_FROM_PAD + 2; across++)
                 level.setBlockAndUpdate(floor.offset(ax * along + side[0] * across, 1, az * along + side[1] * across), Blocks.OAK_PLANKS.defaultBlockState());
+            pierConnector(level, floor.offset(side[0] * Facility.PIER_FROM_PAD, 1, side[1] * Facility.PIER_FROM_PAD), net.minecraft.core.Direction.fromDelta(-side[0], 0, -side[1]));
         } else {
             final int half = facility.padHalfSize();
             for (int x = -half; x <= half; x++) for (int z = -half; z <= half; z++) level.setBlockAndUpdate(floor.offset(x, 0, z), Blocks.STONE.defaultBlockState());
@@ -645,6 +650,23 @@ final class FlightSuite {
         Fixture.platform(level, hut.offset(2, 0, 4), 5, 4);
         for (int z = hut.getZ() - 33; z <= hut.getZ() - 1; z++) for (int x = hut.getX() - 1; x <= hut.getX() + 1; x++)
             level.setBlockAndUpdate(new BlockPos(x, hut.getY() - 1, z), Blocks.OAK_PLANKS.defaultBlockState());
+        // The pier's connector, on its east edge beside the berth, always out (as the anchorage's blueprint has it).
+        final BlockPos berth = hut.offset(Facility.ANCHORAGE_BERTH);
+        pierConnector(level, new BlockPos(hut.getX() + 1, hut.getY() - 1, berth.getZ()), net.minecraft.core.Direction.EAST);
+    }
+
+    /**
+     * A pier's connector (2026-10-18): Simulated's connector facing the berth, with a block of redstone under it, so that
+     * it is always out (as in the anchorage's blueprint).
+     */
+    private static void pierConnector(ServerLevel level, BlockPos at, net.minecraft.core.Direction facing) {
+        level.setBlockAndUpdate(at.below(), Blocks.REDSTONE_BLOCK.defaultBlockState());
+        net.minecraft.world.level.block.state.BlockState connector = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(net.minecraft.resources.ResourceLocation.parse("simulated:docking_connector")).defaultBlockState();
+        for (final net.minecraft.world.level.block.state.properties.Property<?> property : connector.getProperties()) {
+            if (property.getName().equals("facing") && property instanceof net.minecraft.world.level.block.state.properties.DirectionProperty direction) connector = connector.setValue(direction, facing);
+            if (property.getName().equals("powered") && property instanceof net.minecraft.world.level.block.state.properties.BooleanProperty on) connector = connector.setValue(on, true);
+        }
+        level.setBlockAndUpdate(at, connector);
     }
 
     /** The hut block of each kind of place. */
@@ -947,7 +969,7 @@ final class FlightSuite {
 
         // ---- the berth in the air: by command, a round trip to the anchorage; the pilot gets off onto the pier
         final double[] onPier = {Double.NaN, Double.NaN, Double.NaN, Double.NaN};
-        final boolean[] fixedThere = new boolean[1];
+        final boolean[] fixedThere = new boolean[1], joinedThere = new boolean[1];
         s.step("classes: by command, a round trip to the anchorage (the pilot gets off there)", () -> {
             m.log.clear();
             m.clock = 0;
@@ -960,6 +982,7 @@ final class FlightSuite {
                     final double[] r = Flights.readings(m.aircraft);
                     fixedThere[0] = r != null && r[4] > 0;
                     onPier[3] = r == null ? Double.NaN : r[6];
+                    joinedThere[0] = Flights.docked(m.aircraft);
                 }
             });
             final Flights.Answer sent = Flights.send(level, m.pad, anchorage[0].pad(), true, m.pilot);
@@ -972,6 +995,9 @@ final class FlightSuite {
             final boolean onTheDeck = onPier[1] > pad.getY() + 1.9 && onPier[1] < pad.getY() + 2.6 && onPier[0] >= pad.getX() - 10 && onPier[0] < pad.getX() - 7;
             s.soft("classes / at the anchorage the aircraft was held in the air beside the pier, fixed, its own block within 1.5 blocks of where it belongs",
                     fixedThere[0] && onPier[3] < 1.5, "fixed " + fixedThere[0] + ", " + onPier[3] + " from where its own block belongs");
+            // (2026-10-18: the pier's connector pulls it in, so that its deck lies right against the pier.)
+            s.soft("classes / at the anchorage the aircraft's connector was joined to the pier's, its own block within 0.1 of where it belongs",
+                    joinedThere[0] && onPier[3] < 0.1, "joined " + joinedThere[0] + ", " + onPier[3] + " from where its own block belongs");
             s.soft("classes / the pilot got off onto the pier (not into the air) and is alive", onTheDeck && m.pilot.isAlive(),
                     String.format("the pilot stood at (%.1f, %.1f, %.1f) while the aircraft waited; the pad is %s", onPier[0], onPier[1], onPier[2], pad.toShortString()));
             s.soft("classes / then it came home", m.pad.equals(m.aircraft.at) && m.pilot.isAlive(), "at " + m.aircraft.at);

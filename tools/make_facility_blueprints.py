@@ -24,7 +24,7 @@ MineColonies の Original パックに似合うもの(2026-10-14 のご裁定 7�
     └─────────────────────────────┘
 
 連結器(Create Aeronautics に同梱の Simulated の `simulated:docking_connector`): 中型飛行場は台の床に(上向き)、大型飛行場と泊地は
-台の上の左右に(台の中心を向く)。位置は下の CONNECTORS の数字で、機体の連結器の位置が決まったら直す。いまは伸ばしていない(通電なし)。
+台の上の左右に(台の中心を向く)。位置は下の CONNECTORS の数字(泊地は桟橋の縁)。泊地の連結器は、真下のレッドストーンブロックで、いつも伸ばしておく(2026-10-18)。ほかは、まだ通電なし。
 
 使い方: python tools/make_facility_blueprints.py [施設 ...] [--levels 1,2,...] [--show]
 施設は mediumairfield、largeairfield、anchorage(書かなければ 3 つとも)。design() は、レビュー用のビューアーも読む。
@@ -126,6 +126,9 @@ CONNECTORS = {
     "anchorage": [((-8, 1, 0), "east"), ((8, 1, 0), "west")],
 }
 CONNECTOR = "simulated:docking_connector[extended=false,facing=%s,powered=false]"
+# 泊地の岸壁の連結器は、いつも入れておく(ご裁定「埋め込んで常時ON」。2026-10-18 に信号の元を足した)。機体は、機体ブロックの列の
+# 両舷 2 マスの連結器で、これにつながる(中心どうし 3 マス。機体の連結器は、着いたら自動操縦が入れる)。
+CONNECTOR_ON = "simulated:docking_connector[extended=false,facing=%s,powered=true]"
 
 
 class Site:
@@ -276,7 +279,8 @@ def anchorage_design(mod_id="airline", name="anchorage"):
                 above = "hanging=true" in state
                 held = b.get((x, y + 1, z) if above else (x, y - 1, z), "").split("[")[0]
                 assert held in holders, (name + ": lantern without support", (x, y, z), held)
-    put(ax + 1, deck, pz, CONNECTOR % "east")                          # 横型の連結器(桟橋の東の縁、機体の脇)
+    put(ax + 1, deck, pz, CONNECTOR_ON % "east")                       # 横型の連結器(桟橋の東の縁、機体の脇)。いつも入れておく
+    put(ax + 1, py, pz, "minecraft:redstone_block")                    # その信号の元(桟橋の床の下。2026-10-18)
     put(ax, ay, az, mod_id + ":blockhutanchorage[facing=north]")       # 係船柱(小屋ブロック)
     # 柵と塀のつながり
     for (x, y, z), state in list(b.items()):
