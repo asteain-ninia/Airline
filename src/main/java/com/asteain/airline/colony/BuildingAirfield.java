@@ -144,25 +144,29 @@ public class BuildingAirfield extends AbstractBuilding {
         if (!facility.airfield() || !(getColony().getWorld() instanceof ServerLevel level)) return;
         final com.asteain.airline.flight.Flights.PartsWanted wanted = com.asteain.airline.flight.Flights.partsWanted(level, this);
         if (wanted == null) return;
-        final java.util.Map<net.minecraft.world.item.Item, Integer> asked = new java.util.HashMap<>();
+        final java.util.Map<String, Integer> asked = new java.util.HashMap<>();
         final com.google.common.reflect.TypeToken<com.minecolonies.api.colony.requestsystem.requestable.Stack> kind =
                 com.google.common.reflect.TypeToken.of(com.minecolonies.api.colony.requestsystem.requestable.Stack.class);
         for (final com.minecolonies.api.colony.requestsystem.request.IRequest<? extends com.minecolonies.api.colony.requestsystem.requestable.Stack> open : getOpenRequestsOfType(-1, kind)) {
             final com.minecolonies.api.colony.requestsystem.requestable.Stack stack = open.getRequest();
             if (!stack.canBeResolvedByBuilding()) continue;
-            final net.minecraft.world.item.Item item = stack.getStack().getItem();
-            if (!wanted.items().containsKey(item)) {
+            String key = null;
+            for (final String part : wanted.items().keySet()) if (wanted.fits(part, stack.getStack())) key = part;
+            if (key == null) {
                 if (wanted.complete()) getColony().getRequestManager().updateRequestState(open.getId(), com.minecolonies.api.colony.requestsystem.request.RequestState.CANCELLED);
                 continue;
             }
-            asked.merge(item, stack.getCount(), Integer::sum);
+            asked.merge(key, stack.getCount(), Integer::sum);
         }
-        for (final java.util.Map.Entry<net.minecraft.world.item.Item, Integer> part : wanted.items().entrySet()) {
-            final net.minecraft.world.item.Item item = part.getKey();
-            final int onRacks = com.minecolonies.api.util.InventoryUtils.getItemCountInItemHandler(getItemHandlerCap(), stack -> stack.is(item));
-            final int more = part.getValue() - asked.getOrDefault(item, 0) - onRacks;
+        for (final java.util.Map.Entry<String, Integer> part : wanted.items().entrySet()) {
+            final String key = part.getKey();
+            final net.minecraft.world.item.ItemStack item = wanted.item(key);
+            final int onRacks = com.minecolonies.api.util.InventoryUtils.getItemCountInItemHandler(getItemHandlerCap(), stack -> wanted.fits(key, stack));
+            final int more = part.getValue() - asked.getOrDefault(key, 0) - onRacks;
             if (more <= 0) continue;
-            createRequest(new com.minecolonies.api.colony.requestsystem.requestable.Stack(new net.minecraft.world.item.ItemStack(item), false, true,
+            // A part made of others asks for exactly that (its materials as well, 2026-10-19); any other, for the item alone.
+            final boolean madeOf = key.indexOf('|') >= 0;
+            createRequest(new com.minecolonies.api.colony.requestsystem.requestable.Stack(item.copyWithCount(1), madeOf, true,
                     net.minecraft.world.item.ItemStack.EMPTY, more, 1, true), true);
         }
     }

@@ -304,7 +304,7 @@ public final class Flights {
     @Nullable
     public static PartsWanted partsWanted(ServerLevel level, com.asteain.airline.colony.BuildingAirfield airfield) {
         if (!available()) return null;
-        final java.util.Map<net.minecraft.world.item.Item, Integer> items = new java.util.LinkedHashMap<>();
+        final java.util.Map<String, Integer> items = new java.util.LinkedHashMap<>();
         boolean any = false, complete = true;
         for (final AircraftBlockEntity aircraft : FlightController.loaded(level)) {
             if (aircraft.home == null) continue;
@@ -312,16 +312,23 @@ public final class Flights {
             if (home == null || Cargo.storeOf(home) != airfield) continue;
             any = true;
             complete &= aircraft.lacksKnown;
-            for (final java.util.Map.Entry<String, Integer> lack : aircraft.lacks.entrySet()) {
-                final net.minecraft.world.item.Item item = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(net.minecraft.resources.ResourceLocation.parse(lack.getKey())).asItem();
-                if (item != net.minecraft.world.item.Items.AIR) items.merge(item, lack.getValue(), Integer::sum);
-            }
+            for (final java.util.Map.Entry<String, Integer> lack : aircraft.lacks.entrySet())
+                if (!AircraftType.keyItem(lack.getKey()).isEmpty()) items.merge(lack.getKey(), lack.getValue(), Integer::sum);
         }
         return any ? new PartsWanted(items, complete) : null;
     }
 
-    /** See {@link #partsWanted}. */
-    public record PartsWanted(java.util.Map<net.minecraft.world.item.Item, Integer> items, boolean complete) {
+    /** See {@link #partsWanted}: the parts by their keys ({@link AircraftType#partKey}), and how many of each. */
+    public record PartsWanted(java.util.Map<String, Integer> items, boolean complete) {
+        /** The item a key stands for (with its materials for a part made of others). */
+        public net.minecraft.world.item.ItemStack item(String key) {
+            return AircraftType.keyItem(key);
+        }
+
+        /** Whether a stack will do for the part of this key. */
+        public boolean fits(String key, net.minecraft.world.item.ItemStack have) {
+            return AircraftType.fits(have, AircraftType.keyItem(key));
+        }
     }
 
     /** Looks an aircraft that stands at home over now (it is done every ten seconds anyway): {blocks put right, blocks taken out}. */

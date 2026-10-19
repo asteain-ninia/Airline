@@ -74,6 +74,50 @@ public final class AircraftType {
         return tag;
     }
 
+    /**
+     * What a part is put in with: its block's item; for a part made of others, Domum Ornamentum's item made of the design's
+     * materials (a pillar of spruce logs, not just any pillar).
+     */
+    public net.minecraft.world.item.ItemStack partItem(BlockPos part, net.minecraft.world.level.block.state.BlockState state) {
+        final net.minecraft.world.item.ItemStack stack = new net.minecraft.world.item.ItemStack(state.getBlock().asItem());
+        final net.minecraft.nbt.CompoundTag made = materialTag(part);
+        if (made != null && !stack.isEmpty())
+            com.ldtteam.domumornamentum.client.model.data.MaterialTextureData.deserializeFromNBT(made.getCompound("textureData")).writeToItemStack(stack);
+        return stack;
+    }
+
+    /** The key a lacking part is counted under: the block's name, and for a part made of others its materials after a bar. */
+    public String partKey(BlockPos part, net.minecraft.world.level.block.state.BlockState state) {
+        final String block = state.getBlock().builtInRegistryHolder().key().location().toString();
+        final Map<String, String> made = materials.get(part);
+        if (made == null) return block;
+        final StringBuilder key = new StringBuilder(block).append('|');
+        made.forEach((slot, material) -> key.append(key.charAt(key.length() - 1) == '|' ? "" : ";").append(slot).append('=').append(material));
+        return key.toString();
+    }
+
+    /** Whether a stack will do for a part: the same item, and for a part made of others the same materials. */
+    public static boolean fits(net.minecraft.world.item.ItemStack have, net.minecraft.world.item.ItemStack need) {
+        if (!have.is(need.getItem())) return false;
+        final com.ldtteam.domumornamentum.client.model.data.MaterialTextureData wanted = com.ldtteam.domumornamentum.client.model.data.MaterialTextureData.readFromItemStack(need);
+        return wanted == null || wanted.isEmpty() || wanted.equals(com.ldtteam.domumornamentum.client.model.data.MaterialTextureData.readFromItemStack(have));
+    }
+
+    /** The item a lacking part's key stands for (see {@link #partKey}); empty for a block that has none. */
+    public static net.minecraft.world.item.ItemStack keyItem(String key) {
+        final int bar = key.indexOf('|');
+        final net.minecraft.world.level.block.Block block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(net.minecraft.resources.ResourceLocation.parse(bar < 0 ? key : key.substring(0, bar)));
+        final net.minecraft.world.item.ItemStack stack = new net.minecraft.world.item.ItemStack(block.asItem());
+        if (bar < 0 || stack.isEmpty()) return stack;
+        final net.minecraft.nbt.CompoundTag texture = new net.minecraft.nbt.CompoundTag();
+        for (final String slot : key.substring(bar + 1).split(";")) {
+            final int is = slot.indexOf('=');
+            if (is > 0) texture.putString(slot.substring(0, is), slot.substring(is + 1));
+        }
+        com.ldtteam.domumornamentum.client.model.data.MaterialTextureData.deserializeFromNBT(texture).writeToItemStack(stack);
+        return stack;
+    }
+
     /** Gives a part that was just put up the materials the design has for it (nothing for any other part). */
     public void applyMaterials(net.minecraft.world.level.Level level, BlockPos part, BlockPos at) {
         final net.minecraft.nbt.CompoundTag made = materialTag(part);

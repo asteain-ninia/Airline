@@ -427,6 +427,21 @@ final class FlightSuite {
                 s.note("OBS items " + name + ": " + asked);
                 s.soft("items / " + name + ": every belt is asked for as a mechanical belt", belts.isEmpty() && failed.isEmpty(), "belts not asked as belts: " + belts + "; not read: " + failed);
                 s.soft("items / " + name + ": no block is put up for nothing (each asks for an item)", free.isEmpty(), "asked for nothing: " + free);
+                // A part made of others is put in, and asked for, only with its own materials (2026-10-19: 大凪号's pillars of spruce logs).
+                for (final BlockPos part : type.materials.keySet()) {
+                    final net.minecraft.world.level.block.state.BlockState state;
+                    try {
+                        state = net.minecraft.commands.arguments.blocks.BlockStateParser.parseForBlock(level.holderLookup(net.minecraft.core.registries.Registries.BLOCK), type.parts.get(part), false).blockState();
+                    } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+                        continue;
+                    }
+                    final ItemStack need = type.partItem(part, state), plain = new ItemStack(state.getBlock().asItem());
+                    final ItemStack fromKey = com.asteain.airline.flight.AircraftType.keyItem(type.partKey(part, state));
+                    s.soft("items / " + name + ": a part made of others needs its own materials: the right one fits, a plain one does not, and its key asks for the right one",
+                            com.asteain.airline.flight.AircraftType.fits(need.copy(), need) && !com.asteain.airline.flight.AircraftType.fits(plain, need) && com.asteain.airline.flight.AircraftType.fits(fromKey, need),
+                            "need " + need.getComponents() + ", key " + type.partKey(part, state));
+                    break;
+                }
             }
         });
     }

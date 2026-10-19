@@ -79,6 +79,8 @@ final class FlightController {
     /** An administrator is told when the pilot has not got off this many ticks after landing. */
     private static final int LEAVING_LIMIT = 1300;
     private static final int TURNAROUND_TICKS = 200, HOLD_TICKS = 200, RETRY_LEAVING = 300;
+    /** Ticks the pilot may get off without coming nearer to where it walks, before it is sent off at the other end. */
+    private static final int LEAVE_STUCK_TICKS = 40;
     /** In the air without a seated pilot the aircraft waits fixed this long for the pilot to sit again, then gives up. */
     private static final int PAUSE_LIMIT = 1200;
     /** After a failure of the controller on a pad the aircraft rests this long, then takes up its work again. */
@@ -145,6 +147,13 @@ final class FlightController {
          * is out, -1 none there or joined, -2 not joined and taken in again; and the ticks it has been out at rest.
          */
         int floorDock, floorDockTicks;
+        /**
+         * Getting off (2026-10-19): which end of the deck the pilot is sent off at (true: ahead of the nose), the nearest it
+         * has come to that spot, and the ticks since it last came nearer by a little.
+         */
+        boolean leaveAhead;
+        double leaveNearest;
+        int leaveStuck;
         /** The lever moves the pilot was last shown making (see the arm in the tick), and when. */
         int writesSeen, swungAt;
         int shipHolds;
@@ -1196,9 +1205,15 @@ final class FlightController {
 
     private static void disembark(ServerLevel level, AircraftBlockEntity be, Runtime rt, RouteNetwork net, @Nullable Mob pilot) {
         be.timer++;
-        // Behind the tail first, then ahead of the nose, in turn: from a ship that does not lie on the world's block grid
-        // the walk off one end of the deck can fail (seen in the tests) while the other end works.
-        final BlockPos spot = leaveSpot(level, net, be, be.at, (be.timer / RETRY_LEAVING) % 2 == 1);
+        // Behind the tail first, then ahead of the nose: from a ship that does not lie on the world's block grid the walk off
+        // one end of the deck can fail (seen in the tests) while the other end works. Until 2026-10-19 the end was changed
+        // every 300 ticks whatever happened: a pilot whose walk did not go stood on the deck for 15 seconds.
+        if (be.timer == 1) {
+            rt.leaveAhead = false;
+            rt.leaveNearest = Double.MAX_VALUE;
+            rt.leaveStuck = 0;
+        }
+        BlockPos spot = leaveSpot(level, net, be, be.at, rt.leaveAhead);
         if (pilot != null && be.at != null) {
             final Boarding.State state = Boarding.state(pilot);
             final int[] pier = pierSide(level, net, be.at);
@@ -1214,6 +1229,18 @@ final class FlightController {
                 // Refused while the ship does not count as stopped yet; asked again until it is accepted.
                 if (be.timer % 10 == 0) Boarding.leave(pilot, spot);
             } else if (state == Boarding.State.LEAVING) {
+                // Not coming nearer to the spot for two seconds: off at the other end at once.
+                final double away = pilot.position().distanceTo(Vec3.atBottomCenterOf(spot));
+                if (away < rt.leaveNearest - 0.3) {
+                    rt.leaveNearest = away;
+                    rt.leaveStuck = 0;
+                } else if (++rt.leaveStuck >= LEAVE_STUCK_TICKS) {
+                    rt.leaveAhead = !rt.leaveAhead;
+                    rt.leaveNearest = Double.MAX_VALUE;
+                    rt.leaveStuck = 0;
+                    spot = leaveSpot(level, net, be, be.at, rt.leaveAhead);
+                    Boarding.leave(pilot, spot);
+                }
                 if (be.timer % RETRY_LEAVING == 0) Boarding.leave(pilot, spot);
             } else if (!onPad) {
                 // The walk was given up with the pilot still on the deck: the pilot's own job keeps trying.

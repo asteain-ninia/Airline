@@ -211,13 +211,13 @@ final class Shipyard {
                 removed++;
             }
             if (wanted == null) continue;
-            final net.minecraft.world.item.Item item = wanted.state().getBlock().asItem();
-            if (item != net.minecraft.world.item.Items.AIR && take(racks, item)) {
+            final net.minecraft.world.item.ItemStack need = c.type.partItem(part, wanted.state());
+            if (!need.isEmpty() && take(racks, need)) {
                 level.setBlock(at, wanted.state(), 3);
                 c.type.applyMaterials(level, part, at);
                 restored++;
             } else {
-                lacks.merge(wanted.state().getBlock().builtInRegistryHolder().key().location().toString(), 1, Integer::sum);
+                lacks.merge(c.type.partKey(part, wanted.state()), 1, Integer::sum);
             }
         }
         if (restored > 0) c.dial();
@@ -243,8 +243,9 @@ final class Shipyard {
         for (final Map.Entry<String, Integer> item : items.entrySet()) {
             if (!first) out.append(Component.translatable("message." + Airline.MOD_ID + ".parts.separator"));
             first = false;
-            final net.minecraft.world.level.block.Block block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(net.minecraft.resources.ResourceLocation.parse(item.getKey()));
-            out.append(Component.translatable("message." + Airline.MOD_ID + ".parts.item", block.getName(), item.getValue()));
+            final net.minecraft.world.item.ItemStack shown = AircraftType.keyItem(item.getKey());
+            final net.minecraft.world.level.block.Block block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(net.minecraft.resources.ResourceLocation.parse(item.getKey().split("\\|")[0]));
+            out.append(Component.translatable("message." + Airline.MOD_ID + ".parts.item", shown.isEmpty() ? block.getName() : shown.getHoverName(), item.getValue()));
         }
         return out;
     }
@@ -256,10 +257,11 @@ final class Shipyard {
         return text.toString();
     }
 
-    private static boolean take(@Nullable net.neoforged.neoforge.items.IItemHandler from, net.minecraft.world.item.Item item) {
+    /** One of what a part needs from the racks (the same materials too, for a part made of others). */
+    private static boolean take(@Nullable net.neoforged.neoforge.items.IItemHandler from, net.minecraft.world.item.ItemStack need) {
         if (from == null) return false;
         for (int slot = 0; slot < from.getSlots(); slot++) {
-            if (from.getStackInSlot(slot).is(item) && !from.extractItem(slot, 1, false).isEmpty()) return true;
+            if (AircraftType.fits(from.getStackInSlot(slot), need) && !from.extractItem(slot, 1, false).isEmpty()) return true;
         }
         return false;
     }

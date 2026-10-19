@@ -689,6 +689,17 @@ VOID = "minecraft:structure_void"
 PIT_WALL = "minecraft:stone_bricks"
 
 
+SLAB_OF = {"minecraft:stone_bricks": "minecraft:stone_brick_slab", "minecraft:deepslate_tiles": "minecraft:deepslate_tile_slab",
+           "minecraft:cobblestone": "minecraft:cobblestone_slab"}
+
+
+def rim_slab(state):
+    """床のブロックと同じ材料の、下付きの半ブロック(床の穴の縁、2026-10-19)。"""
+    name = state.split("[")[0].split("|")[0]
+    slab = name[:-len("_planks")] + "_slab" if name.endswith("_planks") else SLAB_OF.get(name, "minecraft:stone_brick_slab")
+    return slab + "[type=bottom,waterlogged=false]"
+
+
 def pit_at(name, level):
     """床の穴の連結器があるか(Facility.floorConnector と同じ: 小型飛行場はレベル 3 から、中型飛行場はいつも)。"""
     return name == "mediumairfield" or (name == "airfield" and level >= 3)
@@ -721,6 +732,10 @@ def with_pits(name, level, made):
                     if dx or dz:
                         out[(px + dx, floor - 1, pz + dz)] = PIT_WALL     # くぼみの底
             del out[(px, floor - 1, pz)]                                 # 穴(その下は 1×1)
+            for dx in range(-2, 3):                                      # 縁: まわり 1 周を半ブロックに(半段ずつ下がる)
+                for dz in range(-2, 3):
+                    if max(abs(dx), abs(dz)) == 2 and (px + dx, floor, pz + dz) in out:
+                        out[(px + dx, floor, pz + dz)] = rim_slab(out[(px + dx, floor, pz + dz)])
             out[(px, 0, pz)] = "simulated:docking_connector[extended=false,facing=up,powered=true]"
             out[(px + 1, 0, pz)] = "minecraft:redstone_wall_torch[facing=west,lit=true]"   # 東どなりの石に付く
             for spot in ((px + 2, 0, pz), (px - 1, 0, pz), (px, 0, pz - 1), (px, 0, pz + 1),
