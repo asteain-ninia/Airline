@@ -2,7 +2,7 @@
   "icon": "pack.png",
   "name": "Airline",
   "authors": [ "asteain" ],
-  "desc": "The airfield of the mod Create Aeronautics: Airline for MineColonies (provisional look).",
+  "desc": "The airfield of the mod Create Aeronautics: Airline for MineColonies.",
   "mods": [ "structurize", "minecolonies", "airline" ],
   "version": "1",
   "pack-format": "1"

@@ -113,7 +113,7 @@ public final class Airline {
     public static final DeferredBlock<BlockHutAirfield> AIRFIELD_HUT = BLOCKS.register(HUT_NAME, () -> new BlockHutAirfield());
     public static final DeferredItem<ItemBlockHut> AIRFIELD_HUT_ITEM =
             ITEMS.register(HUT_NAME, () -> new ItemBlockHut(AIRFIELD_HUT.get(), new Item.Properties()));
-    /** The huts of the medium and the large airfield and of the anchorage (2026-10-14; their blueprints are provisional). */
+    /** The huts of the medium and the large airfield and of the anchorage (2026-10-14). */
     public static final DeferredBlock<BlockHutAirfield> MEDIUM_AIRFIELD_HUT = BLOCKS.register(hutName(com.asteain.airline.route.Facility.MEDIUM_AIRFIELD),
             id -> new BlockHutAirfield(com.asteain.airline.route.Facility.MEDIUM_AIRFIELD));
     public static final DeferredBlock<BlockHutAirfield> LARGE_AIRFIELD_HUT = BLOCKS.register(hutName(com.asteain.airline.route.Facility.LARGE_AIRFIELD),
@@ -324,7 +324,11 @@ public final class Airline {
 
     private static void creativeTab(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == ModCreativeTabs.HUTS.getKey()) {
+            // Every hut: recipe viewers (JEI, EMI) list only what the tabs show.
             event.accept(AIRFIELD_HUT_ITEM.get());
+            event.accept(MEDIUM_AIRFIELD_HUT_ITEM.get());
+            event.accept(LARGE_AIRFIELD_HUT_ITEM.get());
+            event.accept(ANCHORAGE_HUT_ITEM.get());
             for (final DeferredItem<BlockItem> buoy : BUOY_ITEMS) event.accept(buoy.get());
             event.accept(AIRCRAFT_ITEM.get());
         }

@@ -120,6 +120,15 @@ final class AirfieldSuite {
             s.check(BuiltInRegistries.BLOCK_ENTITY_TYPE.containsKey(Airline.id(Airline.BUILDING_NAME)), "the mod's own block entity type is registered");
             s.check(Airline.AIRFIELD_BLOCK_ENTITY.get().isValid(Airline.AIRFIELD_HUT.get().defaultBlockState()), "the hut is a valid block for the mod's block entity type");
             s.check(ModSoundEvents.CITIZEN_SOUND_EVENTS.containsKey(Airline.JOB_NAME), "the pilot has an entry in MineColonies' citizen voice table");
+            // (2026-10-19) Every hut can be crafted and stands in MineColonies' tab of huts (recipe viewers list only what the tabs show).
+            net.minecraft.world.item.CreativeModeTabs.tryRebuildTabContents(level.enabledFeatures(), false, level.registryAccess());
+            for (net.minecraft.world.item.Item hut : new net.minecraft.world.item.Item[]{Airline.AIRFIELD_HUT_ITEM.get(), Airline.MEDIUM_AIRFIELD_HUT_ITEM.get(),
+                    Airline.LARGE_AIRFIELD_HUT_ITEM.get(), Airline.ANCHORAGE_HUT_ITEM.get()}) {
+                final String name = BuiltInRegistries.ITEM.getKey(hut).toString();
+                s.check(level.getRecipeManager().getRecipes().stream().anyMatch(r -> r.value().getResultItem(level.registryAccess()).is(hut)), "huts / " + name + " has a recipe");
+                s.soft("huts / " + name + " stands in MineColonies' tab of huts", com.minecolonies.api.creativetab.ModCreativeTabs.HUTS.get().getDisplayItems().stream().anyMatch(st -> st.is(hut)),
+                        "the tab shows " + com.minecolonies.api.creativetab.ModCreativeTabs.HUTS.get().getDisplayItems().size() + " items");
+            }
             // The pilot's look: the job names it, and the textures MineColonies will ask for by that name are in this mod's jar
             // (under MineColonies' own namespace). The client side (registering the look) cannot be checked on a server.
             List<String> noTexture = new ArrayList<>();
