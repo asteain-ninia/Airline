@@ -5,7 +5,7 @@ MineColonies の村どうしを、飛行機(Create Aeronautics の船)で結ん�
 > **決まり: 版が 1.0.0 になるまで、後方互換は一切考えない**(2026-10-16 のご裁定)。古いセーブ・古い設定・古い型を読むための仕掛けは作らない。形式を変えるときはただ変え、前の版で作った物が壊れるなら、そう書く。本文は `..\CLAUDE.md`。**1.0.0 にするときは、この決まりを消す**(`gradle.properties` の `no_backcompat_before` が残ったまま 1.0.0 以上にすると、ビルドが止まる)。
 
 - MOD の ID は `airline`、命令は `/airline …`、Java のパッケージは `com.asteain.airline`。Java の中で ID を文字列で書いているのは `Airline.MOD_ID` の 1 か所だけ。名前の経緯は下の「名前について」。
-- Minecraft 1.21.1 / NeoForge 21.1.x / MineColonies 1.1.1368。ライセンスは GPL-3.0(MineColonies と同じ)。
+- Minecraft 1.21.1 / NeoForge 21.1.x / MineColonies 1.1.1403。ライセンスは GPL-3.0(MineColonies と同じ)。
 - **サーバーと、参加する側の両方に入れる。** ブロックと、MineColonies の建物・職業の登録を足すため。
 - 計画と取り決めは `..\ColonyPatchServer\design\`(全体の状態は `roadmap-user-decisions-2026-10-06.md` の冒頭。段階ごとの記録は `airfield-2026-10-07\`、`beacon-network-2026-10-07\`、`cargo-2026-10-07\`、`rulings-apply-2026-10-11\`、`pilot-skin-2026-10-11\`、`traffic-2026-10-11\`、`levels-2026-10-11\`、`block-art-2026-10-12\`。画面で確かめる順番は `user-checklist-2026-10-11.md`)。
 - `build\libs\old-name\` の `airroute-*.jar` は、改名より前の古い jar。`build\libs\not-a-release\` は、作業の途中のビルドが同じ名前で上書きしてしまった jar。どちらも使わない。

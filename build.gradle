@@ -54,7 +54,7 @@ dependencies {
 
 // The flying part (stage 4) needs Sable and ColonyPatchServer at run time; both are optional, and neither goes into the jar.
 // Sable: the jar of the play instance, shared with ColonyPatchServer, plus the companion library nested inside it.
-def sableJarFile = file("${sharedTestJars}/sable-neoforge-1.21.1-2.0.5.jar")
+def sableJarFile = file("${sharedTestJars}/sable-neoforge-1.21.1-2.0.6.jar")
 def colonyPatchServerJar = file('../ColonyPatchServer/build/libs/colonypatch_server-1.4.0.jar')
 def sableCompileDir = layout.buildDirectory.dir('sable-compile')
 
@@ -205,7 +205,7 @@ dependencies {
 }
 
 // ---- isolated test runs ----------------------------------------------------------------------------------
-def mineColoniesJars = ['blockui-1.0.209-1.21.1.jar', 'domum-ornamentum-1.0.231-main.jar', 'minecolonies-1.1.1368-1.21.1.jar',
+def mineColoniesJars = ['blockui-1.0.209-1.21.1.jar', 'domum-ornamentum-1.0.231-main.jar', 'minecolonies-1.1.1403-1.21.1.jar',
                         'multipiston-1.2.58-1.21.1.jar', 'structurize-1.0.832-1.21.1.jar']
 
 // Only the allowed jars may sit in mods/; jars come from the shared test-jars folder and are checked against its MANIFEST.sha256.
@@ -286,7 +286,7 @@ tasks.named('runAirfieldRemoved').configure {
     doLast { verifyResult('run-airfield', 'airfieldRemoved') }
 }
 
-def physicsJars = ['sable-neoforge-1.21.1-2.0.5.jar', 'create-1.21.1-6.0.10.jar', 'create-aeronautics-bundled-1.21.1-1.3.2.jar']
+def physicsJars = ['sable-neoforge-1.21.1-2.0.6.jar', 'create-1.21.1-6.0.10.jar', 'create-aeronautics-bundled-1.21.1-1.3.2.jar']
 
 tasks.named('runFlight').configure {
     def scene = providers.gradleProperty('scene').getOrElse('trip')

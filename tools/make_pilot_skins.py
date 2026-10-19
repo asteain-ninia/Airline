@@ -24,7 +24,7 @@ from PIL import Image
 import pilot_skin_painter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MINECOLONIES_JAR = os.path.join(ROOT, "..", "ColonyPatchServer", "libs", "minecolonies-1.1.1368-1.21.1.jar")
+MINECOLONIES_JAR = os.path.join(ROOT, "..", "ColonyPatchServer", "libs", "minecolonies-1.1.1403-1.21.1.jar")
 OUT = os.path.join(ROOT, "src", "main", "resources", "assets", "minecolonies", "textures")
 SUFFIXES = ("_a", "_b", "_d", "_w")
 STYLES = ("default", "eastasian", "hellenic", "medieval", "modern", "nether", "nordic", "undead")
