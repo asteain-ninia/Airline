@@ -1587,6 +1587,7 @@ final class FlightSuite {
         // ---- blocked on the way: back to the last point, another way
         BlockPos[] late = tallWall(55);
         boolean[] placed = new boolean[1];
+        final java.util.List<BlockPos> sternWall = new java.util.ArrayList<>();
         s.step("blocked: the old wall goes, the direct line is clear again", () -> {
             for (BlockPos pos : wall) level.setBlockAndUpdate(pos, Blocks.AIR.defaultBlockState());
         });
@@ -1608,6 +1609,13 @@ final class FlightSuite {
                 // Only while it is on the blocked line, on the near side of the wall.
                 if (placed[0] && r[0] < 55 && Math.abs(r[2] + 9.5) < 6) a.wallGap = Math.min(a.wallGap, 55 - (r[0] + 4.5));
             });
+            // (2026-10-19) The way off behind the tail at pad B is fenced off across the pad (a fence cannot be jumped; one high, it
+            // stays out of the shaft the lines come down in): the pilot is to get off ahead of the nose instead, at once, not after 15 seconds.
+            final double h = Math.toRadians(net.node(padB).heading());
+            final int ax = (int) Math.round(Math.cos(h)), az = (int) Math.round(Math.sin(h));
+            sternWall.clear();
+            for (int across = -7; across <= 7; across++) sternWall.add(padB.offset(-5 * ax - across * az, 1, -5 * az + across * ax));
+            for (BlockPos pos : sternWall) level.setBlockAndUpdate(pos, Blocks.OAK_FENCE.defaultBlockState());
             Flights.Answer sent = Flights.send(level, a.pad, padB, false, a.pilot);
             s.soft("blocked / the flight is ordered", sent.ok(), sent.text().getString());
         });
@@ -1624,6 +1632,14 @@ final class FlightSuite {
             s.soft("blocked / the pilot got off at pad B alive and stands on the pad", a.pilot.isAlive() && Boarding.state(a.pilot) == Boarding.State.NONE && a.pilot.position().distanceTo(padB.getCenter()) < 12
                     && a.pilot.getY() < Y + 0.6, "pilot at " + a.pilot.position() + " state " + Boarding.state(a.pilot));
             s.note(String.format("OBS blocked: %d ticks, stopped %.2f blocks short of the wall", a.clock, a.wallGap));
+            // How long getting off took, with the way off behind the tail walled up.
+            int off = -1;
+            for (String line : a.log) {
+                final java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\(\\+(\\d+)\\) DISEMBARK -> ").matcher(line);
+                if (m.find()) off = Integer.parseInt(m.group(1));
+            }
+            s.soft("blocked / with the way off behind the tail fenced off, the pilot got off within 10 seconds (ahead of the nose)", off >= 0 && off <= 200, "getting off took " + off + " ticks");
+            for (BlockPos pos : sternWall) level.setBlockAndUpdate(pos, Blocks.AIR.defaultBlockState());
         });
 
         // ---- blocked with no other way: back to where it started, cancelled

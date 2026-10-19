@@ -1225,11 +1225,9 @@ final class FlightController {
                 final double across = (pilot.getX() - (own.getX() + 0.5)) * pier[0] + (pilot.getZ() - (own.getZ() + 0.5)) * pier[1];
                 onPad = across > AircraftType.of(be.type).deckReach() + 0.3;
             }
-            if (state == Boarding.State.SEATED) {
-                // Refused while the ship does not count as stopped yet; asked again until it is accepted.
-                if (be.timer % 10 == 0) Boarding.leave(pilot, spot);
-            } else if (state == Boarding.State.LEAVING) {
-                // Not coming nearer to the spot for two seconds: off at the other end at once.
+            // Walking off (on the boarding's order, or on its own job's once that order was given up), but not coming nearer
+            // to the spot for two seconds: off at the other end at once.
+            if (state == Boarding.State.LEAVING || (state == Boarding.State.NONE && !onPad)) {
                 final double away = pilot.position().distanceTo(Vec3.atBottomCenterOf(spot));
                 if (away < rt.leaveNearest - 0.3) {
                     rt.leaveNearest = away;
@@ -1239,8 +1237,15 @@ final class FlightController {
                     rt.leaveNearest = Double.MAX_VALUE;
                     rt.leaveStuck = 0;
                     spot = leaveSpot(level, net, be, be.at, rt.leaveAhead);
-                    Boarding.leave(pilot, spot);
+                    LOGGER.info("[Airline/flight] the pilot does not get off {}; it is sent off {} instead.", rt.leaveAhead ? "behind the tail" : "ahead of the nose",
+                            rt.leaveAhead ? "ahead of the nose" : "behind the tail");
+                    if (state == Boarding.State.LEAVING) Boarding.leave(pilot, spot);
                 }
+            }
+            if (state == Boarding.State.SEATED) {
+                // Refused while the ship does not count as stopped yet; asked again until it is accepted.
+                if (be.timer % 10 == 0) Boarding.leave(pilot, spot);
+            } else if (state == Boarding.State.LEAVING) {
                 if (be.timer % RETRY_LEAVING == 0) Boarding.leave(pilot, spot);
             } else if (!onPad) {
                 // The walk was given up with the pilot still on the deck: the pilot's own job keeps trying.
