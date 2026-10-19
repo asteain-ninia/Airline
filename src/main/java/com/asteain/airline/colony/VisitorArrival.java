@@ -20,7 +20,23 @@ public final class VisitorArrival {
     private VisitorArrival() {
     }
 
+    /** What the mixin adds to MineColonies' tavern module (see TavernBuildingModuleMixin). */
+    public interface Tavern {
+        /** Visitors owed: their time came while the colony was joined to others by air. */
+        int airline$owed();
+
+        void airline$setOwed(int owed);
+
+        /** The owed visitors appear now (as many as the tavern has room for); how many did. */
+        int airline$deliver();
+    }
+
+    /** Where the visitors that come with an aircraft appear (set only while they do). */
+    private static final ThreadLocal<BlockPos> ARRIVAL = new ThreadLocal<>();
+
     public static List<BlockPos> spawns(IBuilding tavern, List<BlockPos> original) {
+        final BlockPos with = ARRIVAL.get();
+        if (with != null) return List.of(with);
         try {
             if (tavern == null || !(tavern.getColony().getWorld() instanceof ServerLevel level)) return original;
             final RouteNetwork net = RouteNetwork.get(level);
@@ -42,6 +58,54 @@ public final class VisitorArrival {
             LoggerFactory.getLogger("Airline").warn("[Airline/visitors] could not look for an airfield for a visitor; it comes the usual way", e);
             return original;
         }
+    }
+
+    /**
+     * Whether the tavern's colony is joined to others by air (2026-10-19, the user's ruling "空路のある村では止める"): an
+     * airfield or an anchorage of it, built, whose pad has a clear line toward another colony. Then its visitors come with
+     * aircraft. False on any failure (they come the usual way).
+     */
+    public static boolean byAir(@org.jetbrains.annotations.Nullable IBuilding tavern) {
+        try {
+            if (tavern == null || !(tavern.getColony().getWorld() instanceof ServerLevel level)) return false;
+            final RouteNetwork net = RouteNetwork.get(level);
+            for (final IBuilding building : tavern.getColony().getServerBuildingManager().getBuildings().values()) {
+                if (!(building instanceof BuildingAirfield place) || place.getBuildingLevel() < 1) continue;
+                final BlockPos pad = place.pad();
+                if (pad != null && net.node(pad) != null && joined(net, pad, tavern.getColony().getID(), level)) return true;
+            }
+        } catch (RuntimeException e) {
+            LoggerFactory.getLogger("Airline").warn("[Airline/visitors] could not look whether a colony is joined to others by air", e);
+        }
+        return false;
+    }
+
+    /** Noted in the log when a visitor is owed. */
+    public static void owed(IBuilding tavern, int owed) {
+        LoggerFactory.getLogger("Airline").info("[Airline/visitors] colony {}: a visitor's time came; it comes with the next aircraft ({} owed)", tavern.getColony().getID(), owed);
+    }
+
+    /**
+     * An aircraft from another colony landed in this one: the visitors owed by its taverns appear where its pilot gets off,
+     * and walk to their tavern. How many came.
+     */
+    public static int arrive(com.minecolonies.api.colony.IColony colony, BlockPos where) {
+        int came = 0;
+        for (final IBuilding building : colony.getServerBuildingManager().getBuildings().values()) {
+            for (final com.minecolonies.core.colony.buildings.modules.TavernBuildingModule module : building.getModulesByType(com.minecolonies.core.colony.buildings.modules.TavernBuildingModule.class)) {
+                if (!(module instanceof Tavern tavern) || tavern.airline$owed() <= 0) continue;
+                ARRIVAL.set(where);
+                try {
+                    came += tavern.airline$deliver();
+                } catch (RuntimeException e) {
+                    LoggerFactory.getLogger("Airline").warn("[Airline/visitors] the visitors owed could not appear", e);
+                } finally {
+                    ARRIVAL.remove();
+                }
+            }
+        }
+        if (came > 0) LoggerFactory.getLogger("Airline").info("[Airline/visitors] colony {}: {} visitor(s) came with the aircraft, at {}", colony.getID(), came, where.toShortString());
+        return came;
     }
 
     /** Whether a clear line leads from this pad to a place of another colony (a buoy on the way counts as one step). */

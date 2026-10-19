@@ -147,6 +147,8 @@ final class FlightController {
          * is out, -1 none there or joined, -2 not joined and taken in again; and the ticks it has been out at rest.
          */
         int floorDock, floorDockTicks;
+        /** Where the aircraft last took off from (not saved: after a restart in the air it counts as from elsewhere). */
+        @Nullable BlockPos tookOffAt;
         /**
          * Getting off (2026-10-19): which end of the deck the pilot is sent off at (true: ahead of the nose), the nearest it
          * has come to that spot, and the ticks since it last came nearer by a little.
@@ -1188,6 +1190,7 @@ final class FlightController {
 
     private static void takeOff(AircraftBlockEntity be, Runtime rt) {
         final Craft c = rt.craft;
+        rt.tookOffAt = be.at;
         rt.dockTicks = 0;
         rt.floorDock = 0;
         rt.floorDockTicks = 0;
@@ -1315,6 +1318,14 @@ final class FlightController {
         final double heading = Math.toRadians(node == null ? 0 : node.heading());
         final int far = ahead ? 5 : -5;
         return pad.offset((int) Math.round(Math.cos(heading) * far), 1, (int) Math.round(Math.sin(heading) * far));
+    }
+
+    /** The colony a point of the network belongs to (its airfield's or anchorage's); null for a buoy or when not known. */
+    @Nullable
+    private static com.minecolonies.api.colony.IColony colonyAt(ServerLevel level, RouteNetwork net, BlockPos pad) {
+        final RouteNetwork.Node node = net.node(pad);
+        if (node == null || node.kind() == RouteNetwork.Kind.BUOY || node.home() == null) return null;
+        return com.minecolonies.api.colony.IColonyManager.getInstance().getColonyByPosFromWorld(level, node.home());
     }
 
     /** Tells the pilot's own job where to stay while it is away from home (null: at home again). */
@@ -1784,6 +1795,14 @@ final class FlightController {
                 (at.x - centre.x) * Math.cos(h) + (at.z - centre.z) * Math.sin(h), (at.x - centre.x) * -Math.sin(h) + (at.z - centre.z) * Math.cos(h), rt.lastHeadingError);
         LOGGER.info("[Airline/flight] aircraft {}", be.note);
         if (be.at.equals(be.home)) be.homeward = false;
+        // From another colony: the visitors the taverns here owe come with it (2026-10-19, see VisitorArrival).
+        try {
+            final com.minecolonies.api.colony.IColony here = colonyAt(c.level, net, be.at), from = rt.tookOffAt == null ? null : colonyAt(c.level, net, rt.tookOffAt);
+            if (here != null && (from == null || from.getID() != here.getID()))
+                com.asteain.airline.colony.VisitorArrival.arrive(here, leaveSpot(c.level, net, be, be.at, false));
+        } catch (RuntimeException e) {
+            LOGGER.warn("[Airline/flight] the visitors owed could not come with the aircraft", e);
+        }
         // Away from home with cargo the pilot's own job is told to stay by the aircraft: whenever nobody holds the pilot
         // or has it on the seat, it must not set out for its own airfield, a flight away.
         final Mob pilot = pilot(c.level, be);

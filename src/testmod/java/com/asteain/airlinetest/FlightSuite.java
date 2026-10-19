@@ -2441,7 +2441,27 @@ final class FlightSuite {
             s.note("OBS tour: lines " + lines + "; ledger net B iron " + ledger.net(WantLedger.Key.of(b.colony), Items.IRON_INGOT) + ", C gold " + ledger.net(WantLedger.Key.of(c.colony), Items.GOLD_INGOT)
                     + ", D copper " + ledger.net(WantLedger.Key.of(d.colony), Items.COPPER_INGOT) + "; racks iron " + iron(a.airfield.getItemHandlerCap()) + "; aircraft " + a.aircraft.phase + " | " + a.aircraft.note);
         });
+        // Visitors come with the aircraft (2026-10-19): B gets a tavern; its time for a visitor comes before the aircraft is there.
+        final AbstractBuilding[] tavernB = new AbstractBuilding[1];
+        final int[] visitorsBefore = new int[1];
+        s.step("tour: a tavern in B; its time for a visitor comes", () -> {
+            tavernB[0] = Fixture.placeHut(level, b.colony, ModBlocks.blockHutTavern, b.hut.offset(10, 0, 10));
+            tavernB[0].setBuildingLevel(2);
+            final com.minecolonies.core.colony.buildings.modules.TavernBuildingModule module = tavernB[0].getFirstModuleOccurance(com.minecolonies.core.colony.buildings.modules.TavernBuildingModule.class);
+            module.setNoVisitorTime(0);
+            module.onColonyTick(b.colony);
+            visitorsBefore[0] = b.colony.getVisitorManager().getCivilianDataMap().size();
+            final int owed = ((com.asteain.airline.colony.VisitorArrival.Tavern) module).airline$owed();
+            s.soft("tour / in a colony joined to others by air the tavern's visitor does not appear when its time comes: it is owed, to come with the next aircraft",
+                    owed == 1 && module.getExternalCitizens().isEmpty(), "owed " + owed + ", visitors " + module.getExternalCitizens().size() + "; B joined by air " + com.asteain.airline.colony.VisitorArrival.byAir(tavernB[0]));
+        });
         s.until("tour: out, three colonies, home again", () -> {}, () -> calledAt.size() >= 3 && a.aircraft.phase == Phase.PARKED && a.pad.equals(a.aircraft.at) && !a.aircraft.cargo, 40000);
+        s.step("tour: the visitor came with the aircraft to B", () -> {
+            final com.minecolonies.core.colony.buildings.modules.TavernBuildingModule module = tavernB[0].getFirstModuleOccurance(com.minecolonies.core.colony.buildings.modules.TavernBuildingModule.class);
+            final int owed = ((com.asteain.airline.colony.VisitorArrival.Tavern) module).airline$owed();
+            s.soft("tour / when the aircraft landed at B the owed visitor appeared and belongs to B's tavern; nothing is owed any more",
+                    owed == 0 && module.getExternalCitizens().size() == 1, "owed " + owed + ", visitors of the tavern " + module.getExternalCitizens().size());
+        });
         s.step("tour: result", () -> {
             final RouteNetwork net = RouteNetwork.get(level);
             final int[] stash = new int[3], wanted = new int[3], covered = new int[3], others = new int[3];
