@@ -537,7 +537,7 @@ final class FlightSuite {
         });
         s.until("facilities: fleet: the medium aircraft moves to an anchorage", () -> {}, () -> fm.aircraft.home != null && !fm.aircraft.home.equals(was[0])
                 && fm.aircraft.phase == Phase.PARKED && fm.aircraft.home.equals(fm.aircraft.at), 12000);
-        // Its pilot walks off onto the pier (2026-10-18: from the seat of the user's 丸太号 that takes a while longer).
+        // Its pilot walks off onto the pier (2026-10-18: from the seat of the user's 雲中号 that takes a while longer).
         s.until("facilities: fleet: its pilot off", () -> {}, () -> Boarding.state(fm.pilot) == Boarding.State.NONE, 600);
         s.step("facilities: fleet: result", () -> {
             final BlockPos woodPad = wood.building().pad(), mirroredPad = mirrored.building().pad();

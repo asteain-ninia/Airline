@@ -143,7 +143,7 @@ public final class AircraftType {
     /** The burners, the lever beside each (the height is held with these levers, all set alike), and the setting of each burner's own dial. */
     public BlockPos[] burners = {}, burnerLevers = {};
     public int[] burnerValues = {};
-    /** The hold: containers that carry the cargo (barrels, or MineColonies racks: 2026-10-18, the user's 丸太号 and 大凪号). */
+    /** The hold: containers that carry the cargo (barrels, or MineColonies racks: 2026-10-18, the user's 雲中号 and 大凪号). */
     public final List<BlockPos> cargo = new ArrayList<>();
     /** Places on the deck where somebody can stand to work the hold (the block the feet are in). */
     public final List<BlockPos> access = new ArrayList<>();
@@ -227,7 +227,7 @@ public final class AircraftType {
     public double fastDescentRate = 0.8, slowDescentWithin = 3.0;
     /**
      * 1: the throttle levers are moved a few steps at a time only into and out of the manoeuvres under way (ahead,
-     * astern, the gentle turns); a turn on the spot and a slow push set them at once (2026-10-18: in the user's 丸太号 and
+     * astern, the gentle turns); a turn on the spot and a slow push set them at once (2026-10-18: in the user's 雲中号 and
      * 大凪号 the throttle levers do the turns and the slow pushes as well, which a lever of their own set at once before;
      * moved step by step, every short push lasted a decision too long and the aircraft was never placed). 0: always.
      */

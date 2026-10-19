@@ -1526,7 +1526,7 @@ final class FlightController {
                         // for the half minute of the descent a ship drifts (a third of a block was measured).
                         ap.placeAt(rt.heading, middle.x, middle.z, true);
                         // Kept over its place as closely as ever on the way down (2026-10-18: kept only to the coarse half
-                        // block, the heavy 丸太号 drifted a block off the pier during its long descent and did not dock).
+                        // block, the heavy 雲中号 drifted a block off the pier during its long descent and did not dock).
                         ap.placeWithin = c.type.placeWithin;
                         be.phase = Phase.DESCEND;
                         rt.still = 0;
@@ -1755,7 +1755,7 @@ final class FlightController {
         rt.acrossAim = 0;
         rt.alignRounds = 0;
         // As closely as ever, beside a pier and over a floor's connector as well (2026-10-18: placed only to half a block, the
-        // pier's connector head came down on the edge of the notch in the deck of the user's 丸太号 and pushed it a block
+        // pier's connector head came down on the edge of the notch in the deck of the user's 雲中号 and pushed it a block
         // away from the pier; the connectors' pull does not reach that far).
         rt.pilot.placeWithin = rt.craft.type.placeWithin;
         rt.floorDock = 0;

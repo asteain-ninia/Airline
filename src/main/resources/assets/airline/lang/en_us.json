@@ -51,7 +51,7 @@
   "commands.airline.aircraft.design.first": "%s: %s (used when no design is named)",
   "commands.airline.aircraft.design": "%s: %s",
   "aircraft.airline.koeda": "Packet 'Koeda'",
-  "aircraft.airline.stratus": "Medium packet 'Maruta'",
+  "aircraft.airline.stratus": "Medium packet 'Unchu'",
   "aircraft.airline.oonagi": "Large packet 'Oonagi'",
   "message.airline.yard.started": "Building an aircraft here: %s (%s blocks to go). The colony's builders put it up from its blueprint and ask for the materials as for any decoration; you may also build it by hand. Use this block with an empty hand to build another design.",
   "message.airline.yard.design": "Building this design instead: %s (%s blocks to go).",
