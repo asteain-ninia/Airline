@@ -3,7 +3,7 @@
 使い方: python tools/run_batch.py <札> <項目> [<項目> ...]
 項目は、Gradle のタスク名(runAirfield、runAirfieldReload、runAirfieldRemoved、runNetwork)か、
 runFlight の場面の名前(trip、far、cargo など。reopen で始まる場面は、順番どおりに並べること)。
-場面の名前のあとに @<機体の型> を付けると、その型の機体で飛ばす(例: trip@small)。
+場面の名前のあとに @<機体の型> を付けると、その型の機体で飛ばす(例: trip@stratus)。
 @ のあとが .json で終わるときは、MOD にまだ入れていない設計のファイルとして読ませ、その設計で飛ばす(例: trip@E:/somewhere/swift.json)。
 
 途中で 1 本が落ちても、次へ進む(reopen の続きの場面だけは、前が落ちたら飛ばす)。
@@ -29,8 +29,8 @@ TASKS = {"runAirfield": ("run-airfield", 1500), "runAirfieldReload": ("run-airfi
 # (それまでは、こかぜに中型の印を付けただけの代役 ColonyPatchServer/design/classes-2026-10-14/kokaze_medium.json)。
 ALL = (["classes@stratus", "facilities@stratus", "items", "runNetwork", "runAirfield", "runAirfieldReload", "runAirfieldRemoved",
         "yard", "trip", "direct", "three", "traffic", "detour", "cargo", "carry", "tour", "routes", "far", "faults", "crash", "ground", "lost", "hindered", "fuel", "fetch",
-        "reopen1", "reopen2", "reopen3", "reopenc1", "reopenc2", "reopenc3", "reopenc4"]
-       + [scene + "@small" for scene in ("trip", "far", "fuel", "traffic", "yard", "cargo", "crash")] + ["trip@whitesail"])
+        "reopen1", "reopen2", "reopen3", "reopenc1", "reopenc2", "reopenc3", "reopenc4"])
+# (原型・白帆型で飛ばす場面は、2 つの型を外したので無くした。2026-10-19)
 
 
 # 1 本に掛かる時間の見込み(秒。早回しの札 sp3、reopen は普通の速さの sp5 と c120m から)。分けるときの重さにだけ使う。

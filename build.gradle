@@ -89,6 +89,10 @@ neoForge {
     }
 
     runs {
+        // The test servers write what a flight does into their log, as before (a player's game only into debug.log; 2026-10-19).
+        configureEach {
+            systemProperty 'airline.logFlights', 'true'
+        }
         airfield {
             server()
             programArgument '--nogui'

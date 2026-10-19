@@ -52,7 +52,7 @@ public final class VisitorArrival {
             }
             if (arrivals.isEmpty()) return original;
             final BlockPos chosen = arrivals.get(ThreadLocalRandom.current().nextInt(arrivals.size()));
-            LoggerFactory.getLogger("Airline").info("[Airline/visitors] a visitor of colony {} arrives at the airfield, at {}", tavern.getColony().getID(), chosen.toShortString());
+            LoggerFactory.getLogger("Airline").atLevel(com.asteain.airline.Airline.STEPS).log("[Airline/visitors] a visitor of colony {} arrives at the airfield, at {}", tavern.getColony().getID(), chosen.toShortString());
             return List.of(chosen);
         } catch (RuntimeException e) {
             LoggerFactory.getLogger("Airline").warn("[Airline/visitors] could not look for an airfield for a visitor; it comes the usual way", e);
@@ -82,7 +82,7 @@ public final class VisitorArrival {
 
     /** Noted in the log when a visitor is owed. */
     public static void owed(IBuilding tavern, int owed) {
-        LoggerFactory.getLogger("Airline").info("[Airline/visitors] colony {}: a visitor's time came; it comes with the next aircraft ({} owed)", tavern.getColony().getID(), owed);
+        LoggerFactory.getLogger("Airline").atLevel(com.asteain.airline.Airline.STEPS).log("[Airline/visitors] colony {}: a visitor's time came; it comes with the next aircraft ({} owed)", tavern.getColony().getID(), owed);
     }
 
     /**
@@ -104,7 +104,7 @@ public final class VisitorArrival {
                 }
             }
         }
-        if (came > 0) LoggerFactory.getLogger("Airline").info("[Airline/visitors] colony {}: {} visitor(s) came with the aircraft, at {}", colony.getID(), came, where.toShortString());
+        if (came > 0) LoggerFactory.getLogger("Airline").atLevel(com.asteain.airline.Airline.STEPS).log("[Airline/visitors] colony {}: {} visitor(s) came with the aircraft, at {}", colony.getID(), came, where.toShortString());
         return came;
     }
 

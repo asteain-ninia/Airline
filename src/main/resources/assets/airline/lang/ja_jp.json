@@ -1,4 +1,5 @@
 {
+  "fml.menu.mods.info.description.airline": "MineColonies の村どうしを、Create Aeronautics の飛行船で結びます。村に飛行場(小型・中型・大型)と泊地を建てると、飛行場が、村の届けた部品で、そこに降りられる級の機体を建造し、飛行士が時刻表どおりに飛ばして、倉庫の余りを欲しがっている村へ運びます。航路は空路ブイと飛行場のあいだに結ばれ、通れるかを確かめてから使われます。酒場の来訪者は、機体と一緒にやって来ます。飛ぶには Sable、Create Aeronautics、ColonyPatch Server が要ります。",
   "block.airline.blockhutairfield": "小型飛行場",
   "block.minecolonies.blockhutairfield": "小型飛行場",
   "com.airline.building.airfield": "小型飛行場",
@@ -49,8 +50,6 @@
   "commands.airline.flight.status.fuel": "  燃料:燃料庫の燃料で %s 分飛べます",
   "commands.airline.aircraft.design.first": "%s:%s(型を指定しないときはこれ)",
   "commands.airline.aircraft.design": "%s:%s",
-  "aircraft.airline.small": "小型機",
-  "aircraft.airline.whitesail": "定期船 白帆型",
   "aircraft.airline.koeda": "定期船 小枝号",
   "aircraft.airline.stratus": "中型定期船 丸太号",
   "aircraft.airline.oonagi": "大型定期船 大凪号",

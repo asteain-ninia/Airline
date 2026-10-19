@@ -1138,7 +1138,10 @@ final class FlightSuite {
             pad(level, padB, 0);
             final BlockPos middle = a.pad.above();
             final List<String> designs = Flights.designs();
-            final String first = designs.get(0), second = designs.get(1 % designs.size());
+            // The design asked for: the last one this airfield can build (the prototype until 2026-10-19; with it gone the
+            // small airfield builds only the first one).
+            final List<Flights.Design> cards = Flights.designCards(a.airfield);
+            final String first = designs.get(0), second = cards.isEmpty() ? first : cards.get(cards.size() - 1).name();
             final java.util.function.Supplier<List<com.minecolonies.core.colony.workorders.WorkOrderDecoration>> orders =
                     () -> a.colony.getWorkManager().getWorkOrdersOfType(com.minecolonies.core.colony.workorders.WorkOrderDecoration.class);
             // Something in the way on the middle of the pad: nothing is begun.
@@ -1162,11 +1165,16 @@ final class FlightSuite {
                     "free " + Flights.padFree(level, a.pad) + ", lacks " + Flights.buildingLacks(level, site) + " of " + Flights.blocksOf(second) + " (" + second + ")");
             said = Flights.requestAircraft(level, a.airfield, second, null);
             s.soft("yard / asked again for the design that is being built, nothing changes", "same".equals(said) && orders.get().size() == 1 && second.equals(site.type), "said " + said + ", orders " + orders.get().size());
-            said = Flights.requestAircraft(level, a.airfield, first, null);
-            now = orders.get();
-            s.soft("yard / asked for another design while one is being built, the site builds that one instead: still one work order, now with the other blueprint",
-                    "design".equals(said) && first.equals(site.type) && now.size() == 1 && Flights.blueprintOf(first).equals(now.get(0).getStructurePath()) && site.workOrder == now.get(0).getID(),
-                    "said " + said + ", design " + site.type + ", orders " + now.size() + (now.isEmpty() ? "" : " " + now.get(0).getStructurePath()));
+            if (first.equals(second)) {
+                // (Since 2026-10-19 the small airfield builds one design only: there is no other to switch to here.)
+                s.note("OBS yard: the small airfield builds only " + first + "; switching the design of a site is not checked");
+            } else {
+                said = Flights.requestAircraft(level, a.airfield, first, null);
+                now = orders.get();
+                s.soft("yard / asked for another design while one is being built, the site builds that one instead: still one work order, now with the other blueprint",
+                        "design".equals(said) && first.equals(site.type) && now.size() == 1 && Flights.blueprintOf(first).equals(now.get(0).getStructurePath()) && site.workOrder == now.get(0).getID(),
+                        "said " + said + ", design " + site.type + ", orders " + now.size() + (now.isEmpty() ? "" : " " + now.get(0).getStructurePath()));
+            }
             // A block of the aircraft being built, in the shaft over the pad (inside the aircraft's outline).
             level.setBlockAndUpdate(middle.offset(2, 4, 0), net.minecraft.world.level.block.Blocks.OAK_PLANKS.defaultBlockState());
         });

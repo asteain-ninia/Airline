@@ -362,7 +362,7 @@ public final class Flights {
         if (!available()) return List.of();
         final List<Design> all = new java.util.ArrayList<>();
         for (final AircraftType type : AircraftType.ALL.values()) {
-            // Only the classes this airfield builds (a small airfield: small aircraft), and no retired design.
+            // Only the classes this airfield builds (a small airfield: small aircraft).
             if (airfield.facility().builds(type.shipClass)) all.add(new Design(type.name, type.title(), type.parts.size() + 1, type.topSpeed, Fuel.minutes(type, Fuel.capacity())));
         }
         return all;

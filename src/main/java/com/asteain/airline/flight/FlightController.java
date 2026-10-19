@@ -71,7 +71,12 @@ import java.util.UUID;
 final class FlightController {
     private FlightController() {}
 
+    /**
+     * What a flight does goes to the debug log only (logs/debug.log; 2026-10-19, the user's "静かにしたい": every flight
+     * wrote a dozen lines into the game's log); the game's log gets only what went wrong ({@link com.asteain.airline.Airline#STEPS}).
+     */
     static final Logger LOGGER = LogUtils.getLogger();
+    private static final org.slf4j.event.Level STEPS = com.asteain.airline.Airline.STEPS;
     /** An aircraft that stands at home is looked over this often (ticks). */
     private static final int MAINTAIN_EVERY = 200;
     /** A flight is called off when the pilot is not seated this many ticks after being sent to the aircraft. */
@@ -204,7 +209,7 @@ final class FlightController {
         if (be.home == null) return;
         Runtime rt = runtime(be);
         if (rt == null || rt.craft.ship != ship) {
-            rt = new Runtime(new Craft(level, ship, AircraftType.ALL.getOrDefault(be.type, AircraftType.DEFAULT), be.getBlockPos()));
+            rt = new Runtime(new Craft(level, ship, AircraftType.of(be.type), be.getBlockPos()));
             be.runtime = rt;
         }
         LOADED.put(ship.getUniqueId(), be);
@@ -328,7 +333,8 @@ final class FlightController {
     static void abandon(ServerLevel level, BlockPos pos, @Nullable AircraftBlockEntity be) {
         final ServerSubLevel ship = Craft.shipAt(level, pos);
         if (ship == null) return;
-        final Craft c = new Craft(level, ship, AircraftType.ALL.getOrDefault(be == null ? "" : be.type, AircraftType.DEFAULT), pos);
+        // (Only to switch the drives off: with the aircraft's own block gone, any design will do for that.)
+        final Craft c = new Craft(level, ship, be != null && AircraftType.ALL.containsKey(be.type) ? AircraftType.of(be.type) : AircraftType.DEFAULT, pos);
         safely(c::drivesOff);
         safely(() -> c.ticket(false));
         if (be != null) safely(() -> uncover(level, be));
@@ -408,7 +414,7 @@ final class FlightController {
         final Component text = Component.translatable("commands." + Airline.MOD_ID + "." + key, args);
         be.note = text.getString();
         be.setChanged();
-        LOGGER.info("[Airline/flight] {}", be.note);
+        LOGGER.atLevel(STEPS).log("[Airline/flight] {}", be.note);
         final BuildingAirfield home = Cargo.airfieldAt(level, be.home);
         if (home != null) com.minecolonies.api.util.MessageUtils.format(text).sendTo(home.getColony()).forManagers();
         else tell(be, key, args);
@@ -509,13 +515,13 @@ final class FlightController {
             note(be, "joining the pier's connector");
         }
         if (c.connectorLocked(dock.connector())) {
-            LOGGER.info("[Airline/flight] joined the pier's connector at {} after {} ticks.", be.destination, rt.dockTicks);
+            LOGGER.atLevel(STEPS).log("[Airline/flight] joined the pier's connector at {} after {} ticks.", be.destination, rt.dockTicks);
             rt.dockTicks = -1;
             return false;
         }
         if (++rt.dockTicks > DOCK_TICKS) {
             c.dockLever(dock.lever(), 0);
-            LOGGER.info("[Airline/flight] the connectors at {} did not join; the aircraft is fixed where it is.", be.destination);
+            LOGGER.atLevel(STEPS).log("[Airline/flight] the connectors at {} did not join; the aircraft is fixed where it is.", be.destination);
             note(be, "the connectors did not join; fixed where it is");
             rt.dockTicks = -1;
             return false;
@@ -570,13 +576,13 @@ final class FlightController {
             return false;
         }
         if (c.connectorLocked(bottom.connector())) {
-            LOGGER.info("[Airline/flight] joined the floor's connector at {} after {} ticks at rest.", be.destination, rt.floorDockTicks);
+            LOGGER.atLevel(STEPS).log("[Airline/flight] joined the floor's connector at {} after {} ticks at rest.", be.destination, rt.floorDockTicks);
             rt.floorDock = -1;
             return false;
         }
         if (++rt.floorDockTicks > DOCK_TICKS) {
             c.dockLever(bottom.lever(), 0);
-            LOGGER.info("[Airline/flight] the connectors at {} did not join; the bottom connector is taken in and the aircraft settles on the floor.", be.destination);
+            LOGGER.atLevel(STEPS).log("[Airline/flight] the connectors at {} did not join; the bottom connector is taken in and the aircraft settles on the floor.", be.destination);
             note(be, "the connectors did not join; down onto the floor");
             rt.floorDock = -2;
             rt.still = 0;
@@ -605,7 +611,7 @@ final class FlightController {
             out |= c.connectorOut(dock.connector()) || c.connectorLocked(dock.connector());
         }
         if (!out || rt.undockTicks++ > UNDOCK_TICKS) {
-            if (out) LOGGER.info("[Airline/flight] a connector of the aircraft is still out; it leaves all the same.");
+            if (out) LOGGER.atLevel(STEPS).log("[Airline/flight] a connector of the aircraft is still out; it leaves all the same.");
             rt.undockTicks = 0;
             return false;
         }
@@ -652,7 +658,7 @@ final class FlightController {
             // In the air a failure is the end (the aircraft is given up). On a pad the work is taken up again after a rest.
             if (be.phase == Phase.STRANDED || be.flying() || ++rt.rest < FAULT_REST) return;
             rt.faulted = false;
-            LOGGER.info("[Airline/flight] the aircraft on the pad at {} takes up its work again after a failure ({}).", be.at, be.phase);
+            LOGGER.atLevel(STEPS).log("[Airline/flight] the aircraft on the pad at {} takes up its work again after a failure ({}).", be.at, be.phase);
         }
         if (failNext && be.flying()) {
             failNext = false;
@@ -693,7 +699,7 @@ final class FlightController {
             // Create's seats sit down any creature that steps onto them: a pilot that walked over a seat (one for passengers,
             // 2026-10-17) is taken off it again; the boarding puts it on its own seat when it is wanted there.
             pilot.stopRiding();
-            LOGGER.info("[Airline/flight] the pilot of the aircraft at {} sat down on a seat it was not sent to; it is taken off it.", c.pos());
+            LOGGER.atLevel(STEPS).log("[Airline/flight] the pilot of the aircraft at {} sat down on a seat it was not sent to; it is taken off it.", c.pos());
         }
         switch (be.phase) {
             case PARKED -> {
@@ -920,7 +926,7 @@ final class FlightController {
     static void note(AircraftBlockEntity be, String text) {
         be.note = text;
         be.setChanged();
-        LOGGER.info("[Airline/flight] {}", text);
+        LOGGER.atLevel(STEPS).log("[Airline/flight] {}", text);
     }
 
     // ---- the timetable ------------------------------------------------------------------------------------
@@ -1058,7 +1064,7 @@ final class FlightController {
         be.timer = 0;
         be.phase = Phase.BOARDING;
         be.note = "flying home";
-        LOGGER.info("[Airline/flight] the aircraft parked at {} flies home.", be.at);
+        LOGGER.atLevel(STEPS).log("[Airline/flight] the aircraft parked at {} flies home.", be.at);
         be.setChanged();
     }
 
@@ -1151,7 +1157,7 @@ final class FlightController {
             be.home = pad;
             be.homeward = true;
             be.setChanged();
-            LOGGER.info("[Airline/flight] the aircraft at the anchorage {} is sent back to the airfield's pad {}, its home from now.", be.at, pad);
+            LOGGER.atLevel(STEPS).log("[Airline/flight] the aircraft at the anchorage {} is sent back to the airfield's pad {}, its home from now.", be.at, pad);
             return said(player, say + "returning");
         }
         return said(player, say + "none_away");
@@ -1240,7 +1246,7 @@ final class FlightController {
                     rt.leaveNearest = Double.MAX_VALUE;
                     rt.leaveStuck = 0;
                     spot = leaveSpot(level, net, be, be.at, rt.leaveAhead);
-                    LOGGER.info("[Airline/flight] the pilot does not get off {}; it is sent off {} instead.", rt.leaveAhead ? "behind the tail" : "ahead of the nose",
+                    LOGGER.atLevel(STEPS).log("[Airline/flight] the pilot does not get off {}; it is sent off {} instead.", rt.leaveAhead ? "behind the tail" : "ahead of the nose",
                             rt.leaveAhead ? "ahead of the nose" : "behind the tail");
                     if (state == Boarding.State.LEAVING) Boarding.leave(pilot, spot);
                 }
@@ -1366,7 +1372,7 @@ final class FlightController {
         }
         // Plans are not saved: this one is made again.
         if (be.flying()) replan(be, rt, 0);
-        LOGGER.info("[Airline/flight] the aircraft at {} takes up its flight again ({}).", c.pos(), be.phase);
+        LOGGER.atLevel(STEPS).log("[Airline/flight] the aircraft at {} takes up its flight again ({}).", c.pos(), be.phase);
     }
 
     private static void fly(ServerLevel level, AircraftBlockEntity be, Runtime rt, RouteNetwork net) {
@@ -1501,7 +1507,7 @@ final class FlightController {
                         // it, the large aircraft touched the pier on the way down and was pushed two blocks off (2026-10-16).
                         rt.alignRounds++;
                         rt.acrossAim -= off;
-                        LOGGER.info("[Airline/flight] {} across the middle of the pad after turning onto its heading: placed across again (round {})", String.format("%.2f", Math.abs(off)), rt.alignRounds);
+                        LOGGER.atLevel(STEPS).log("[Airline/flight] {} across the middle of the pad after turning onto its heading: placed across again (round {})", String.format("%.2f", Math.abs(off)), rt.alignRounds);
                         placeAcross(rt, middle);
                         rt.placeStep = 0;
                         be.timer = 0;
@@ -1542,7 +1548,7 @@ final class FlightController {
                 if (!held && rt.floorDock == 1 && ap.altTarget <= rest - 0.39 && c.pos().y >= rest + 0.12 && ++rt.floorDockTicks > DOCK_TICKS) {
                     final AircraftType.Dock bottom = c.type.docks.get("bottom");
                     if (bottom != null) c.dockLever(bottom.lever(), 0);
-                    LOGGER.info("[Airline/flight] over the floor's connector at {} the aircraft does not come down; the bottom connector is taken in.", be.destination);
+                    LOGGER.atLevel(STEPS).log("[Airline/flight] over the floor's connector at {} the aircraft does not come down; the bottom connector is taken in.", be.destination);
                     note(be, "the connectors did not join; down onto the floor");
                     rt.floorDock = -2;
                 }
@@ -1793,7 +1799,7 @@ final class FlightController {
         final double h = Math.toRadians(rt.heading);
         be.note = String.format("landed %.2f from the middle of the pad (ahead %+.2f, to the right %+.2f), heading off by %.2f degrees", rt.lastMiss,
                 (at.x - centre.x) * Math.cos(h) + (at.z - centre.z) * Math.sin(h), (at.x - centre.x) * -Math.sin(h) + (at.z - centre.z) * Math.cos(h), rt.lastHeadingError);
-        LOGGER.info("[Airline/flight] aircraft {}", be.note);
+        LOGGER.atLevel(STEPS).log("[Airline/flight] aircraft {}", be.note);
         if (be.at.equals(be.home)) be.homeward = false;
         // From another colony: the visitors the taverns here owe come with it (2026-10-19, see VisitorArrival).
         try {
@@ -2076,7 +2082,7 @@ final class FlightController {
         be.timer = 0;
         be.phase = Phase.LOAD;
         be.note = order.fetch() ? "going to fetch goods from colony " + be.freightColony : "loading for colony " + be.freightColony + (be.stops.isEmpty() ? "" : " (a round: " + roundText(be) + ")");
-        LOGGER.info("[Airline/flight] cargo flight to colony {}: {} wanted items lie ready {}.", be.freightColony, order.ready(), order.fetch() ? "there; the flight goes out empty to fetch them"
+        LOGGER.atLevel(STEPS).log("[Airline/flight] cargo flight to colony {}: {} wanted items lie ready {}.", be.freightColony, order.ready(), order.fetch() ? "there; the flight goes out empty to fetch them"
                 : be.stops.isEmpty() ? "here; loading" : "here; loading for a round: " + roundText(be));
         be.setChanged();
         // At once, not with the next second: the pad it will land on counts as taken from now on.
@@ -2364,7 +2370,7 @@ final class FlightController {
         final Component text = Component.translatable("commands." + Airline.MOD_ID + "." + key, args);
         be.note = text.getString();
         be.setChanged();
-        LOGGER.info("[Airline/flight] {}", be.note);
+        LOGGER.atLevel(STEPS).log("[Airline/flight] {}", be.note);
         if (be.getLevel() instanceof ServerLevel level) {
             for (final ServerPlayer player : level.getServer().getPlayerList().getPlayers()) {
                 if (player.hasPermissions(2)) player.sendSystemMessage(text);
@@ -2686,7 +2692,7 @@ final class FlightController {
             // Sable takes a ship that is marked like this away with its next tick, blocks and all (nothing is dropped).
             c.ship.markRemoved();
             if (pilot != null && Boarding.state(pilot) != Boarding.State.NONE) Boarding.leave(pilot, null);
-            LOGGER.info("[Airline/flight] the given-up aircraft at {} was taken away by command; {} items were in its hold.", where, goods);
+            LOGGER.atLevel(STEPS).log("[Airline/flight] the given-up aircraft at {} was taken away by command; {} items were in its hold.", where, goods);
             ships++;
         }
         if (ships == 0) return new Answer(false, "flight.clear.none");
@@ -2734,7 +2740,7 @@ final class FlightController {
     /** The blocks of the hold (in the ship's own coordinates). */
     static List<BlockPos> holdBlocks(AircraftBlockEntity be) {
         final List<BlockPos> blocks = new ArrayList<>();
-        for (final BlockPos barrel : AircraftType.ALL.getOrDefault(be.type, AircraftType.DEFAULT).cargo) blocks.add(be.getBlockPos().offset(barrel));
+        for (final BlockPos barrel : AircraftType.of(be.type).cargo) blocks.add(be.getBlockPos().offset(barrel));
         return blocks;
     }
 }

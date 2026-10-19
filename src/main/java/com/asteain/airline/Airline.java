@@ -59,8 +59,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Air freight between MineColonies colonies. Stage 3: the airfield (a MineColonies building), the pilot (a job) and the
- * collection of warehouse surplus onto the airfield's export racks. No aircraft yet.
+ * Air transport between MineColonies colonies: the airfields and the anchorage (MineColonies buildings), the pilot (a job),
+ * the aircraft, the routes, the collection of warehouse surplus onto the airfields' export racks, and the visitors who come by air.
  *
  * <p>The registration layout follows the add-on Volcanic Mason (https://github.com/ferriarnus/VolcanicMason,
  * Copyright (c) Ferri_Arnus, LGPL-3.0): a hut block with its own block entity type, a building entry and a job entry
@@ -70,6 +70,11 @@ import java.util.List;
 public final class Airline {
     /** The mod's id. This is the only place in Java where the id is written as text. */
     public static final String MOD_ID = "airline";
+    /**
+     * What a flight does, and the visitors who come with it, are written at this level: debug (logs/debug.log only;
+     * 2026-10-19, the user's "静かにしたい"), and in the game's log on the test servers (the system property {@code airline.logFlights}).
+     */
+    public static final org.slf4j.event.Level STEPS = Boolean.getBoolean("airline.logFlights") ? org.slf4j.event.Level.INFO : org.slf4j.event.Level.DEBUG;
 
     /** Registry paths (not ids). The hut name is read by the hut block's super constructor, so it must stay a constant. */
     public static final String HUT_NAME = "blockhutairfield";

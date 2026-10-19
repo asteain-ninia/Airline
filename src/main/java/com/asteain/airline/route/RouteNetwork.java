@@ -57,14 +57,6 @@ public final class RouteNetwork extends SavedData {
      * (small, medium or large airfield, or anchorage; null for a buoy): which classes of aircraft may berth there.
      */
     public record Node(BlockPos pos, Kind kind, int tier, int heading, BlockPos home, @Nullable Facility facility) {
-        /** A point that stands where it is: a buoy, or a landing pad of a small airfield whose hut is not told (older saves; tests). */
-        public Node(BlockPos pos, Kind kind, int tier, int heading) {
-            this(pos, kind, tier, heading, pos);
-        }
-
-        public Node(BlockPos pos, Kind kind, int tier, int heading, BlockPos home) {
-            this(pos, kind, tier, heading, home, kind == Kind.AIRFIELD ? Facility.SMALL_AIRFIELD : null);
-        }
 
         /** The grade of a buoy (1 to 3). */
         public int grade() {
@@ -121,7 +113,7 @@ public final class RouteNetwork extends SavedData {
          * line is blocked): a large aircraft may not fly a line a small one may. Null: nothing found. Saved.
          */
         @Nullable private ShipClass blockedFrom;
-        /** Where the block is that keeps that class out (the first one the scan met; not saved). */
+        /** Where the block is that keeps that class out (the first one the scan met). Saved. */
         @Nullable private BlockPos blockedFromAt;
         /**
          * The smallest class that cannot pass over a landing pad on the way without the line being raised more than lines
@@ -325,14 +317,6 @@ public final class RouteNetwork extends SavedData {
     private final ArrayDeque<Scan> queue = new ArrayDeque<>();
     private int age;
     private boolean sweepDue = true;
-    /**
-     * What "clear" means has changed over the versions (2: the shaft over a landing pad belongs to its lines, and the
-     * lines of a pad start higher; 3: lines are verified for the class they are for, and pass higher over the points made
-     * for larger classes; 4: lines are level and raised over the landing pads and blocks on their way). A network saved
-     * by older rules is looked at again from scratch once it is loaded.
-     */
-    private static final int RULES = 4;
-    private boolean recheckDue;
     /** Who set down a buoy and is told what its lines came to once they have been looked at. Not saved. */
     private final Map<BlockPos, UUID> watchers = new HashMap<>();
     /** The pairs of landing pads between which there is a way, as last told to their colonies. Saved. */
@@ -409,7 +393,7 @@ public final class RouteNetwork extends SavedData {
     // ---- points -------------------------------------------------------------------------------------------
 
     public void addBuoy(BlockPos pos, int tier) {
-        put(new Node(pos.immutable(), Kind.BUOY, tier, 0));
+        put(new Node(pos.immutable(), Kind.BUOY, tier, 0, pos.immutable(), null));
     }
 
     /**
@@ -860,10 +844,6 @@ public final class RouteNetwork extends SavedData {
                 it.remove();
                 lookAgain(site.getKey(), true);
             }
-        }
-        if (recheckDue) {
-            recheckDue = false;
-            recheckAll();
         }
         if (sweepDue || ++age % RouteRules.retryTicks() == 0) {
             sweepDue = false;
@@ -1431,7 +1411,6 @@ public final class RouteNetwork extends SavedData {
             links.add(link);
         }
         tag.put("links", links);
-        tag.putInt("rules", RULES);
         return tag;
     }
 
@@ -1440,16 +1419,12 @@ public final class RouteNetwork extends SavedData {
         final ListTag points = tag.getList("points", Tag.TAG_COMPOUND);
         for (int i = 0; i < points.size(); i++) {
             final CompoundTag point = points.getCompound(i);
-            try {
-                final BlockPos pos = BlockPos.of(point.getLong("pos"));
-                // ("home" is written only where it is not the point itself.)
-                final BlockPos home = point.contains("home") ? BlockPos.of(point.getLong("home")) : pos;
-                final Kind kind = Kind.valueOf(point.getString("kind"));
-                network.nodes.put(pos, new Node(pos, kind, point.getInt("tier"), point.getInt("heading"), home,
-                        kind == Kind.AIRFIELD ? Facility.of(point.getString("facility")) : null));
-            } catch (IllegalArgumentException unknownKind) {
-                // A kind this version does not know: the point is left out.
-            }
+            final BlockPos pos = BlockPos.of(point.getLong("pos"));
+            // ("home" is written only where it is not the point itself.)
+            final BlockPos home = point.contains("home") ? BlockPos.of(point.getLong("home")) : pos;
+            final Kind kind = Kind.valueOf(point.getString("kind"));
+            network.nodes.put(pos, new Node(pos, kind, point.getInt("tier"), point.getInt("heading"), home,
+                    kind == Kind.AIRFIELD ? Facility.of(point.getString("facility")) : null));
         }
         // Lines are made by the rules of today (the config may have changed); what was known about a line is kept.
         network.relink();
@@ -1458,14 +1433,9 @@ public final class RouteNetwork extends SavedData {
             final CompoundTag line = lines.getCompound(i);
             final Edge edge = network.edges.get(Pair.of(BlockPos.of(line.getLong("a")), BlockPos.of(line.getLong("b"))));
             if (edge == null) continue;
-            try {
-                edge.state = State.valueOf(line.getString("state"));
-            } catch (IllegalArgumentException unknownState) {
-                edge.state = State.UNVERIFIED;
-            }
+            edge.state = State.valueOf(line.getString("state"));
             edge.blockedAt = edge.state == State.BLOCKED && line.contains("blockedAt") ? BlockPos.of(line.getLong("blockedAt")) : null;
-            edge.blockedFrom = line.contains("blockedFrom") ? ShipClass.of(line.getString("blockedFrom").toLowerCase(java.util.Locale.ROOT)) : null;
-            if (edge.blockedFrom == ShipClass.SMALL) edge.blockedFrom = null;
+            edge.blockedFrom = line.contains("blockedFrom") ? ShipClass.valueOf(line.getString("blockedFrom")) : null;
             edge.blockedFromAt = edge.blockedFrom != null && line.contains("blockedFromAt") ? BlockPos.of(line.getLong("blockedFromAt")) : null;
             // As high as it was found to pass over the blocks on its way (relink() made it as high as the pads ask for).
             if (line.getInt("lift") > edge.lift) network.reshape(edge, line.getInt("lift"));
@@ -1476,7 +1446,6 @@ public final class RouteNetwork extends SavedData {
             edge.state = State.BLOCKED;
             edge.blockedAt = edge.barred;
         }
-        network.recheckDue = tag.getInt("rules") < RULES;
         final ListTag links = tag.getList("links", Tag.TAG_COMPOUND);
         for (int i = 0; i < links.size(); i++) network.linked.add(Pair.of(BlockPos.of(links.getCompound(i).getLong("a")), BlockPos.of(links.getCompound(i).getLong("b"))));
         // The scans queued by relink() are dropped; the first tick queues what is still not verified.

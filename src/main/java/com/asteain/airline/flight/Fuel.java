@@ -79,7 +79,7 @@ final class Fuel {
             }
             return;
         }
-        be.fuel += ticks;      // (no fuel item is known: kept as a number, as it was before there was a store)
+        be.fuel += ticks;      // (no fuel item is known: kept as a number)
     }
 
     /** Takes everything out of the tank: the store and what was taken out of it. */

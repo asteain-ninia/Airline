@@ -247,14 +247,6 @@ public final class AircraftType {
         this.name = name;
     }
 
-    private void put(int x, int y, int z, String state) {
-        parts.put(new BlockPos(x, y, z), state);
-    }
-
-    private void box(int x0, int y0, int z0, int x1, int y1, int z1, String state) {
-        for (int x = x0; x <= x1; x++) for (int y = y0; y <= y1; y++) for (int z = z0; z <= z1; z++) put(x, y, z, state);
-    }
-
     private void manoeuvre(Drive which, int... values) {
         drive[which.ordinal()] = values;
     }
@@ -264,86 +256,6 @@ public final class AircraftType {
         for (final Drive which : Drive.values()) if (drive[which.ordinal()] == null) drive[which.ordinal()] = drive[which.ordinary().ordinal()];
     }
 
-    /**
-     * "Aircraft 2, geared 2:1, long deck": the design measured in the fourth lab round (9 long, 7 wide, 9 high, mass 62.75
-     * with a plank where the aircraft's own block now sits; 1.87 blocks per second; mean tilt 3.2 degrees).
-     */
-    private static AircraftType small() {
-        return core("small");
-    }
-
-    /** The machinery, envelope, seat and hold that were measured, under the given name. */
-    private static AircraftType core(String name) {
-        final AircraftType t = new AircraftType(name);
-        final String plank = "minecraft:oak_planks", small = "create:cogwheel[axis=x]", large = "create:large_cogwheel[axis=x]", shaft = "create:shaft[axis=x]";
-        t.box(-2, 0, -1, 2, 0, 1, plank);
-        t.parts.remove(BlockPos.ZERO);      // the aircraft's own block takes the middle of the deck
-        t.put(1, 1, 0, "aeronautics:adjustable_burner[powered=false]");
-        t.put(1, 1, 1, "simulated:throttle_lever[face=floor,facing=east]");
-        t.put(-1, 1, 0, "create:white_seat");
-        t.engines = new BlockPos[2];
-        for (int side = 0; side < 2; side++) {
-            final int s = side == 0 ? -1 : 1, d = side == 0 ? 1 : -1;
-            final String toward = d > 0 ? "east" : "west";
-            t.put(-3 * d, 0, 2 * s, "simulated:white_portable_engine[facing=" + toward + "]");
-            t.put(-2 * d, 0, 2 * s, large);
-            t.put(-2 * d, 1, 3 * s, small);
-            t.put(-d, 1, 3 * s, small);
-            t.put(-d, 2, 3 * s, small);
-            t.put(-d, 2, 2 * s, small);
-            t.put(0, 2, 2 * s, "simulated:directional_gearshift[facing=up,axis_along_first=true]");
-            t.put(0, 3, 2 * s, "simulated:throttle_lever[face=floor,facing=east]");
-            t.put(0, 1, 2 * s, plank);
-            t.put(0, 1, s, "simulated:throttle_lever[face=wall,facing=" + (s > 0 ? "north" : "south") + "]");
-            t.put(d, 2, 2 * s, shaft);
-            t.put(2 * d, 2, 2 * s, shaft);
-            t.put(3 * d, 2, 2 * s, small);
-            t.put(3 * d, 2, s, small);
-            for (int y = 3; y <= 6; y++) t.put(3 * d, y, s, small);
-            t.put(4 * d, 6, s, "aeronautics:wooden_propeller[facing=" + toward + "]");
-            t.engines[side] = new BlockPos(-3 * d, 0, 2 * s);
-        }
-        final String envelope = "aeronautics:white_envelope";
-        for (int y = 3; y <= 7; y++) for (int x = -2; x <= 2; x++) for (int z = -3; z <= 3; z++)
-            if (Math.abs(x) == 2 || Math.abs(z) == 3) t.put(x, y, z, envelope);
-        t.box(-2, 8, -3, 2, 8, 3, envelope);
-        // The hold: two barrels on the two end cells of the deck that nobody can step onto from the ground anyway
-        // (a column of cogwheels stands outside each); opposite corners, so the balance fore and aft stays.
-        for (final BlockPos barrel : new BlockPos[] {new BlockPos(2, 1, -1), new BlockPos(-2, 1, 1)}) {
-            t.parts.put(barrel, "minecraft:barrel[facing=up]");
-            t.cargo.add(barrel);
-        }
-        // The middle cell of each end of the deck: one barrel stands beside each, and the deck is boarded over these ends.
-        t.access.add(new BlockPos(-2, 1, 0));
-        t.access.add(new BlockPos(2, 1, 0));
-        t.seat = new BlockPos(-1, 1, 0);
-        t.burners = new BlockPos[] {new BlockPos(1, 1, 0)};
-        t.burnerLevers = new BlockPos[] {new BlockPos(1, 1, 1)};
-        t.burnerValues = new int[] {80};
-        // Two drives, one on each side, each with a lever for "toward the nose" and one for "toward the tail". Which
-        // lever of a side does which was measured: left the inner lever ahead, right the upper one.
-        t.driveLevers = new BlockPos[] {new BlockPos(0, 1, -1), new BlockPos(0, 3, -2), new BlockPos(0, 3, 2), new BlockPos(0, 1, 1)};
-        //                          left ahead, left astern, right ahead, right astern
-        t.manoeuvre(Drive.OFF, 0, 0, 0, 0);
-        t.manoeuvre(Drive.AHEAD, 15, 0, 15, 0);
-        t.manoeuvre(Drive.ASTERN, 0, 15, 0, 15);
-        t.manoeuvre(Drive.RIGHT, 15, 0, 0, 15);
-        t.manoeuvre(Drive.LEFT, 0, 15, 15, 0);
-        t.manoeuvre(Drive.AHEAD_RIGHT, 15, 0, 0, 0);
-        t.manoeuvre(Drive.AHEAD_LEFT, 0, 0, 15, 0);
-        t.gentleAsOrdinary();
-        return t;
-    }
-
-    /**
-     * The outline every design has to stay inside, seen from the aircraft's own block: 9 long, 9 wide, 9 high (7 wide
-     * until 0.11.0; the user's ruling of 2026-10-14: the propellers of the fast design go one block outward, off the
-     * envelope). The pads (13 x 13), the distance between an airfield's two pads (17) and the shafts over the pads take
-     * it; what that leaves of the tubes' margin is told at {@link com.asteain.airline.route.RouteRules#tubeRadius}.
-     * This is the outline of a small aircraft; a design of another class stays inside its class's outline ({@link #shipClass},
-     * 2026-10-15: until then a medium or large design was still held to this one).
-     */
-    public static final int HALF_LENGTH = 4, HALF_WIDTH = 4, HEIGHT = 10;
     /**
      * For the test bench only: a larger outline for the designs of this run, as "ahead x astern x half width x height"
      * (blocks from the aircraft's own block toward the nose and toward the tail, to either side, and layers; "5x7x4x12").
@@ -446,96 +358,80 @@ public final class AircraftType {
     }
 
     /**
-     * A design from a file. Two kinds:
-     *
-     * <p><b>A hull around the measured machinery</b> (no "format", or 1): {@code "blocks": [[x, y, z, "state"], ...]} with
-     * every block of the aircraft except its own block; the machinery, the seat and the hold of {@link #small()} have to be
-     * exactly where they are there (the corner posts and the rim of the roof of the envelope, which hold no air, may be
-     * left out).</p>
-     *
-     * <p><b>A design of its own</b> ("format": 2): besides the blocks it says where its devices are and how it is driven:
+     * A design from a file ("format": 2; the hulls around the machinery made in code went with the prototype, 2026-10-19):
+     * {@code "blocks": [[x, y, z, "state"], ...]} with every block of the aircraft except its own block, and where its
+     * devices are and how it is driven:
      * {@code "seat": [x, y, z]}, {@code "cargo": [[x, y, z], ...]} (barrels), {@code "access": [[x, y, z], ...]},
      * {@code "burners": [{"at": [x, y, z], "lever": [x, y, z], "value": 80}, ...]}, {@code "engines": [[x, y, z], ...]},
      * {@code "levers": {"name": [x, y, z], ...}} (the levers of the drives) and
      * {@code "drive": {"ahead": {"name": 15, ...}, "astern": ..., "left": ..., "right": ..., "ahead_left": ..., "ahead_right": ...}}
      * (for each manoeuvre the levers that are not at 0; "ahead_slow", "astern_slow", "left_slow" and "right_slow" may be
      * named as well, and "off" when the drives are off with a lever at something else than 0), and optionally
-     * {@code "throttles": ["name", ...]}: the drive levers that are moved a few steps at a time.</p>
+     * {@code "throttles": ["name", ...]}: the drive levers that are moved a few steps at a time.
      *
-     * <p>Both may carry {@code "handling": {"topSpeed": 2.1, ...}}: numbers that were measured with this design.</p>
+     * <p>It may carry {@code "handling": {"topSpeed": 2.1, ...}}: numbers that were measured with this design.</p>
      */
     public static AircraftType read(String name, java.io.Reader json) throws IOException {
         try {
             final JsonObject file = com.google.gson.JsonParser.parseReader(json).getAsJsonObject();
-            final boolean own = file.has("format") && file.get("format").getAsInt() >= 2;
-            final AircraftType t = own ? new AircraftType(name) : core(name);
+            if (!file.has("format") || file.get("format").getAsInt() != 2) throw new IOException("not a design file of format 2");
+            final AircraftType t = new AircraftType(name);
             if (file.has("class")) t.shipClass = com.asteain.airline.route.ShipClass.of(file.get("class").getAsString());
-            if (own) {
-                // A design of its own climbs to the line with its target raised two blocks a second (2026-10-18, the user's
-                // ruling "速くする"; it was one: 15 seconds of a short flight); a design's own number goes first.
-                t.climbRate = 2.0;
-                t.readBlocks(file);
-                t.seat = pos(file.get("seat"));
-                for (final JsonElement each : file.getAsJsonArray("cargo")) t.cargo.add(pos(each));
-                for (final JsonElement each : file.getAsJsonArray("access")) t.access.add(pos(each));
-                if (file.has("passengers")) for (final JsonElement each : file.getAsJsonArray("passengers")) t.passengers.add(pos(each));
-                if (file.has("docks")) {
-                    for (final Map.Entry<String, JsonElement> dock : file.getAsJsonObject("docks").entrySet()) {
-                        final JsonObject one = dock.getValue().getAsJsonObject();
-                        t.docks.put(dock.getKey(), new Dock(pos(one.get("connector")), pos(one.get("lever"))));
-                    }
+            // A design of its own climbs to the line with its target raised two blocks a second (2026-10-18, the user's
+            // ruling "速くする"; it was one: 15 seconds of a short flight); a design's own number goes first.
+            t.climbRate = 2.0;
+            t.readBlocks(file);
+            t.seat = pos(file.get("seat"));
+            for (final JsonElement each : file.getAsJsonArray("cargo")) t.cargo.add(pos(each));
+            for (final JsonElement each : file.getAsJsonArray("access")) t.access.add(pos(each));
+            if (file.has("passengers")) for (final JsonElement each : file.getAsJsonArray("passengers")) t.passengers.add(pos(each));
+            if (file.has("docks")) {
+                for (final Map.Entry<String, JsonElement> dock : file.getAsJsonObject("docks").entrySet()) {
+                    final JsonObject one = dock.getValue().getAsJsonObject();
+                    t.docks.put(dock.getKey(), new Dock(pos(one.get("connector")), pos(one.get("lever"))));
                 }
-                final JsonArray burners = file.getAsJsonArray("burners");
-                t.burners = new BlockPos[burners.size()];
-                t.burnerLevers = new BlockPos[burners.size()];
-                t.burnerValues = new int[burners.size()];
-                for (int i = 0; i < burners.size(); i++) {
-                    final JsonObject burner = burners.get(i).getAsJsonObject();
-                    t.burners[i] = pos(burner.get("at"));
-                    t.burnerLevers[i] = pos(burner.get("lever"));
-                    t.burnerValues[i] = burner.get("value").getAsInt();
+            }
+            final JsonArray burners = file.getAsJsonArray("burners");
+            t.burners = new BlockPos[burners.size()];
+            t.burnerLevers = new BlockPos[burners.size()];
+            t.burnerValues = new int[burners.size()];
+            for (int i = 0; i < burners.size(); i++) {
+                final JsonObject burner = burners.get(i).getAsJsonObject();
+                t.burners[i] = pos(burner.get("at"));
+                t.burnerLevers[i] = pos(burner.get("lever"));
+                t.burnerValues[i] = burner.get("value").getAsInt();
+            }
+            final JsonArray engines = file.getAsJsonArray("engines");
+            t.engines = new BlockPos[engines.size()];
+            for (int i = 0; i < engines.size(); i++) t.engines[i] = pos(engines.get(i));
+            final List<String> names = new ArrayList<>(file.getAsJsonObject("levers").keySet());
+            t.driveLevers = new BlockPos[names.size()];
+            for (int i = 0; i < names.size(); i++) t.driveLevers[i] = pos(file.getAsJsonObject("levers").get(names.get(i)));
+            final JsonObject drive = file.getAsJsonObject("drive");
+            for (final Drive which : Drive.values()) {
+                final String key = which.name().toLowerCase(java.util.Locale.ROOT);
+                if (!drive.has(key) && which == Drive.OFF) {
+                    // Not named: with the drives off every lever is at 0.
+                    t.manoeuvre(Drive.OFF, new int[names.size()]);
+                    continue;
                 }
-                final JsonArray engines = file.getAsJsonArray("engines");
-                t.engines = new BlockPos[engines.size()];
-                for (int i = 0; i < engines.size(); i++) t.engines[i] = pos(engines.get(i));
-                final List<String> names = new ArrayList<>(file.getAsJsonObject("levers").keySet());
-                t.driveLevers = new BlockPos[names.size()];
-                for (int i = 0; i < names.size(); i++) t.driveLevers[i] = pos(file.getAsJsonObject("levers").get(names.get(i)));
-                final JsonObject drive = file.getAsJsonObject("drive");
-                for (final Drive which : Drive.values()) {
-                    final String key = which.name().toLowerCase(java.util.Locale.ROOT);
-                    if (!drive.has(key) && which == Drive.OFF) {
-                        // Not named: with the drives off every lever is at 0.
-                        t.manoeuvre(Drive.OFF, new int[names.size()]);
-                        continue;
-                    }
-                    if (!drive.has(key) && which.ordinary() != which) continue;
-                    if (!drive.has(key)) throw new IOException("the manoeuvre '" + key + "' is missing");
-                    final int[] values = new int[names.size()];
-                    for (final Map.Entry<String, JsonElement> lever : drive.getAsJsonObject(key).entrySet()) {
-                        final int index = names.indexOf(lever.getKey());
-                        if (index < 0) throw new IOException("the manoeuvre '" + key + "' names the lever '" + lever.getKey() + "', which is not among the levers");
-                        values[index] = lever.getValue().getAsInt();
-                    }
-                    t.manoeuvre(which, values);
+                if (!drive.has(key) && which.ordinary() != which) continue;
+                if (!drive.has(key)) throw new IOException("the manoeuvre '" + key + "' is missing");
+                final int[] values = new int[names.size()];
+                for (final Map.Entry<String, JsonElement> lever : drive.getAsJsonObject(key).entrySet()) {
+                    final int index = names.indexOf(lever.getKey());
+                    if (index < 0) throw new IOException("the manoeuvre '" + key + "' names the lever '" + lever.getKey() + "', which is not among the levers");
+                    values[index] = lever.getValue().getAsInt();
                 }
-                t.gentleAsOrdinary();
-                if (file.has("throttles")) {
-                    t.throttle = new boolean[names.size()];
-                    for (final JsonElement each : file.getAsJsonArray("throttles")) {
-                        final int index = names.indexOf(each.getAsString());
-                        if (index < 0) throw new IOException("the throttle '" + each.getAsString() + "' is not among the levers");
-                        t.throttle[index] = true;
-                    }
-                }
-            } else {
-                final Map<BlockPos, String> machinery = new LinkedHashMap<>(t.parts);
-                t.readBlocks(file);
-                // The devices the autopilot works, and what turns between them, have to be exactly where they were measured.
-                for (final Map.Entry<BlockPos, String> part : machinery.entrySet()) {
-                    final String was = part.getValue(), is = t.parts.get(part.getKey());
-                    final boolean device = was.startsWith("create:") && !was.endsWith("_seat") || was.startsWith("simulated:") || was.startsWith("aeronautics:") && !was.endsWith("_envelope");
-                    if (device && !was.equals(is)) throw new IOException("the device " + was + " at " + part.getKey().toShortString() + " is " + is);
+                t.manoeuvre(which, values);
+            }
+            t.gentleAsOrdinary();
+            if (file.has("throttles")) {
+                t.throttle = new boolean[names.size()];
+                for (final JsonElement each : file.getAsJsonArray("throttles")) {
+                    final int index = names.indexOf(each.getAsString());
+                    if (index < 0) throw new IOException("the throttle '" + each.getAsString() + "' is not among the levers");
+                    t.throttle[index] = true;
                 }
             }
             t.readHandling(file);
@@ -559,11 +455,11 @@ public final class AircraftType {
         }
     }
 
-    /** The designs that come as files in the jar (airline_aircraft/), in the order they are offered after the first design. */
-    private static final String[] BUNDLED = {"whitesail", "koeda", "stratus", "oonagi"};
+    /** The designs that come as files in the jar (airline_aircraft/), in the order they are offered. */
+    private static final String[] BUNDLED = {"koeda", "stratus", "oonagi"};
     /**
      * The design an airfield gets when nothing else is asked for (the user's ruling of 2026-10-14: the fast one; larger
-     * and better ones are to follow it). It is offered first. If its file cannot be read, the first design takes its place.
+     * and better ones are to follow it). It is offered first.
      * Koeda since 2026-10-15 (the user's ruling: "こかぜと入れ替える"; kokaze itself is gone from 0.12.0: no backward
      * compatibility before 1.0.0, the user's ruling of 2026-10-16).
      */
@@ -601,9 +497,6 @@ public final class AircraftType {
         return moving = java.util.Collections.unmodifiableSet(found);
     }
 
-    /** The design that is made in code and always there; an aircraft of a save that does not name its design is one of these. */
-    public static final String FIRST = "small";
-
     /**
      * For trying a design out before it is put into the mod: the path of a design file, given to the server as the
      * system property {@code airline.design}. It is offered under the file's name (without ".json") like any other.
@@ -618,11 +511,9 @@ public final class AircraftType {
 
     private static Map<String, AircraftType> all() {
         final Map<String, AircraftType> all = new LinkedHashMap<>();
-        final AircraftType first = small();
-        if (first.fault() != null) throw new IllegalStateException("aircraft design '" + first.name + "': " + first.fault());
         final AircraftType standard = bundled(STANDARD);
-        if (standard != null) all.put(standard.name, standard);
-        all.put(first.name, first);
+        if (standard == null) throw new IllegalStateException("the standard aircraft design '" + STANDARD + "' could not be read (see the log)");
+        all.put(standard.name, standard);
         for (final String name : BUNDLED) {
             if (all.containsKey(name)) continue;
             final AircraftType type = bundled(name);
@@ -642,9 +533,11 @@ public final class AircraftType {
         return java.util.Collections.unmodifiableMap(all);
     }
 
-    /** The design of that name; an unknown name (a design that was taken out of the mod) gives the first design. */
+    /** The design of that name (one that is not in the mod is a fault: an aircraft of it does not fly). */
     public static AircraftType of(String name) {
-        return ALL.getOrDefault(name, DEFAULT);
+        final AircraftType type = ALL.get(name);
+        if (type == null) throw new IllegalArgumentException("there is no aircraft design '" + name + "' in this version of the mod");
+        return type;
     }
 
     /** The translation key of the design's name as players see it. */

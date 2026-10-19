@@ -206,18 +206,13 @@ public final class RouteRules {
         return kind == RouteNetwork.Kind.AIRFIELD ? airfieldReach(tier) : reach(tier);
     }
 
-    /**
-     * The settings are taken as they are, but never lower than the small aircraft needs (2026-10-15: it became 10 high, and
-     * a world's settings file still says 8 and 16, the numbers that were right for 9 high): over a buoy, the bottom of the
-     * tube 2 blocks above the buoy's block; over a pad, a block of air between a line and a small aircraft standing on
-     * another pad ({@link #padClearance}).
-     */
+    /** As the settings say (what is too low for the small aircraft is told in the settings' comments). */
     public static int waypointHeight() {
-        return Math.max(WAYPOINT_HEIGHT.get(), (int) Math.ceil(tubeHalfHeight() + 1.5));
+        return WAYPOINT_HEIGHT.get();
     }
 
     public static int airfieldWaypointHeight() {
-        return Math.max(AIRFIELD_WAYPOINT_HEIGHT.get(), (int) Math.ceil(padClearance() + 0.5));
+        return AIRFIELD_WAYPOINT_HEIGHT.get();
     }
 
     public static int lineRaiseMax() {
@@ -246,8 +241,8 @@ public final class RouteRules {
     }
 
     /**
-     * The outline of the one aircraft design there is so far (aircraft 2, geared 2:1, long deck: 9 long, 7 wide, 9 high).
-     * When aircraft types become data these two numbers come from the type; the network is verified for this one design only.
+     * The outline the small aircraft's tube is made for: 9 long and 7 wide (see below), and half the height of a small
+     * aircraft.
      */
     private static final double AIRCRAFT_HALF_DIAGONAL = Math.hypot(4.5, 3.5);
     private static final double AIRCRAFT_HALF_HEIGHT = 5.0;     // 10 high since 2026-10-15 (koeda); 4.5 before
@@ -367,11 +362,6 @@ public final class RouteRules {
     /** ... for an aircraft of class {@code flying} over a pad where one of class {@code parked} may stand. */
     public static double padClearance(ShipClass parked, ShipClass flying) {
         return 1.0 + parked.height + 1.0 + flying.halfHeight();
-    }
-
-    /** Whether a line (or a piece of one) comes too low over the landing pad at {@code pad}. The line's own ends are not asked about. */
-    public static boolean grazes(Tube line, BlockPos pad) {
-        return line.lowestNear(pad.getX() + 0.5, pad.getZ() + 0.5, padReach()) < pad.getY() + padClearance();
     }
 
     /** ... for aircraft of class {@code flying}, over a pad where one of class {@code parked} may stand. */

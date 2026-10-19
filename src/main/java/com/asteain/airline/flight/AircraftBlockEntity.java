@@ -46,8 +46,7 @@ public final class AircraftBlockEntity extends BlockEntity {
     /** The tank: how many ticks one engine can still burn of what is in it (an aircraft has two engines). See {@link Fuel}. */
     /**
      * Fuel already taken out of the store for the engines and not burnt yet (ticks of one engine): what the engines give
-     * back when the aircraft lands, and what was in the tank before there was a store. Everything the aircraft has to
-     * burn is this and what the store holds ({@link Fuel#total}).
+     * back when the aircraft lands. Everything the aircraft has to burn is this and what the store holds ({@link Fuel#total}).
      */
     public long fuel;
     /** The fuel store (the user's ruling of 2026-10-14: fuel is kept in the inventory of the aircraft's own block). */
@@ -255,16 +254,12 @@ public final class AircraftBlockEntity extends BlockEntity {
         at = getPos(tag, "at");
         fuel = tag.getLong("fuel");
         store.clearContent();
-        if (tag.contains("fuelStore")) store.fromTag(tag.getList("fuelStore", net.minecraft.nbt.Tag.TAG_COMPOUND), registries);
+        store.fromTag(tag.getList("fuelStore", net.minecraft.nbt.Tag.TAG_COMPOUND), registries);
         fetch = tag.getBoolean("fetch");
         yard = getPos(tag, "yard");
         workOrder = tag.getInt("workOrder");
         restOffset = tag.getDouble("restOffset");
-        try {
-            phase = Phase.valueOf(tag.getString("phase"));
-        } catch (IllegalArgumentException unknown) {
-            phase = Phase.PARKED;
-        }
+        phase = Phase.valueOf(tag.getString("phase"));
         route = new ArrayList<>();
         for (final long point : tag.getLongArray("route")) route.add(BlockPos.of(point));
         leg = tag.getInt("leg");

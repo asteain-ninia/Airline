@@ -112,7 +112,7 @@ final class BenchSuite {
 
         void start() {
             String file = System.getProperty(AircraftType.TRIAL_PROPERTY, "");
-            String name = file.isEmpty() ? System.getProperty("airlinetest.aircraft", "small") : Path.of(file).getFileName().toString().replaceFirst("\\.json$", "");
+            String name = file.isEmpty() ? System.getProperty("airlinetest.aircraft", com.asteain.airline.flight.AircraftType.STANDARD) : Path.of(file).getFileName().toString().replaceFirst("\\.json$", "");
             report.addProperty("design", name);
             report.addProperty("ok", false);
             if (AircraftType.trialFault != null) {

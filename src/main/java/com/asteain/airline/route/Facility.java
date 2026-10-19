@@ -62,7 +62,7 @@ public enum Facility {
         return this == SMALL_AIRFIELD ? ShipClass.SMALL : this == MEDIUM_AIRFIELD ? ShipClass.MEDIUM : ShipClass.LARGE;
     }
 
-    /** Whether aircraft of this class are built here (provisional: what an airfield can berth; an anchorage builds none). */
+    /** Whether aircraft of this class are built here: what an airfield can berth; an anchorage builds none (the user's ruling of 2026-10-19). */
     public boolean builds(ShipClass ship) {
         return this != ANCHORAGE && berths(ship);
     }
@@ -105,9 +105,8 @@ public enum Facility {
         return this == ANCHORAGE ? ANCHORAGE_BERTH : new BlockPos(1 + 2 * padHalfSize + 5, -1, -(padHalfSize + 8));
     }
 
-    /** Read from a save; an unknown or missing name is the small airfield (saves from before there were others). */
+    /** Read from a save: the small airfield is written as no name (a save leaves the name out for it). */
     public static Facility of(String name) {
-        for (final Facility f : values()) if (f.name().equals(name)) return f;
-        return SMALL_AIRFIELD;
+        return name.isEmpty() ? SMALL_AIRFIELD : valueOf(name);
     }
 }

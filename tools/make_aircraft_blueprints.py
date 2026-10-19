@@ -31,8 +31,6 @@ OUT = os.path.join(ROOT, "src", "main", "resources", "blueprints", "airline", "a
 
 def designs():
     out = {}
-    with open(os.path.join(ROOT, "tools", "aircraft_small.json"), encoding="utf-8") as f:
-        out["small"] = json.load(f)["blocks"]
     for path in sorted(glob.glob(os.path.join(ROOT, "src", "main", "resources", "airline_aircraft", "*.json"))):
         with open(path, encoding="utf-8") as f:
             out[os.path.splitext(os.path.basename(path))[0]] = json.load(f)["blocks"]

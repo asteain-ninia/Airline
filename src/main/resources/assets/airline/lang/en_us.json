@@ -1,4 +1,5 @@
 {
+  "fml.menu.mods.info.description.airline": "Air transport between MineColonies colonies, with Create Aeronautics airships. A colony builds airfields (small, medium and large) and anchorages; an airfield builds its aircraft of the classes it can take from parts the colony supplies, and its pilot flies them on a timetable, carrying a warehouse's surplus to the colonies that want it. Routes run between air buoys and airfields and are checked for obstacles before they are flown. The visitors of a colony's tavern arrive with the aircraft. Flying needs Sable, Create Aeronautics and ColonyPatch Server.",
   "block.airline.blockhutairfield": "Small Airfield",
   "block.minecolonies.blockhutairfield": "Small Airfield",
   "com.airline.building.airfield": "Small Airfield",
@@ -49,8 +50,6 @@
   "commands.airline.flight.status.fuel": "  fuel: %s minutes of flight in the tank",
   "commands.airline.aircraft.design.first": "%s: %s (used when no design is named)",
   "commands.airline.aircraft.design": "%s: %s",
-  "aircraft.airline.small": "Small aircraft",
-  "aircraft.airline.whitesail": "Packet 'White Sail'",
   "aircraft.airline.koeda": "Packet 'Koeda'",
   "aircraft.airline.stratus": "Medium packet 'Maruta'",
   "aircraft.airline.oonagi": "Large packet 'Oonagi'",

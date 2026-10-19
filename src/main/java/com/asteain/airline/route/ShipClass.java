@@ -46,10 +46,10 @@ public enum ShipClass {
         return name().toLowerCase(Locale.ROOT);
     }
 
-    /** Read from a data file; a missing or unknown name is a small aircraft. */
+    /** Read from a design file ("small", "medium", "large"; a design that does not say is small). */
     public static ShipClass of(String key) {
         for (final ShipClass c : values()) if (c.key().equals(key)) return c;
-        return SMALL;
+        throw new IllegalArgumentException("no class '" + key + "' (small, medium or large)");
     }
 
     public static ShipClass smaller(ShipClass a, ShipClass b) {
