@@ -157,6 +157,12 @@ public final class ColonyRoutes extends SavedData {
     /** Why a line may not be flown by this class: something in the way (one place), a pad it crosses, or not looked at yet. */
     private static Component why(ServerLevel level, RouteNetwork net, RouteNetwork.Edge edge, ShipClass ship, MutableComponent name) {
         // (What keeps this class off the line comes first: a line that is still being looked at may be closed to it already.)
+        // Higher up than the class can climb (2026-11-03): where the line runs, and how high the class goes.
+        if (edge.tooHigh(ship)) {
+            final BlockPos middle = BlockPos.containing((edge.a.getX() + edge.b.getX()) / 2.0, edge.height(), (edge.a.getZ() + edge.b.getZ()) / 2.0);
+            final double ceiling = net.ceiling(ship);
+            return Component.translatable(STATUS + "too_high", name, (int) Math.ceil(edge.height()), Double.isInfinite(ceiling) ? "?" : String.valueOf((int) ceiling), at(middle));
+        }
         // A landing pad on the way that the line would have to be raised too far to pass over (for the small class, or for this class).
         final BlockPos pad = edge.barredBy() != null ? edge.barredBy() : edge.barredFrom() != null && ship.atLeast(edge.barredFrom()) ? edge.barredFromAt() : null;
         if (pad != null) {

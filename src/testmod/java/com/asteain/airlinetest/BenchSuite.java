@@ -480,6 +480,12 @@ final class BenchSuite {
                     if (balloon != null) {
                         put("hotAir", balloon[0]);
                         put("room", balloon[2]);
+                        // How thin the air may get: lift goes with the pressure, and the burners' dials are turned up by as much
+                        // as it is thinner, up to what they give at most and the balloon holds.
+                        type.benchAir = trial.air();
+                        type.thinnestAir = type.benchAir * balloon[0] / Math.max(1.0, Math.min(balloon[2], (double) AircraftType.BURNER_MOST * type.burners.length));
+                        put("benchAir", type.benchAir);
+                        put("thinnestAir", type.thinnestAir);
                     }
                     type.hoverLever = sum / age;
                     type.parkedLever = (int) Math.floor(type.hoverLever);
@@ -992,6 +998,8 @@ final class BenchSuite {
             h.addProperty("leanPerBlock", round(type.leanPerBlock));
             h.addProperty("maxLean", round(type.maxLean));
             h.addProperty("hoverLever", round(type.hoverLever));
+            h.addProperty("benchAir", Math.round(type.benchAir * 1.0e4) / 1.0e4);
+            h.addProperty("thinnestAir", Math.round(type.thinnestAir * 1.0e4) / 1.0e4);
             if (heightScale < 0.999) {
                 h.addProperty("heightGain", round(type.heightGain));
                 h.addProperty("heightDamping", round(type.heightDamping));

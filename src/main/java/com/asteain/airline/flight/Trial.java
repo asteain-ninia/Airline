@@ -187,6 +187,11 @@ public final class Trial {
         return lever == null ? -1 : (int) Craft.get(lever, "state");
     }
 
+    /** Sable's air pressure where the aircraft's own block is. */
+    public double air() {
+        return c.air();
+    }
+
     /** The balloon of a burner: {hot air in it, hot air it is being filled to, room, lift}; null when the burner sees no balloon. */
     @Nullable
     public double[] balloon(int burner) {

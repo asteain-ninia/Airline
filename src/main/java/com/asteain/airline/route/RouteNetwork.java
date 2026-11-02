@@ -2,6 +2,7 @@ package com.asteain.airline.route;
 
 import com.asteain.airline.Airline;
 import com.asteain.airline.colony.AirLinks;
+import com.asteain.airline.flight.AircraftType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -15,6 +16,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import org.jetbrains.annotations.NotNull;
@@ -150,8 +152,15 @@ public final class RouteNetwork extends SavedData {
          * the classes up to this one. Not saved: worked out from the points.
          */
         private ShipClass serves = ShipClass.SMALL;
+        /**
+         * The classes (bit 1 << ordinal) an aircraft of which was found unable to climb to this line's height although the
+         * ceiling worked out for its class lies higher ({@link #reportTooHigh}). Cleared when the line's height changes. Not saved.
+         */
+        private int stalled;
+        private final RouteNetwork network;
 
-        private Edge(BlockPos a, BlockPos b) {
+        private Edge(RouteNetwork network, BlockPos a, BlockPos b) {
+            this.network = network;
             this.a = a;
             this.b = b;
         }
@@ -189,10 +198,17 @@ public final class RouteNetwork extends SavedData {
         @Nullable public BlockPos barredFromAt() { return barredFromAt; }
         /** The smallest class kept off this line although the small one may fly it (something in the way, or too low over a pad); null for none. */
         @Nullable public ShipClass closedFrom() { return blockedFrom == null ? barredFrom : barredFrom == null ? blockedFrom : ShipClass.smaller(blockedFrom, barredFrom); }
-        /** Whether an aircraft of this class may fly this line (not blocked, made for that class, nothing in that class's way). */
+        /** Whether an aircraft of this class may fly this line (not blocked, made for that class, nothing in that class's way, not too high for it). */
         public boolean opens(ShipClass ship) {
             final ShipClass closed = closedFrom();
-            return state != State.BLOCKED && serves.atLeast(ship) && (closed == null || ship.ordinal() < closed.ordinal());
+            return state != State.BLOCKED && serves.atLeast(ship) && (closed == null || ship.ordinal() < closed.ordinal()) && !tooHigh(ship);
+        }
+        /**
+         * Whether the line lies higher than aircraft of this class can climb: above the class's ceiling ({@link #ceiling}),
+         * or an aircraft of the class was found unable to climb to it.
+         */
+        public boolean tooHigh(ShipClass ship) {
+            return height() > network.ceiling(ship) || (stalled & 1 << ship.ordinal()) != 0;
         }
         @Nullable public BlockPos blockedAt() { return blockedAt; }
         public boolean hasUnseenParts() { return gaps; }
@@ -336,13 +352,71 @@ public final class RouteNetwork extends SavedData {
     // ---- access -------------------------------------------------------------------------------------------
 
     public static RouteNetwork get(ServerLevel level) {
-        return level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(RouteNetwork::new, RouteNetwork::load), FILE);
+        return withCeilings(level, level.getDataStorage().computeIfAbsent(new SavedData.Factory<>(RouteNetwork::new, RouteNetwork::load), FILE));
     }
 
     /** The network of this dimension if there is one already (nothing is created). */
     @Nullable
     public static RouteNetwork find(ServerLevel level) {
-        return level.getDataStorage().get(new SavedData.Factory<>(RouteNetwork::new, RouteNetwork::load), FILE);
+        final RouteNetwork network = level.getDataStorage().get(new SavedData.Factory<>(RouteNetwork::new, RouteNetwork::load), FILE);
+        return network == null ? null : withCeilings(level, network);
+    }
+
+    // ---- ceilings -----------------------------------------------------------------------------------------
+
+    /**
+     * For each class, the highest a line may lie for its aircraft to climb to it (the height of the aircraft's own block):
+     * where the air is still as thick as every design of the class needs ({@link AircraftType#thinnestAirFor}). Infinite
+     * when that is not known (no design of the class measured, or no Sable: nothing flies then). Worked out once for the
+     * dimension; not saved.
+     */
+    @Nullable private double[] ceilings;
+
+    private static RouteNetwork withCeilings(ServerLevel level, RouteNetwork network) {
+        if (network.ceilings != null) return network;
+        final double[] ceilings = new double[ShipClass.values().length];
+        for (final ShipClass ship : ShipClass.values()) {
+            final double need = AircraftType.thinnestAirFor(ship);
+            ceilings[ship.ordinal()] = Double.isNaN(need) || !ModList.get().isLoaded(Airline.SABLE_ID) ? Double.POSITIVE_INFINITY : SableOnly.ceiling(level, need);
+        }
+        network.ceilings = ceilings;
+        return network;
+    }
+
+    /** The highest a line may lie for aircraft of this class (see {@link #ceilings}). */
+    public double ceiling(ShipClass ship) {
+        return ceilings == null || !ceilingsKept ? Double.POSITIVE_INFINITY : ceilings[ship.ordinal()];
+    }
+
+    private static boolean ceilingsKept = true;
+
+    /** For the checks: lines higher than the ceilings are offered all the same (so that an aircraft finds out in the air). */
+    public static void ceilingsForChecks(boolean kept) {
+        ceilingsKept = kept;
+    }
+
+    /**
+     * An aircraft of this class could not climb to the line's height (its balloon full and the line still above it): the
+     * line is kept from the class until its height changes, or the server is started again.
+     */
+    public void reportTooHigh(Edge edge, ShipClass ship) {
+        edge.stalled |= 1 << ship.ordinal();
+        linksDue = true;
+        lampsDue.add(edge.a);
+        lampsDue.add(edge.b);
+    }
+
+    /** Only loaded when Sable is installed. */
+    private static final class SableOnly {
+        /** The highest whole height (from the top of the dimension down) where the air pressure is at least {@code need}. */
+        static double ceiling(ServerLevel level, double need) {
+            final org.joml.Vector3d at = new org.joml.Vector3d();
+            for (int y = level.getMaxBuildHeight(); y >= level.getMinBuildHeight(); y--) {
+                at.set(0.0, y, 0.0);
+                if (dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData.getAirPressure(level, at) >= need) return y;
+            }
+            return level.getMinBuildHeight() - 1;
+        }
     }
 
     public Collection<Node> nodes() {
@@ -427,8 +501,11 @@ public final class RouteNetwork extends SavedData {
         edge.base = Math.max(waypoint(edge.a).y, waypoint(edge.b).y);
         edge.over = String.valueOf(waypoint(edge.a)) + waypoint(edge.b);
         edge.byClass = build(edge, edge.lift);
+        final double was = edge.tube == null ? Double.NaN : edge.tube.from.y;
         edge.tube = edge.byClass.get(0).get(0);
         edge.spaces = edge.byClass.get(edge.byClass.size() - 1);
+        // At another height the line is another matter for the aircraft that could not climb to it.
+        if (edge.tube.from.y != was) edge.stalled = 0;
         return !(String.valueOf(edge.serves) + edge.tube.from + edge.tube.to + edge.over).equals(before);
     }
 
@@ -469,6 +546,10 @@ public final class RouteNetwork extends SavedData {
         edge.lift = lift;
         shape(edge);
         index(edge, true);
+        // (Raised over what is in its way, it may now lie too high for a class.)
+        linksDue = true;
+        lampsDue.add(edge.a);
+        lampsDue.add(edge.b);
         setDirty();
     }
 
@@ -590,7 +671,7 @@ public final class RouteNetwork extends SavedData {
         final Pair pair = Pair.of(x, y);
         Edge edge = edges.get(pair);
         if (edge != null) return edge;
-        edge = new Edge(pair.a(), pair.b());
+        edge = new Edge(this, pair.a(), pair.b());
         shape(edge);
         edges.put(pair, edge);
         around.computeIfAbsent(edge.a, p -> new ArrayList<>()).add(edge);

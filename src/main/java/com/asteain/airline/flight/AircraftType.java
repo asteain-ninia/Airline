@@ -242,6 +242,38 @@ public final class AircraftType {
      * turning into the next line), and the seconds it takes to be placed over a pad.
      */
     public double climbSpeed = 0.25, pointSeconds = 15.0, alignSeconds = 25.0;
+    /**
+     * Sable's air pressure (1 at the sea) where the design was measured hovering on the test bench: its burners' dials are
+     * turned up by as much as the air is thinner than this ({@link Craft#dialToAir}). NaN: not measured, the dials stay.
+     */
+    public double benchAir = Double.NaN;
+    /**
+     * The thinnest air in which the burners at full lever, their dials turned up as far as they go, just carry the aircraft:
+     * {@link #benchAir} x the hot air it hovered with / the most hot air it can get (the smaller of its balloon's room and
+     * what its burners give at most). Lift goes with the pressure, so higher up than where the pressure is this (and a
+     * margin: {@link #AIR_MARGIN}) it cannot climb (2026-11-03, the user's question "船の最大高度以上のとこに飛行場あったら").
+     * Measured by the test bench; NaN: not measured (a design under trial), no ceiling is known.
+     */
+    public double thinnestAir = Double.NaN;
+
+    /** The most a burner's dial goes to (Aeronautics' setting hot_air_burner_max, as it comes). */
+    public static final int BURNER_MOST = 500;
+    /** The ceiling leaves this much of the full lever's lift unused: enough over the weight to climb to it and keep there. */
+    public static final double AIR_MARGIN = 0.9;
+
+    /**
+     * The thinnest air every design of a class can still climb in (with the margin); NaN when no design of the class was
+     * measured. Lines higher up than where the air is this thin are not flown by the class.
+     */
+    public static double thinnestAirFor(com.asteain.airline.route.ShipClass ship) {
+        double worst = Double.NaN;
+        for (final AircraftType type : ALL.values()) {
+            if (type.shipClass != ship || Double.isNaN(type.thinnestAir)) continue;
+            final double need = type.thinnestAir / AIR_MARGIN;
+            if (Double.isNaN(worst) || need > worst) worst = need;
+        }
+        return worst;
+    }
 
     private AircraftType(String name) {
         this.name = name;
@@ -448,7 +480,10 @@ public final class AircraftType {
     private static AircraftType bundled(String name) {
         try (java.io.InputStream in = AircraftType.class.getResourceAsStream("/airline_aircraft/" + name + ".json")) {
             if (in == null) throw new IOException("no such file in the jar");
-            return read(name, new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
+            final AircraftType type = read(name, new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8));
+            // A design of the mod has its ceiling measured (a design under trial may not have it yet).
+            if (Double.isNaN(type.thinnestAir) || Double.isNaN(type.benchAir)) throw new IOException("its handling has no thinnestAir or benchAir (the test bench measures them)");
+            return type;
         } catch (IOException e) {
             org.slf4j.LoggerFactory.getLogger("Airline").error("[Airline/flight] the aircraft design '{}' could not be read and is left out: {}", name, e.getMessage());
             return null;

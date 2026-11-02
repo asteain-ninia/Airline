@@ -108,6 +108,13 @@ final class FlightController {
      */
     /** Seated and waiting for the air to be free, an aircraft looks again this often (ticks). */
     private static final int AIR_LOOK = 40;
+    /**
+     * Climbing to a line, an aircraft that has not come {@link #CLIMB_GAIN} blocks higher in this many ticks while the line
+     * is still more than a block above it cannot climb to it (2026-11-03: a line above where its burners can carry it).
+     * Filling the balloon at full lever takes 20 to 30 seconds; so does the last of a climb near the ceiling.
+     */
+    private static final int CLIMB_STUCK_TICKS = 900;
+    private static final double CLIMB_GAIN = 0.3;
 
     private static final Map<UUID, AircraftBlockEntity> LOADED = new HashMap<>();
 
@@ -164,6 +171,9 @@ final class FlightController {
         /** The lever moves the pilot was last shown making (see the arm in the tick), and when. */
         int writesSeen, swungAt;
         int shipHolds;
+        /** Climbing to a line: the highest it has come so far, and the ticks since it last came higher by a little (see {@link #stalled}). */
+        double climbBest = Double.NEGATIVE_INFINITY;
+        int climbStuck;
         /** Lines it found another ship on and goes round, until it has flown a line to its end or landed. */
         final java.util.Set<Edge> avoid = new java.util.HashSet<>();
 
@@ -1379,12 +1389,18 @@ final class FlightController {
         final Craft c = rt.craft;
         final Autopilot ap = rt.pilot;
         final boolean decide = rt.age % c.type.period == 0;
+        if (decide) c.dialToAir();
+        if (be.phase != Phase.CLIMB && be.phase != Phase.ALTITUDE) {
+            rt.climbBest = Double.NEGATIVE_INFINITY;
+            rt.climbStuck = 0;
+        }
         switch (be.phase) {
             case CLIMB -> {
                 final double line = legHeight(net, be.route, be.leg);
                 ap.climbToward(line);
                 ap.tick();
                 if (ap.atHeight(line)) startLeg(be, rt, net);
+                else if (stalled(rt, line)) tooHigh(be, rt, net, line);
             }
             case ALTITUDE -> {
                 // Over a point, up or down to the height of the line ahead (set by startLeg); down as slowly as onto a pad.
@@ -1417,6 +1433,7 @@ final class FlightController {
                 else ap.altTarget = Math.max(line, ap.altTarget - c.type.fastDescentRate / 20.0);
                 ap.tick();
                 if (ap.atHeight(line)) cruise(be, rt);
+                else if (stalled(rt, line)) tooHigh(be, rt, net, line);
             }
             case CRUISE -> {
                 // The height follows the line from one passing point to the next.
@@ -1665,6 +1682,42 @@ final class FlightController {
         if (!rt.toldWaiting) tell(be, "flight.note.waiting");
         rt.toldWaiting = true;
         replan(be, rt, HOLD_TICKS);
+    }
+
+    /**
+     * Whether the aircraft cannot climb to {@code line}: still more than a block below it, it has not come
+     * {@link #CLIMB_GAIN} higher for {@link #CLIMB_STUCK_TICKS} ticks. Close to the line (or above it) the count starts again.
+     */
+    private static boolean stalled(Runtime rt, double line) {
+        final double y = rt.craft.pos().y;
+        if (line - y <= 1.0 || y > rt.climbBest + CLIMB_GAIN) {
+            rt.climbBest = line - y <= 1.0 ? Double.NEGATIVE_INFINITY : y;
+            rt.climbStuck = 0;
+            return false;
+        }
+        return ++rt.climbStuck >= CLIMB_STUCK_TICKS;
+    }
+
+    /**
+     * It cannot climb to the line ahead (its burners at full do not carry it that high): the line is kept from its class
+     * ({@link RouteNetwork#reportTooHigh}), and it stays at this height and goes another way from the point it is over, or
+     * back ({@link #reroute}; over the pad it took off from, that is down onto it again).
+     */
+    private static void tooHigh(AircraftBlockEntity be, Runtime rt, RouteNetwork net, double line) {
+        final Craft c = rt.craft;
+        final Edge ahead = be.leg + 1 < be.route.size() ? net.edge(be.route.get(be.leg), be.route.get(be.leg + 1)) : null;
+        if (ahead != null) net.reportTooHigh(ahead, shipClass(be));
+        LOGGER.warn("[Airline/flight] the aircraft at {} cannot climb to the line at y = {} (air pressure {} here); it goes another way or back.",
+                c.pos(), Math.round(line), String.format(java.util.Locale.ROOT, "%.3f", c.air()));
+        tell(be, "flight.note.too_high", (int) Math.floor(c.pos().y), (int) Math.ceil(line));
+        rt.climbBest = Double.NEGATIVE_INFINITY;
+        rt.climbStuck = 0;
+        rt.pilot.altTarget = c.pos().y;
+        rt.from = overPoint(net, be.route.get(be.leg), c.pos().y);
+        final boolean before = be.cancelled;
+        reroute(be, rt, net);
+        // (Called off by it: the colony is told why when the aircraft is back.)
+        if (be.cancelled && !before) be.cancelNote = "flight.note.cancelled_too_high";
     }
 
     /** Back at the point behind the blocked line: another way to the destination, else home, else wait here. */

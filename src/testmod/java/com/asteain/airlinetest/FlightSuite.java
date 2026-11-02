@@ -287,6 +287,7 @@ final class FlightSuite {
         com.asteain.airline.flight.Cargo.fetchingForChecks(scene.equals("fetch"));
         switch (scene) {
             case "trip" -> trip(s, level);
+            case "ceiling" -> ceiling(s, level);
             case "yard" -> yard(s, level);
             case "fuel" -> fuel(s, level);
             case "fetch" -> fetch(s, level);
@@ -1531,6 +1532,70 @@ final class FlightSuite {
     }
 
     // ---- round trip, blocked lines ----------------------------------------------------------------------------
+
+    // ---- a pad higher up than the aircraft can climb (2026-11-03) ------------------------------------------------
+
+    /**
+     * Pad C lies so high that its line runs above the ceiling of the small class: the network does not offer it, and the
+     * order is refused. Then the ceilings are switched off for the checks and the aircraft is sent all the same: it climbs
+     * until its burners at full no longer carry it higher, finds out, keeps the line from its class and comes back down
+     * onto pad A.
+     */
+    private static void ceiling(Script s, ServerLevel level) {
+        RouteNetwork net = RouteNetwork.get(level);
+        Field a = new Field(HUT_A);
+        addField(s, level, a, "ceiling");
+        BlockPos[] padC = new BlockPos[1];
+        double[] peak = {Double.NEGATIVE_INFINITY};
+        s.step("ceiling: the ceilings, and pad C just below the small class's", () -> {
+            for (int cx = -2; cx <= 6; cx++) for (int cz = -3; cz <= 1; cz++) { level.setChunkForced(cx, cz, true); level.getChunk(cx, cz); }
+            for (ShipClass ship : ShipClass.values()) s.note(String.format("OBS ceiling: %s climbs to y = %.0f", ship, net.ceiling(ship)));
+            s.soft("ceiling / every class has a ceiling below the top of the world", java.util.Arrays.stream(ShipClass.values()).allMatch(ship -> net.ceiling(ship) < level.getMaxBuildHeight()),
+                    java.util.Arrays.stream(ShipClass.values()).map(ship -> ship + " " + net.ceiling(ship)).toList().toString());
+            padC[0] = new BlockPos(80, (int) net.ceiling(ShipClass.SMALL) - 5, -10);
+            // (Nearly 200 blocks higher up: the checks' reach of 3 chunks does not go that far, the mod's own of 8 does.)
+            Fixture.airfieldReachChunks(8, 8, 8, 8, 8);
+            pad(level, padC[0], 0);
+            s.note(String.format("OBS ceiling: pad C at %s, %.0f blocks from pad A", padC[0].toShortString(), Math.sqrt(padC[0].distSqr(a.pad))));
+        });
+        s.until("ceiling: the line to pad C is looked at", () -> {}, () -> net.pending() == 0, 1200);
+        s.step("ceiling: the line to pad C is not offered", () -> {
+            Edge line = net.edge(a.pad, padC[0]);
+            s.soft("ceiling / the line to pad C runs above the small class's ceiling and is too high for it", line != null && line.height() > net.ceiling(ShipClass.SMALL) && line.tooHigh(ShipClass.SMALL) && !line.opens(ShipClass.SMALL),
+                    line == null ? "no line" : String.format("line at y = %.1f, %s, ceiling %.0f", line.height(), line.state(), net.ceiling(ShipClass.SMALL)));
+            s.soft("ceiling / there is no route to pad C", net.route(a.pad, padC[0], ShipClass.SMALL).isEmpty(), String.valueOf(net.route(a.pad, padC[0], ShipClass.SMALL)));
+            Flights.Answer sent = Flights.send(level, a.pad, padC[0], false, a.pilot);
+            s.soft("ceiling / the order is refused", !sent.ok(), sent.text().getString());
+        });
+        s.step("ceiling: ceilings off for the checks; the aircraft is sent all the same", () -> {
+            RouteNetwork.ceilingsForChecks(false);
+            Edge line = net.edge(a.pad, padC[0]);
+            s.soft("ceiling / without the ceilings the line is open", line != null && line.opens(ShipClass.SMALL), line == null ? "no line" : String.valueOf(line.state()));
+            watch(s, a, "ceiling");
+            s.monitor(() -> {
+                double[] r = Flights.readings(a.aircraft);
+                if (r != null) peak[0] = Math.max(peak[0], r[1]);
+            });
+            Flights.Answer sent = Flights.send(level, a.pad, padC[0], false, a.pilot);
+            s.soft("ceiling / the flight is ordered", sent.ok(), sent.text().getString());
+        });
+        s.until("ceiling: up, stuck, back down on pad A", () -> {}, () -> a.aircraft.phase == Phase.PARKED && a.clock > 100, 16000);
+        s.step("ceiling: result", () -> {
+            Edge line = net.edge(a.pad, padC[0]);
+            double[] r = Flights.readings(a.aircraft);
+            s.soft("ceiling / the aircraft stopped climbing below the line, and found out", peak[0] < line.height() - 1.0 && a.log.stream().noneMatch(l -> l.contains("-> CRUISE")),
+                    String.format("highest y = %.1f, line at y = %.1f", peak[0], line.height()));
+            s.soft("ceiling / it keeps the line from its class (even with the ceilings off)", line.tooHigh(ShipClass.SMALL) && !line.opens(ShipClass.SMALL), String.valueOf(line.state()));
+            s.soft("ceiling / it came back down onto pad A, within 1.5 of its middle", a.pad.equals(a.aircraft.at) && r != null && r[4] > 0 && r[6] <= 1.5, "at " + a.aircraft.at + " " + at(r));
+            s.soft("ceiling / the pilot is alive and off the aircraft", a.pilot.isAlive() && Boarding.state(a.pilot) == Boarding.State.NONE, "state " + Boarding.state(a.pilot));
+            s.soft("ceiling / the colony is told the line was too high", a.aircraft.note.contains("too high"), a.aircraft.note);
+            Fixture.airfieldReachChunks(3, 3, 3, 3, 3);
+            s.note(String.format("OBS ceiling: highest y = %.1f (small class's ceiling %.0f with the margin), %d ticks | %s", peak[0], net.ceiling(ShipClass.SMALL), a.clock, a.aircraft.note));
+            for (String l : a.log) if (l.contains("->")) s.note("OBS ceiling: " + l);
+            RouteNetwork.ceilingsForChecks(true);
+            s.clearMonitors();
+        });
+    }
 
     private static void trip(Script s, ServerLevel level) {
         RouteNetwork net = RouteNetwork.get(level);

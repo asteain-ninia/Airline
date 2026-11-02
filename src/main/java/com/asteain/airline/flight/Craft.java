@@ -325,6 +325,43 @@ final class Craft {
             final BlockEntity burner = level.getBlockEntity(inShip(type.burners[i]));
             if (burner != null) call(get(burner, "hotAirAmountBehaviour"), "setValue", type.burnerValues[i]);
         }
+        dialled = null;
+    }
+
+    /** What each burner's dial was last set to by {@link #dialToAir} (-1: not known); null: not since {@link #dial}. */
+    @Nullable private int[] dialled;
+
+    /** Sable's air pressure where the aircraft's own block is (1 at the sea; lift and thrust go with it). */
+    double air() {
+        final Vec3 p = pos();
+        return dev.ryanhcode.sable.physics.config.dimension_physics.DimensionPhysicsData.getAirPressure(level, new Vector3d(p.x, p.y, p.z));
+    }
+
+    /**
+     * Each burner's dial turned up by as much as the air is thinner than where the design was measured (down where it is
+     * thicker), so that a notch of the lever carries as much at every height and the height is held as it was measured
+     * (2026-11-03, the user's ruling: "高さに応じて上げる"). Never above what the burner gives or its balloon holds (hot air
+     * beyond the room is lost), nor below the design's own value where that is more already.
+     */
+    void dialToAir() {
+        if (Double.isNaN(type.benchAir)) return;
+        final double scale = type.benchAir / Math.max(0.01, air());
+        if (dialled == null) {
+            // (What the dials stand at is not known: after a start of the server they keep what they were last set to.)
+            dialled = new int[type.burners.length];
+            java.util.Arrays.fill(dialled, -1);
+        }
+        for (int i = 0; i < type.burners.length; i++) {
+            final BlockEntity burner = level.getBlockEntity(inShip(type.burners[i]));
+            if (burner == null) continue;
+            final Object balloon = call(burner, "getBalloon");
+            final double room = balloon != null && call(balloon, "getCapacity") instanceof Number n ? n.doubleValue() : 0.0;
+            final int most = Math.max(type.burnerValues[i], (int) Math.min(AircraftType.BURNER_MOST, room));
+            final int value = (int) Math.max(5, Math.min(most, Math.round(type.burnerValues[i] * scale)));
+            if (value == dialled[i]) continue;
+            call(get(burner, "hotAirAmountBehaviour"), "setValue", value);
+            dialled[i] = value;
+        }
     }
 
     // ---- reflection ---------------------------------------------------------------------------------------------

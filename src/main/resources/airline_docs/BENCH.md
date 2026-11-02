@@ -38,7 +38,7 @@ python tools/bench.py list                               これまでの札
 | `turning` | **操作ごとの、回る部品の一覧**(画面には出ない。`python tools/bench.py turning <札> ahead` のように見る)。`at` 位置(x y z)、`block`、`rpm`(符号つき)、`overstressed`(エンジンの容量を超えた)、`thrust`(プロペラだけ)。**`thrust` が正なら、そのプロペラは機体を `facing` の反対向きへ押し、負なら `facing` の向きへ押します。** 機械のつなぎ間違い(回っていない、逆に回る、切っても回る)は、ここで分かります |
 | `turningSummary` | 操作ごとの、回っている部品の数と、推力の大きさの合計 |
 | `climb` | `secondsUntilItFliesOff` 12 ブロック上の高さの近く(下 0.5〜上 1.75 ブロック、上下の速さ 毎秒 0.6 未満)に入るまでの秒数。**空路 MOD は、ここで航路を飛び始めます**(行き過ぎが抜けるのは、飛びながら)。`secondsUntilThere` 誤差 0.5・上下の速さ 0.2 以内に落ち着くまで(以前は、ここまで待ってから飛び始めていました。**2026-10-13 15:45 ごろに、自動操縦の決まりを上のとおりに変えました**)。`overshoot` 行き過ぎ(**1.75 を超えると、航路の管の天井に近すぎるので、落ちてくるまで待たされます**)。`targetRaisedPerSecond` 目標を上げた速さ(設計の `handling.climbRate`)。`secondsHeightLever` 1 秒ごとの [秒, 上がった高さ, バーナーのレバー] |
-| `hover` | `hoverLever` 高さを保っているときのレバーの平均(**9.5 以下に**)。`meanHeightError`・`heightSwing` 高さの誤差と揺れ。`meanNoseUp`・`noseUpFrom`・`noseUpTo` その 10 秒の間の、機首の上がり(度。**機首が下がっていれば負**。重心が、浮く力の中心より前にあると、機首が下がる: 重心の前後のずれ 0.10 で 4.5 度、0.13 で 5.7 度だった。**2 度以内を目指す**)。`hotAir`・`room` そのときの熱気と容量 |
+| `hover` | `hoverLever` 高さを保っているときのレバーの平均(**9.5 以下に**)。`meanHeightError`・`heightSwing` 高さの誤差と揺れ。`meanNoseUp`・`noseUpFrom`・`noseUpTo` その 10 秒の間の、機首の上がり(度。**機首が下がっていれば負**。重心が、浮く力の中心より前にあると、機首が下がる: 重心の前後のずれ 0.10 で 4.5 度、0.13 で 5.7 度だった。**2 度以内を目指す**)。`hotAir`・`room` そのときの熱気と容量。`benchAir` そこの気圧。`thinnestAir` バーナーを全開にし、設定値も上げきったとき(500 か容量の小さいほう)に支えられる一番薄い気圧(`benchAir` × `hotAir` ÷ その熱気)。この 2 つは `handling` にも書かれ、型のファイルに要ります |
 | `ahead` | `topSpeed` 最高の速さ。`secondsTo63Percent`・`secondsTo90Percent` 立ち上がり。`largestNoseUpOrDown` 前後の傾きの最大、`noseUpAtTheEnd` 巡航中の傾き(正が機首上げ)。`largestHeightError` 高さの乱れ。`turnedMeanwhile` 勝手に回った角度(左右のつり合い)。`secondsSpeedNoseUp` 1 秒ごとの [秒, 速さ, 機首上げ] |
 | `coast` | 推進を切ってから止まるまでの距離と時間 |
 | `astern` | 後進の最高の速さ |
@@ -75,5 +75,5 @@ python tools/bench.py list                               これまでの札
 
 - 村人が実際に歩いて乗り降りできるか(`tools/check.py` が、形だけ確かめます。本当の乗り降りは、納めていただいたあとに、こちらで確かめます)。
 - 降下と着陸、台の上での向き合わせ(自動操縦の旋回と位置合わせの組み合わせなので、`autopilot.turn`・`autopilot.place` が目安になります)。
-- 高い所(y = 200 以上)での浮く余裕(`hover.hoverLever` が 9.5 以下なら、足りる見込みです)。
+- 高い所(y = 200 以上)での浮く余裕(`hover.hoverLever` が 9.5 以下なら、足りる見込みです)。上がれる高さは、`hover.thinnestAir`(全開で支えられる一番薄い気圧。その 1 割増しの気圧の高さが上限)から計算で出します。実際に上限まで上がってはいません。
 - 建築士が 1 ブロックずつ建てられるか。
