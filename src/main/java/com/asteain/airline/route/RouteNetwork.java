@@ -380,6 +380,7 @@ public final class RouteNetwork extends SavedData {
             ceilings[ship.ordinal()] = Double.isNaN(need) || !ModList.get().isLoaded(Airline.SABLE_ID) ? Double.POSITIVE_INFINITY : SableOnly.ceiling(level, need);
         }
         network.ceilings = ceilings;
+        org.slf4j.LoggerFactory.getLogger("Airline").info("[Airline/route] the ceilings in {} (small, medium, large): {}", level.dimension().location(), java.util.Arrays.toString(ceilings));
         return network;
     }
 
