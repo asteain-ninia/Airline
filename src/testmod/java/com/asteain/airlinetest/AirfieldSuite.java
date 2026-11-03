@@ -679,6 +679,9 @@ final class AirfieldSuite {
             bp.setRotationMirror(RotationMirror.MIR_R90, level);
             AbstractBlockHut<?> hutBlock = Airline.AIRFIELD_HUT.get();
             ServerPlayer owner = (ServerPlayer) Fixture.owner(level);
+            // Ground under the floor (the two layers the blueprint keeps as they are): a turned blueprint once made them air (2026-11-03).
+            for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) for (int dy = -3; dy <= -2; dy++)
+                level.setBlockAndUpdate(mirrorPos.offset(dx, dy, dz), net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState());
             boolean ready = hutBlock.setup(owner, level, mirrorPos, bp, RotationMirror.MIR_R90, true, Airline.PACK_NAME, path2);
             s.check(ready, "the hut accepts the mirrored placement");
             Manager.addToQueue(new PlaceStructureOperation(new StructurePlacer(hutBlock.getStructureHandler(level, mirrorPos, bp, RotationMirror.MIR_R90, true)), owner));
@@ -726,6 +729,10 @@ final class AirfieldSuite {
             s.soft("mirrored / the heading an aircraft rests in points away from the hut, and both pads are on the network with it", heading % 90 == 0 && away && nodes, seen.toString());
             s.soft("mirrored / the mirror matters: the pads are not where a building that was only turned would have them", !field.pad().equals(RouteRules.pad(mirrorPos, RotationMirror.MIR_R90.rotation())),
                     "mirrored " + field.pad().toShortString() + ", only turned " + RouteRules.pad(mirrorPos, RotationMirror.MIR_R90.rotation()).toShortString());
+            int ground = 0;
+            for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) for (int dy = -3; dy <= -2; dy++)
+                if (level.getBlockState(mirrorPos.offset(dx, dy, dz)).is(net.minecraft.world.level.block.Blocks.DIRT)) ground++;
+            s.soft("mirrored / the ground under the floor is kept (98 blocks of dirt under the hut)", ground == 98, ground + " of 98");
         });
 
         s.step("pilot walked to the airfield", () -> {

@@ -452,7 +452,9 @@ def design(mod_id="airline", level=1):
 PIT_LIFT = 2
 PIT_FROM_PAD = (0, 3)
 PIT_LEVEL = 3
-VOID = "minecraft:structure_void"
+# 床の下の 2 段の、いまの地面をそのまま残す印は Structurize の置き換えの印(2026-11-03)。minecraft:structure_void は
+# 回して置くと空気に変わり(Structurize の Blueprint.setRotationMirrorRelative が写さない)、建築家が地面を掘っていた。
+KEEP = "structurize:blocksubstitution"
 PIT_WALL = "minecraft:stone_bricks"
 
 
@@ -474,7 +476,7 @@ def with_pits(level, made):
     for x in range(SIZE_X):
         for z in range(SIZE_Z):
             for y in range(PIT_LIFT):
-                out[(x, y, z)] = VOID
+                out[(x, y, z)] = KEEP
     if level >= PIT_LEVEL:
         for cx, _, cz in pads(level):
             px, pz = cx + PIT_FROM_PAD[0], cz + PIT_FROM_PAD[1]
@@ -608,7 +610,7 @@ def write(mod_id, level, blocks, racks, stash):
     # Domum Ornamentum のブロックは、場所ごとに、材料を書いたブロックエンティティを持つ。
     entities = [hut_entity, stash_entity]
     for (x, y, z), state in sorted(blocks.items()):
-        made_of = materials(state) if state != VOID else None
+        made_of = materials(state) if state != KEEP else None
         if made_of:
             entities.append(Compound({
                 "id": String(MATERIAL_ENTITY), "x": Short(x), "y": Short(y), "z": Short(z),

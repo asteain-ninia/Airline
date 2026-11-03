@@ -685,7 +685,9 @@ def design(name, level=1, mod_id="airline"):
 # 機体の連結器(床の 1 段上)とは中心で 3 マス、間の 2 マスに両方の頭が入る。そのため設計図は床の下に 2 段を足す(地面はそのまま残す)。
 PIT_LIFT = 2
 PIT_FROM_PAD = (0, 3)
-VOID = "minecraft:structure_void"
+# 床の下の 2 段の、いまの地面をそのまま残す印は Structurize の置き換えの印(2026-11-03)。minecraft:structure_void は
+# 回して置くと空気に変わり(Structurize の Blueprint.setRotationMirrorRelative が写さない)、建築家が地面を掘っていた。
+KEEP = "structurize:blocksubstitution"
 PIT_WALL = "minecraft:stone_bricks"
 
 
@@ -720,7 +722,7 @@ def with_pits(name, level, made):
     for x in range(sx):
         for z in range(sz):
             for y in range(PIT_LIFT):
-                out[(x, y, z)] = VOID
+                out[(x, y, z)] = KEEP
     if pit_at(name, level):
         for cx, _, cz in site.pads(level):
             px, pz = cx + PIT_FROM_PAD[0], cz + PIT_FROM_PAD[1]
@@ -800,7 +802,7 @@ def write(name, level, blocks, stash, mod_id="airline"):
                                                "posTagMap": List[Compound]([])}),
         }))
     for (x, y, z), state in sorted(blocks.items()):
-        made_of = mb.materials(state) if state != VOID else None
+        made_of = mb.materials(state) if state != KEEP else None
         if made_of:
             entities.append(Compound({
                 "id": String(mb.MATERIAL_ENTITY), "x": Short(x), "y": Short(y), "z": Short(z),
