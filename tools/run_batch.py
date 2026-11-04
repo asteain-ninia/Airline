@@ -1,14 +1,15 @@
 """専用サーバーの試験を、続けて何本か回す。結果は run-logs に <札>-<名前>-result.txt として残り、<札>-summary.txt に 1 行ずつまとまる。
 
 使い方: python tools/run_batch.py <札> <項目> [<項目> ...]
-項目は、Gradle のタスク名(runAirfield、runAirfieldReload、runAirfieldRemoved、runNetwork)か、
+項目は、Gradle のタスク名(runAirfield、runAirfieldReload、runAirfieldRemoved、runNetwork、船の試験の runShip○○)か、
 runFlight の場面の名前(trip、far、cargo など。reopen で始まる場面は、順番どおりに並べること)。
 場面の名前のあとに @<機体の型> を付けると、その型の機体で飛ばす(例: trip@stratus)。
 @ のあとが .json で終わるときは、MOD にまだ入れていない設計のファイルとして読ませ、その設計で飛ばす(例: trip@E:/somewhere/swift.json)。
 
 途中で 1 本が落ちても、次へ進む(reopen の続きの場面だけは、前が落ちたら飛ばす)。
 
-項目に all と書くと、全部の場面(ALL の並び。普通の速さで 3 時間あまり)。
+項目に ships と書くと、村人が船の上を歩く・席に座る試験(SHIPS の並び。2026-11-05 に ColonyPatchServer から移した)。
+項目に all と書くと、全部の場面(ALL の並び。ships を含む。普通の速さで 3 時間あまり)。
 --part 2/3 を付けると、並びを 3 つに分けた 2 つめだけを回す(掛かる時間の見込みが釣り合うように分ける。reopen の続きの場面と、runAirfield の続きの 2 つは分けない)。
 分けて別の時に回すときや、2 つの写しで同時に回すとき(tools/run_split.py)に。
 
@@ -25,11 +26,16 @@ import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TASKS = {"runAirfield": ("run-airfield", 1500), "runAirfieldReload": ("run-airfield", 900), "runAirfieldRemoved": ("run-airfield", 900), "runNetwork": ("run-network", 900)}
+# 船の試験(src/shiptest。build.gradle の shipChecks と同じ。runShipLab は調べ物なので入れない)。結果は ship-result.txt。
+SHIPS = ["runShipSmoke", "runShipPathing", "runShipPathGrid", "runShipShips", "runShipMotion", "runShipReach", "runShipEdge", "runShipEdgeLand",
+         "runShipLandWalk", "runShipLandHeight", "runShipLanding", "runShipBurner", "runShipMooring", "runShipMooringGravity", "runShipBoarding"]
+for _task in SHIPS:
+    TASKS[_task] = ("run-ship-" + _task[len("runShip"):].lower(), 1800)
 # 全部の場面(2026-10-15 の c120m の並びに、設計図から建てる場面 facilities を足した)。中型機の場面は、中型機 stratus で飛ばす
 # (それまでは、こかぜに中型の印を付けただけの代役 ColonyPatchServer/design/classes-2026-10-14/kokaze_medium.json)。
 ALL = (["classes@stratus", "facilities@stratus", "items", "runNetwork", "runAirfield", "runAirfieldReload", "runAirfieldRemoved",
         "yard", "trip", "ceiling", "direct", "three", "traffic", "detour", "cargo", "carry", "tour", "routes", "far", "faults", "crash", "ground", "lost", "hindered", "fuel", "fetch",
-        "reopen1", "reopen2", "reopen3", "reopenc1", "reopenc2", "reopenc3", "reopenc4"])
+        "reopen1", "reopen2", "reopen3", "reopenc1", "reopenc2", "reopenc3", "reopenc4"] + SHIPS)
 # (原型・白帆型で飛ばす場面は、2 つの型を外したので無くした。2026-10-19)
 
 
@@ -75,7 +81,7 @@ def main():
         part = (int(which), int(parts))
         del args_in[at:at + 2]
     label, items = args_in[0], args_in[1:]
-    items = [each for item in items for each in (ALL if item == "all" else [item])]
+    items = [each for item in items for each in (ALL if item == "all" else SHIPS if item == "ships" else [item])]
     if part:
         items = part_of(items, *part)
         print("part %d/%d: %s" % (part[0], part[1], " ".join(items)), flush=True)
@@ -105,7 +111,7 @@ def main():
         if chain_broken:
             line = "%s SKIPPED (an earlier scene of its chain failed)" % item
         else:
-            result = os.path.join(ROOT, folder, "airline-result.txt")
+            result = os.path.join(ROOT, folder, "ship-result.txt" if item.startswith("runShip") else "airline-result.txt")
             if os.path.exists(result):
                 os.remove(result)
             started = time.time()

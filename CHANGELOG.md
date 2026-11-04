@@ -6,6 +6,16 @@ Create Aeronautics: Airline for MineColonies(`airline`)。新しい版が上。
 
 0.11.2 より前の版はコミットが無いので、`../ColonyPatchServer/design/` の記録から要点を拾って書いた。
 
+## 0.21.0(2026-11-05)
+
+ColonyPatch Server が無くても、全部が動くようにした。空路を GitHub で一般公開するにあたり(ユーザーのご判断「案 B」)。
+
+- 村人が止まっている船の上を歩く部分(pathing)と、船の席に座って運ばれる部分(boarding)を、ColonyPatch Server 1.4.0 から、そのまま移した(`pathing/`・`boarding/`。中身は同じ)。飛ぶ部分に要るのは、Sable と Create Aeronautics だけになった。
+- 設定は `saves/<世界>/serverconfig/airline-ships.toml`(`[pathing]`・`[boarding]`。項目と既定値は ColonyPatch Server のときと同じ)。
+- 命令は `/airline board`・`/airline leave`・`/airline boarding`(前は `/colonypatch ...`)。
+- 試験: ColonyPatch Server の船の試験を、2 つめの試験用 MOD `shiptest`(`src/shiptest`)として移した。タスクは `runShipSmoke`・`runShipPathing`・`runShipBoarding` など(一覧は `build.gradle` の `shipChecks`)。`runNetwork` に「Sable が無いと、乗り込みの命令は Sable が無いと答える」を足した。
+- 壊れるもの: ColonyPatch Server 1.4.0 以前と一緒に入れると、同じ所に二重に手を入れるので、**ColonyPatch Server は 2.0.0 に上げる**(2.0.0 には船の部分が無い)。ColonyPatch Server の設定の `[pathing]`・`[boarding]` を変えていたら、`airline-ships.toml` に書き直す(本番は既定のまま)。
+
 ## 0.20.1(2026-11-03)
 
 - 飛行場(普通と中型)を建てると、建築家が床の下の地面を 2 段ぶん敷地いっぱいに掘っていたのを直した。床の下の「いまの地面をそのまま残す」2 段を、バニラの `minecraft:structure_void` で埋めていたため。Structurize は設計図を回して置くとこの印を写さず空気にするので、空気の場所として掘られていた。Structurize の置き換えの印(`structurize:blocksubstitution`)に替えた。大型の飛行場と泊地には、この 2 段が無いので変わらない。

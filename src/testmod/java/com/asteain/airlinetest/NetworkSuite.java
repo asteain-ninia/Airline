@@ -275,6 +275,11 @@ final class NetworkSuite {
             // This server has no Sable: the flying part is off, its commands say so, nothing else is disturbed.
             s.soft("B / without Sable the flying part is off", !com.asteain.airline.flight.Flights.available() && com.asteain.airline.flight.Flights.aircraft(level).isEmpty(),
                     "available=" + com.asteain.airline.flight.Flights.available());
+            // The boarding came over from ColonyPatchServer (2026-11-05); its check without Sable came with it.
+            server.getCommands().performPrefixedCommand(stack, root + " board 00000000-0000-0000-0000-000000000000 0 0 0");
+            s.soft("B / without Sable the boarding command says that Sable is missing", out.size() == 1 && out.get(0).contains("Sable"), String.valueOf(out));
+            out.clear();
+            s.soft("B / without Sable the boarding reports itself unavailable", !com.asteain.airline.boarding.Boarding.available(), "");
             s.soft("B / the aircraft block and its block entity type are registered all the same", Airline.AIRCRAFT.get() != null && Airline.AIRCRAFT_BLOCK_ENTITY.get() != null,
                     String.valueOf(BuiltInRegistries.BLOCK.getKey(Airline.AIRCRAFT.get())));
             level.setBlockAndUpdate(start.above(20), Airline.AIRCRAFT.get().defaultBlockState());

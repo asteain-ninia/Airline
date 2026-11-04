@@ -29,9 +29,14 @@ repositories {
     mavenCentral()
 }
 
-// Development-only integration checks (airlinetest); never included in the distributable jar.
+// Development-only integration checks (airlinetest, and shiptest: the ship walking and boarding checks that came over from
+// ColonyPatchServer on 2026-11-05); never included in the distributable jar.
 sourceSets {
     testmod {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+    shiptest {
         compileClasspath += sourceSets.main.output
         runtimeClasspath += sourceSets.main.output
     }
@@ -52,10 +57,9 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-// The flying part (stage 4) needs Sable and ColonyPatchServer at run time; both are optional, and neither goes into the jar.
+// The flying part (stage 4) and the ship walking need Sable at run time; it is optional, and does not go into the jar.
 // Sable: the jar of the play instance, shared with ColonyPatchServer, plus the companion library nested inside it.
 def sableJarFile = file("${sharedTestJars}/sable-neoforge-1.21.1-2.0.6.jar")
-def colonyPatchServerJar = file('../ColonyPatchServer/build/libs/colonypatch_server-1.4.0.jar')
 def sableCompileDir = layout.buildDirectory.dir('sable-compile')
 
 def extractSableCompileJars = tasks.register('extractSableCompileJars', Copy) {
@@ -70,11 +74,37 @@ def extractSableCompileJars = tasks.register('extractSableCompileJars', Copy) {
     into sableCompileDir
 }
 
-def flightCompileJars = files(sableJarFile, colonyPatchServerJar, fileTree(dir: sableCompileDir, include: '*.jar')).builtBy(extractSableCompileJars)
+def flightCompileJars = files(sableJarFile, fileTree(dir: sableCompileDir, include: '*.jar')).builtBy(extractSableCompileJars)
 
 dependencies {
     compileOnly flightCompileJars
 }
+
+// The ship checks (src/shiptest). Ports are the ones these runs had in ColonyPatchServer. props: extra shiptest.* properties.
+def gp = { String name, String fallback -> providers.gradleProperty(name).getOrElse(fallback) }
+def shipChecks = [
+        [name: 'shipSmoke', suite: 'smoke', port: 25601],
+        [name: 'shipPathing', suite: 'pathing', port: 25602],
+        [name: 'shipMooring', suite: 'mooring', port: 25604],
+        [name: 'shipMooringGravity', suite: 'mooring', port: 25605, gravity: true],
+        [name: 'shipLanding', suite: 'landing', port: 25606, gravity: true],
+        [name: 'shipBurner', suite: 'burner', port: 25607, gravity: true],
+        [name: 'shipPathGrid', suite: 'pathgrid', port: 25608],
+        [name: 'shipShips', suite: 'ships', port: 25610],
+        [name: 'shipMotion', suite: 'motion', port: 25611],
+        [name: 'shipLandWalk', suite: 'landwalk', port: 25612, gravity: true],
+        [name: 'shipLandHeight', suite: 'landheight', port: 25613, gravity: true],
+        [name: 'shipReach', suite: 'reach', port: 25614],
+        [name: 'shipEdge', suite: 'edge', port: 25615,
+         props: [edgeShapes: gp('edgeShapes', 's5'), edgeYaws: gp('edgeYaws', '0,10,20,30,40,44,45,46,60'), edgeGap: gp('edgeGap', '0.6'),
+                 watchdogTicks: '30000', timeoutSeconds: '1500']],
+        [name: 'shipEdgeLand', suite: 'edge', port: 25616, gravity: true,
+         props: [edgeLanded: 'true', edgeShapes: gp('edgeShapes', 's5'), edgeYaws: gp('edgeYaws', '0,20,30,45'),
+                 watchdogTicks: '30000', timeoutSeconds: '1500']],
+        [name: 'shipBoarding', suite: 'boarding', port: 25617],
+        [name: 'shipLab', suite: 'lab', port: 25618, gravity: true,
+         props: [lab: gp('lab', 'probe'), labArg: gp('labArg', ''), watchdogTicks: '40000', timeoutSeconds: '1700']],
+].collect { it + [dir: 'run-ship-' + it.name.substring(4).toLowerCase(), props: it.props ?: [:]] }
 
 neoForge {
     version = project.neo_version
@@ -85,6 +115,9 @@ neoForge {
         }
         airlinetest {
             sourceSet sourceSets.testmod
+        }
+        shiptest {
+            sourceSet sourceSets.shiptest
         }
     }
 
@@ -128,7 +161,7 @@ neoForge {
             systemProperty 'airlinetest.sprint', providers.gradleProperty('sprint').getOrElse('off')
             jvmArgument '-Xmx3G'
         }
-        // Stage 4, second half: aircraft fly. Sable, Create, Create Aeronautics and ColonyPatchServer are added to the server.
+        // Stage 4, second half: aircraft fly. Sable, Create and Create Aeronautics are added to the server.
         // -Pscene=<name> picks what is run: trip (default), far, faults, crash, cargo, ground, lost, hindered,
         // reopen1 -> reopen2 -> reopen3, reopenc1 -> reopenc2 -> reopenc3 -> reopenc4 (reopenprobe: a look at a reopen world by hand).
         flight {
@@ -197,15 +230,33 @@ neoForge {
             systemProperty 'airlinetest.timeoutSeconds', providers.gradleProperty('timeoutSeconds').getOrElse('600')
             jvmArgument '-Xmx3G'
         }
+        // The ship walking and boarding checks (src/shiptest; ColonyPatchServer's checks until 2026-11-05). One run per entry
+        // of shipChecks: run<Name>, in run-ship-<name>. Gravity runs get Sable's normal gravity back (enableGravityPack).
+        shipChecks.each { check ->
+            create(check.name) {
+                server()
+                programArgument '--nogui'
+                gameDirectory = project.file(check.dir)
+                sourceSet = sourceSets.shiptest
+                loadedMods = [neoForge.mods.named(mod_id).get(), neoForge.mods.named('shiptest').get()]
+                systemProperty 'shiptest.suite', check.suite
+                if (check.gravity) systemProperty 'shiptest.gravity', 'true'
+                check.props.each { key, value -> systemProperty 'shiptest.' + key, value }
+                jvmArgument '-Xmx3G'
+            }
+        }
     }
 }
 
 neoForge.addModdingDependenciesTo(sourceSets.testmod)
+neoForge.addModdingDependenciesTo(sourceSets.shiptest)
 
 dependencies {
     testmodCompileOnly files(journeyMapApiJar)
     testmodCompileOnly fileTree(dir: sharedLibs, include: ['*.jar'])
     testmodCompileOnly flightCompileJars
+    shiptestCompileOnly fileTree(dir: sharedLibs, include: ['*.jar'])
+    shiptestCompileOnly flightCompileJars
 }
 
 // ---- isolated test runs ----------------------------------------------------------------------------------
@@ -250,8 +301,8 @@ def prepareRun = { String dirName, List<String> allowed, int basePort, String mo
 }
 
 // Result file contract: "PASS n ...", "FAIL ...". Log scan is record-only.
-def verifyResult = { String dirName, String label ->
-    def report = file("${dirName}/airline-result.txt")
+def verifyResult = { String dirName, String label, String resultName = 'airline-result.txt' ->
+    def report = file("${dirName}/${resultName}")
     if (!report.exists()) throw new GradleException("${label} produced no result")
     if (!report.text.startsWith('PASS ')) throw new GradleException(report.text)
     def log = file("${dirName}/logs/latest.log")
@@ -300,9 +351,7 @@ tasks.named('runFlight').configure {
         // A fresh world, except for the later starts of the two reopen chains (reopen1-3: a plain flight; reopenc1-4: a cargo
         // flight stopped while loading, flying and unloading), which continue on the world of the start before.
         if (!(scene in ['reopen2', 'reopen3', 'reopenc2', 'reopenc3', 'reopenc4', 'reopenprobe'])) delete file("${dirName}/world")
-        def patch = file('../ColonyPatchServer/build/libs/colonypatch_server-1.4.0.jar')
-        if (!patch.isFile()) throw new GradleException("Missing ${patch}: build ColonyPatchServer 1.4.0 first")
-        prepareRun(dirName, mineColoniesJars + physicsJars + [patch.name], 25632, 'Airline flight', [patch])
+        prepareRun(dirName, mineColoniesJars + physicsJars, 25632, 'Airline flight')
     }
     doLast { verifyResult(dirName, 'flight ' + scene) }
 }
@@ -311,11 +360,38 @@ tasks.named('runBench').configure {
     doFirst {
         delete file('run-bench/airline-result.txt')
         delete file('run-bench/world')
-        def patch = file('../ColonyPatchServer/build/libs/colonypatch_server-1.4.0.jar')
-        if (!patch.isFile()) throw new GradleException("Missing ${patch}: build ColonyPatchServer 1.4.0 first")
-        prepareRun('run-bench', mineColoniesJars + physicsJars + [patch.name], 25633, 'Airline bench', [patch])
+        prepareRun('run-bench', mineColoniesJars + physicsJars, 25633, 'Airline bench')
     }
     doLast { verifyResult('run-bench', 'bench') }
+}
+
+// A world data pack (priority 3000) restores Sable's normal gravity over the ship checks' zero-gravity data (priority 2000).
+def enableGravityPack = { String dirName ->
+    def pack = file("${dirName}/world/datapacks/shipgravity")
+    new File(pack, 'data/shipgravity/dimension_physics').mkdirs()
+    new File(pack, 'pack.mcmeta').text = '{"pack":{"pack_format":48,"description":"ship checks: gravity on"}}'
+    new File(pack, 'data/shipgravity/dimension_physics/gravity_on.json').text =
+            '{"dimension":"minecraft:overworld","priority":3000,"base_gravity":[0.0,-11.0,0.0]}'
+    def props = file("${dirName}/server.properties")
+    if (!props.text.contains('initial-enabled-packs')) props.text = props.text + 'initial-enabled-packs=vanilla,file/shipgravity' + System.lineSeparator()
+}
+
+// The ship checks' result file: "PASS n ...", "FAIL ...", and "XFAIL ..." lines after PASS; an XPASS (an expected failure passed) fails.
+def verifyShipResult = { String dirName, String label ->
+    def report = file("${dirName}/ship-result.txt")
+    if (report.exists() && report.text.contains('XPASS')) throw new GradleException("${label}: XPASS (an expected failure passed): ${report.text}")
+    verifyResult(dirName, label, 'ship-result.txt')
+}
+
+shipChecks.each { check ->
+    tasks.named('run' + check.name.capitalize()).configure {
+        doFirst {
+            delete file("${check.dir}/ship-result.txt")
+            prepareRun(check.dir, mineColoniesJars + physicsJars, check.port, 'Airline ' + check.name)
+            if (check.gravity) enableGravityPack(check.dir)
+        }
+        doLast { verifyShipResult(check.dir, check.name) }
+    }
 }
 
 tasks.named('runVisual').configure {
@@ -378,6 +454,11 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
 
 sourceSets.main.resources.srcDir generateModMetadata
 neoForge.ideSyncTask generateModMetadata
+
+// The GPL-3.0 text goes with the jar (2026-11-05, for the public release on GitHub).
+tasks.named('jar', Jar) {
+    from('LICENSE') { rename { 'LICENSE_airline.txt' } }
+}
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'

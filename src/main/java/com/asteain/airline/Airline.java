@@ -87,7 +87,6 @@ public final class Airline {
     public static final String SABLE_ID = "sable";
     public static final String AERONAUTICS_ID = "aeronautics";
     public static final String SIMULATED_ID = "simulated";
-    public static final String COLONY_PATCH_SERVER_ID = "colonypatch_server";
     public static final String AIRCRAFT_NAME = "aircraft";
 
     /** The structure pack shipped in this jar (blueprints/&lt;id&gt;/airfield/pack.json) and the hut's level 1 blueprint in it. */
@@ -262,6 +261,13 @@ public final class Airline {
         container.registerConfig(ModConfig.Type.COMMON, Cargo.SPEC, MOD_ID + "-cargo.toml");
         // Per world (saves/<world>/serverconfig/): the design tools, off unless a world that is not played switches them on.
         container.registerConfig(ModConfig.Type.SERVER, com.asteain.airline.flight.DesignTools.SPEC, MOD_ID + "-server.toml");
+        // Per world as well: citizens walking over stopped ships and sitting down on them (came over from ColonyPatchServer, 2026-11-05).
+        container.registerConfig(ModConfig.Type.SERVER, ShipConfig.SPEC, MOD_ID + "-ships.toml");
+        // The boarding command exists with or without Sable; without it, it answers that Sable is missing.
+        NeoForge.EVENT_BUS.addListener(com.asteain.airline.boarding.BoardingCommand::register);
+        // Everything under pathing/ names Sable classes, so it is only entered when Sable is installed
+        // (the matching mixin config, airline.sable.mixins.json, is skipped without Sable as well).
+        if (net.neoforged.fml.ModList.get().isLoaded(SABLE_ID)) com.asteain.airline.pathing.SablePathing.register(NeoForge.EVENT_BUS);
         Flights.bootstrap();
         BLOCKS.register(modBus);
         ITEMS.register(modBus);

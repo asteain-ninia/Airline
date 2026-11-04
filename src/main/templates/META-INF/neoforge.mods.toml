@@ -15,6 +15,11 @@ ${mod_description}
 [[mixins]]
 config="${mod_id}.mixins.json"
 
+# Citizens walk over stopped Sable ships (MineColonies path finding); skipped without Sable (pathing/SableMixinPlugin).
+[[mixins]]
+config="${mod_id}.sable.mixins.json"
+requiredMods=["sable"]
+
 [[dependencies.${mod_id}]]
 modId="neoforge"
 type="required"
@@ -36,7 +41,7 @@ versionRange="*"
 ordering="AFTER"
 side="BOTH"
 
-# The flying part needs these four; without any of them only the flying part is switched off.
+# The flying part needs these three; without any of them only the flying part is switched off.
 [[dependencies.${mod_id}]]
 modId="sable"
 type="optional"
@@ -58,12 +63,6 @@ versionRange="[1.3.2,)"
 ordering="AFTER"
 side="BOTH"
 
-[[dependencies.${mod_id}]]
-modId="colonypatch_server"
-type="optional"
-versionRange="[1.2.1,)"
-ordering="AFTER"
-side="BOTH"
 
 # JourneyMap: when a player has it, the lines of the air network are drawn on its maps (client only).
 [[dependencies.${mod_id}]]

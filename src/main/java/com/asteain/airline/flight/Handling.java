@@ -4,7 +4,7 @@ import com.asteain.airline.colony.BuildingAirfield;
 import com.asteain.airline.flight.FlightController.Runtime;
 import com.asteain.airline.ledger.WantLedger;
 import com.asteain.airline.route.RouteNetwork;
-import com.asteain.colonypatchserver.boarding.Boarding;
+import com.asteain.airline.boarding.Boarding;
 import com.minecolonies.api.colony.ICitizenData;
 import com.minecolonies.api.colony.buildings.IBuilding;
 import com.minecolonies.api.entity.ai.statemachine.AIEventTarget;
@@ -34,7 +34,7 @@ import java.util.Map;
  * pilot does this on foot: to the racks, take, to the aircraft, put down, and back. (Between warehouse and airfield
  * the couriers carry, as before.) With the setting switched off nobody carries: the goods move by themselves.
  *
- * <p>While the pilot carries, its own decisions (work, food, sleep) are held back the way ColonyPatchServer's boarding
+ * <p>While the pilot carries, its own decisions (work, food, sleep) are held back the way the boarding (boarding/)
  * does it, and this class tells it where to walk. That works the same at home and at an airfield a flight away, where
  * the pilot's own job would not run. A pilot asleep in its bed at home is left asleep: the loading waits.</p>
  *
@@ -434,7 +434,7 @@ final class Handling {
 
     /**
      * Holds the pilot's own decisions for as long as this class keeps looking: a blocking entry in MineColonies' own
-     * decision machine that answers "stay in the state you are in" (the same means as ColonyPatchServer's boarding).
+     * decision machine that answers "stay in the state you are in" (the same means as the boarding, boarding/).
      * It lapses by itself when the looks stop.
      */
     private static void hold(ServerLevel level, Runtime rt, AbstractEntityCitizen citizen) {

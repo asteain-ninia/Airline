@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
 
-/** Colony, building, rack and citizen fixtures (the colony part is the one ColonyPatchServer's checks use). */
+/** Colony, building, rack and citizen fixtures (the colony part is the one the ship checks, src/shiptest, use). */
 final class Fixture {
     /**
      * How far airfields reach, in chunks, by building level from level 1 on (0: as it follows from MineColonies' settings).

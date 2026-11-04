@@ -10,7 +10,7 @@ import com.asteain.airline.route.RouteNetwork;
 import com.asteain.airline.route.ShipClass;
 import com.asteain.airline.route.RouteNetwork.Edge;
 import com.asteain.airline.route.RouteNetwork.State;
-import com.asteain.colonypatchserver.boarding.Boarding;
+import com.asteain.airline.boarding.Boarding;
 import com.minecolonies.api.colony.ICitizenData;
 import com.minecolonies.api.colony.IColony;
 import com.minecolonies.api.colony.IColonyManager;
@@ -45,7 +45,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Stage 4, second half, on a dedicated server with Sable, Create Aeronautics and ColonyPatchServer: a pilot boards the
+ * Stage 4, second half, on a dedicated server with Sable and Create Aeronautics: a pilot boards the
  * aircraft, it flies the lines of the network to another landing pad and back; blocked lines; a long flight; stopping
  * and starting the server. The scene is chosen with -Pscene.
  */

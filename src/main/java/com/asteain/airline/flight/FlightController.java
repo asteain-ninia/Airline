@@ -10,7 +10,7 @@ import com.asteain.airline.route.RouteNetwork;
 import com.asteain.airline.route.RouteNetwork.Edge;
 import com.asteain.airline.route.RouteRules;
 import com.asteain.airline.route.Tube;
-import com.asteain.colonypatchserver.boarding.Boarding;
+import com.asteain.airline.boarding.Boarding;
 import com.minecolonies.api.colony.ICivilianData;
 import com.minecolonies.api.colony.IColony;
 import com.minecolonies.api.colony.IColonyManager;
@@ -56,11 +56,11 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Runs every aircraft: called once a tick by the aircraft's own block. Only loaded when Sable, Create Aeronautics and
- * ColonyPatchServer are installed. Server thread only.
+ * Runs every aircraft: called once a tick by the aircraft's own block. Only loaded when Sable and Create Aeronautics are
+ * installed. Server thread only.
  *
  * <p>On the ground the ship is kept fixed to the world and carries no loading ticket. For a flight the pilot is sent to
- * the seat (ColonyPatchServer's boarding); once seated the ship is released, gets Sable's loading ticket, climbs to the
+ * the seat (the boarding, boarding/); once seated the ship is released, gets Sable's loading ticket, climbs to the
  * line, flies it point by point while looking ahead, turns to the heading of the destination pad, goes down, is fixed
  * again, and the pilot walks off. The autopilot only works while the pilot sits on the seat.</p>
  *

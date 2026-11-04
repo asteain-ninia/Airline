@@ -11,7 +11,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.List;
 
 /**
- * The door to the flying part. Aircraft need Sable, Create Aeronautics (with Simulated) and ColonyPatchServer; when one
+ * The door to the flying part. Aircraft need Sable and Create Aeronautics (with Simulated); when one
  * of them is missing everything here answers "not available" and nothing else of the mod is affected. This class can be
  * loaded without any of them; {@link FlightController} is only touched after {@link #available()} said yes.
  */
@@ -32,8 +32,7 @@ public final class Flights {
     public static boolean available() {
         if (available == null) {
             final ModList mods = ModList.get();
-            available = mods.isLoaded(Airline.SABLE_ID) && mods.isLoaded(Airline.AERONAUTICS_ID) && mods.isLoaded(Airline.SIMULATED_ID)
-                    && mods.isLoaded(Airline.COLONY_PATCH_SERVER_ID);
+            available = mods.isLoaded(Airline.SABLE_ID) && mods.isLoaded(Airline.AERONAUTICS_ID) && mods.isLoaded(Airline.SIMULATED_ID);
         }
         return available;
     }

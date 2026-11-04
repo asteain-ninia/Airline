@@ -1,0 +1,7 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="GPL-3.0"
+[[mods]]
+modId="shiptest"
+version="1"
+displayName="Airline ship checks (walking and boarding)"

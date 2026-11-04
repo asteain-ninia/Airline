@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.asteain.airline.pathing.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "com.asteain.airline.pathing.SableMixinPlugin",
+  "mixins": [
+    "AbstractPathJobAccessor",
+    "AbstractPathJobMixin",
+    "CachingBlockLookupMixin",
+    "ChunkCacheMixin",
+    "MinecoloniesAdvancedPathNavigateMixin",
+    "PathfindingUtilsMixin",
+    "PathingStuckHandlerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

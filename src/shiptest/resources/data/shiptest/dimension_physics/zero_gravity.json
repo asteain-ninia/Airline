@@ -1,0 +1,5 @@
+{
+  "dimension": "minecraft:overworld",
+  "priority": 2000,
+  "base_gravity": [0.0, 0.0, 0.0]
+}

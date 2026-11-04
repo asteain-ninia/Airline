@@ -13,7 +13,7 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * The pilot. At home the pilot stays at the airfield. A flight sends the pilot to the aircraft's seat and off again
- * (ColonyPatchServer's boarding does the walking and sitting); while the aircraft waits at another airfield the pilot
+ * (the boarding, boarding/, does the walking and sitting); while the aircraft waits at another airfield the pilot
  * stays near it, at the "duty post". Cargo handling is the couriers' work.
  */
 public class JobPilot extends AbstractJob<EntityAIWorkPilot, JobPilot> {
