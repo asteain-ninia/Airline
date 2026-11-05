@@ -160,6 +160,8 @@ public final class AircraftBlockEntity extends BlockEntity {
     public boolean lacksKnown;
     /** Not saved: the controller's working state for this aircraft. */
     @Nullable Object runtime;
+    /** Not saved: whether the log already says that this aircraft's design is not in this version of the mod. */
+    boolean unknownDesignReported;
 
     public AircraftBlockEntity(BlockPos pos, BlockState state) {
         super(Airline.AIRCRAFT_BLOCK_ENTITY.get(), pos, state);

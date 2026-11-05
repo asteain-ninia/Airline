@@ -139,6 +139,18 @@ public final class Flights {
     }
 
     static void tick(ServerLevel level, AircraftBlockEntity aircraft) {
+        // A design this version does not have (the prototype and the white sail were removed in 0.19.0, or a design tried
+        // with -Dairline.design): the aircraft stays as it is and does nothing. Both the controller and the shipyard look
+        // the design up first thing, and AircraftType.of throws on an unknown name; out of a block entity's tick that is a
+        // "Ticking block entity" crash, again every time the aircraft is loaded.
+        if (!AircraftType.ALL.containsKey(aircraft.type)) {
+            if (!aircraft.unknownDesignReported) {
+                aircraft.unknownDesignReported = true;
+                org.slf4j.LoggerFactory.getLogger("Airline").error("[Airline/flight] the aircraft at {} is of the design '{}', which this version of the mod does not have: it does not fly and is not built.",
+                        aircraft.getBlockPos().toShortString(), aircraft.type);
+            }
+            return;
+        }
         FlightController.tick(level, aircraft);
     }
 
