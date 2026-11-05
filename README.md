@@ -239,7 +239,7 @@ MineColonies の経路探索は独自の実装で、ワールドのチャンク�
 
 #### ほかの MOD から呼ぶ入口
 
-`com.asteain.airline.boarding.Boarding` の `available`・`board`・`boardAt`・`leave`・`state`。サーバーのスレッドから呼ぶ。Sable が無い環境でも呼べて、そのときは「Sable が無い」と答える。くわしくはクラスの注記。
+`com.asteain.airline.boarding.Boarding` の `available`・`board`・`boardAt`・`leave`・`standUpWhenStopped`・`state`。`standUpWhenStopped` は、船が動いている間は `leave` と同じく `SHIP_MOVING` と答えるが、頼まれたことを覚えておき、船が止まったら村人を甲板に立たせる。サーバーのスレッドから呼ぶ。Sable が無い環境でも呼べて、そのときは「Sable が無い」と答える。くわしくはクラスの注記。
 
 #### boarding の既知の限界
 

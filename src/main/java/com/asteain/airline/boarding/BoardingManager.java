@@ -104,6 +104,8 @@ public final class BoardingManager {
         /** Where the sitting point was in the world the last time the ship was seen. */
         Vec3 lastSit;
         @Nullable BlockPos ground;
+        /** Asked to stand up while the ship moved (see standUpWhenStopped): it does so as soon as the ship has stopped. */
+        boolean standWhenStopped;
         /** Game time of the last tick this session was looked after; the hold on the citizen's decisions lapses without it. */
         long lookedAfter;
         boolean over;
@@ -248,6 +250,16 @@ public final class BoardingManager {
         }
     }
 
+    static Result standUpWhenStopped(ServerLevel level, Mob mob) {
+        final Result now = leave(level, mob, null);
+        if (now != Result.SHIP_MOVING) return now;
+        // Refused only for a seated citizen whose ship is there and moving: the session is still there.
+        final BoardingManager manager = MANAGERS.get(level);
+        final Session session = manager == null ? null : manager.sessions.get(mob.getUUID());
+        if (session != null) session.standWhenStopped = true;
+        return now;
+    }
+
     static State state(ServerLevel level, Entity citizen) {
         final BoardingManager manager = MANAGERS.get(level);
         final Session session = manager == null ? null : manager.sessions.get(citizen.getUUID());
@@ -378,6 +390,11 @@ public final class BoardingManager {
         }
         final Vec3 sit = world(ship, session.sit);
         session.lastSit = sit;
+        if (session.standWhenStopped && PathingHooks.isStopped(level, session.ship)) {
+            standUp(citizen, world(ship, standPlace(level, ship, session)));
+            end(session, citizen, "it was asked to stand up while the ship moved, and the ship has stopped");
+            return;
+        }
         seat.setMaxLifeTime(SEAT_LIFETIME);
         // A seat inside the ship goes with it by itself.
         if (!session.inShip) {

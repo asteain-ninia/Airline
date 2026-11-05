@@ -106,6 +106,16 @@ public final class Boarding {
         return refusal != null ? refusal : BoardingManager.leave((ServerLevel) citizen.level(), citizen, ground);
     }
 
+    /**
+     * Like {@link #leave(Mob, BlockPos)} without a place to walk to, for a citizen that nobody will ask again (the aircraft
+     * whose pilot it is was taken away). While the ship moves the answer is {@link Result#SHIP_MOVING} as with leave, but
+     * the order is kept: the citizen stands up on the deck as soon as the ship has stopped.
+     */
+    public static Result standUpWhenStopped(Mob citizen) {
+        final Result refusal = refusal(citizen);
+        return refusal != null ? refusal : BoardingManager.standUpWhenStopped((ServerLevel) citizen.level(), citizen);
+    }
+
     public static State state(Entity citizen) {
         if (!available() || !(citizen.level() instanceof ServerLevel level)) return State.NONE;
         return BoardingManager.state(level, citizen);

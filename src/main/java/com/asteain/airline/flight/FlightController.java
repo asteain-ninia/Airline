@@ -11,6 +11,7 @@ import com.asteain.airline.route.RouteNetwork.Edge;
 import com.asteain.airline.route.RouteRules;
 import com.asteain.airline.route.Tube;
 import com.asteain.airline.boarding.Boarding;
+import com.minecolonies.api.colony.ICitizenData;
 import com.minecolonies.api.colony.ICivilianData;
 import com.minecolonies.api.colony.IColony;
 import com.minecolonies.api.colony.IColonyManager;
@@ -342,6 +343,9 @@ final class FlightController {
     /** 1-3: the aircraft's own block is gone while the ship still exists. */
     static void abandon(ServerLevel level, BlockPos pos, @Nullable AircraftBlockEntity be) {
         final ServerSubLevel ship = Craft.shipAt(level, pos);
+        // Nothing will run this aircraft any more, so nothing would ever let its pilot go: done here, whether the ship is
+        // still there or gone as well.
+        if (be != null) safely(() -> letPilotGo(level, be));
         if (ship == null) return;
         // (Only to switch the drives off: with the aircraft's own block gone, any design will do for that.)
         final Craft c = new Craft(level, ship, be != null && AircraftType.ALL.containsKey(be.type) ? AircraftType.of(be.type) : AircraftType.DEFAULT, pos);
@@ -352,6 +356,44 @@ final class FlightController {
         safely(() -> Timetable.get(level.getServer()).remove(ship.getUniqueId()));
         safely(() -> Airspace.get(level.getServer()).remove(ship.getUniqueId()));
         LOGGER.warn("[Airline/flight] the aircraft block at {} was removed: the drives are switched off and the ticket is given back.", c.pos());
+    }
+
+    /**
+     * The aircraft's own block is gone: its pilot no longer belongs to it. A pilot on its way to the seat, on the seat or
+     * getting off is let go (on a ship that is moving: as soon as the ship has stopped, see
+     * {@link Boarding#standUpWhenStopped}), and its job is told to stay at its own airfield again. Left alone when another
+     * aircraft has it on its way by now.
+     */
+    private static void letPilotGo(ServerLevel level, AircraftBlockEntity be) {
+        final Mob pilot = pilot(level, be);
+        if (pilot == null || onItsWay(level, pilot, be)) return;
+        if (Boarding.state(pilot) != Boarding.State.NONE) {
+            final Boarding.Result result = Boarding.standUpWhenStopped(pilot);
+            if (result == Boarding.Result.SHIP_MOVING) {
+                LOGGER.atLevel(STEPS).log("[Airline/flight] the aircraft block at {} was removed while its ship moves: the pilot stands up once the ship has stopped.", be.getBlockPos());
+            } else if (result != Boarding.Result.OK) {
+                LOGGER.warn("[Airline/flight] the aircraft block at {} was removed; its pilot could not be let go ({}).", be.getBlockPos(), result);
+            }
+        }
+        post(pilot, null);
+    }
+
+    /**
+     * Whether an aircraft other than {@code self} has this pilot on its way (flying, loading, unloading, going home), the
+     * same way {@link Cargo#freePilot} counts it.
+     */
+    private static boolean onItsWay(ServerLevel level, Mob pilot, @Nullable AircraftBlockEntity self) {
+        int colony = 0, citizen = 0;
+        if (pilot instanceof AbstractEntityCitizen entity && entity.getCitizenData() != null) {
+            colony = entity.getCitizenData().getColony().getID();
+            citizen = entity.getCitizenData().getId();
+        }
+        for (final AircraftBlockEntity other : loaded(level)) {
+            if (other == self) continue;
+            final boolean same = pilot.getUUID().equals(other.pilot) || (colony > 0 && other.pilotColony == colony && other.pilotCitizen == citizen);
+            if (same && (other.cargo || other.flying() || other.homeward || other.phase != Phase.PARKED)) return true;
+        }
+        return false;
     }
 
     /** Given up in the air: drives off, fixed where it is, no ticket; nothing more happens until somebody comes. */
@@ -2745,6 +2787,8 @@ final class FlightController {
             // Sable takes a ship that is marked like this away with its next tick, blocks and all (nothing is dropped).
             c.ship.markRemoved();
             if (pilot != null && Boarding.state(pilot) != Boarding.State.NONE) Boarding.leave(pilot, null);
+            // Its job may still say where the aircraft was given up: it stays at its own airfield again.
+            if (pilot != null && !onItsWay(level, pilot, be)) post(pilot, null);
             LOGGER.atLevel(STEPS).log("[Airline/flight] the given-up aircraft at {} was taken away by command; {} items were in its hold.", where, goods);
             ships++;
         }
@@ -2769,7 +2813,32 @@ final class FlightController {
             Airspace.get(level.getServer()).remove(entry.ship());
             dropped++;
         }
+        // A pilot may have been left waiting where one of them stood.
+        if (dropped > 0) safely(() -> sendPilotsHome(level, home));
         return dropped == 0 ? new Answer(false, "flight.forget.none") : new Answer(true, "flight.forget.done", dropped);
+    }
+
+    /**
+     * After aircraft whose home is the pad {@code home} were forgotten: the pilots of that airfield are told to stay at it
+     * again, except one that a loaded aircraft has on its way. Nobody is touched while another aircraft of the colony that
+     * is not loaded stands away from home or is in the air: its pilot may be waiting by it, and which pilot that is is not
+     * known while it is not loaded.
+     */
+    private static void sendPilotsHome(ServerLevel level, BlockPos home) {
+        final BuildingAirfield airfield = Cargo.airfieldAt(level, home);
+        if (airfield == null) return;
+        final int colony = airfield.getColony().getID();
+        final String dimension = level.dimension().location().toString();
+        for (final Timetable.Entry entry : Timetable.get(level.getServer()).entries()) {
+            if (!entry.dimension().equals(dimension) || LOADED.containsKey(entry.ship()) || entry.home().equals(entry.at())) continue;
+            final BuildingAirfield of = Cargo.airfieldAt(level, entry.home());
+            if (of == null || of.getColony().getID() == colony) return;
+        }
+        for (final ICitizenData citizen : airfield.getAllAssignedCitizen()) {
+            if (citizen.getEntity().isEmpty()) continue;
+            final Mob pilot = citizen.getEntity().get();
+            if (!onItsWay(level, pilot, null)) post(pilot, null);
+        }
     }
 
     /** For the checks: the plans of the flights that are under way. */
