@@ -1,6 +1,6 @@
 # Create Aeronautics: Airline for MineColonies
 
-MineColonies の村どうしを飛行機(Create Aeronautics の船)で結び、物資を運ぶ MOD。まだ作りかけで、版は 0.21.1。
+MineColonies の村どうしを飛行機(Create Aeronautics の船)で結び、物資を運ぶ MOD。まだ作りかけで、版は 0.21.2。
 
 いま入っているもの:
 
