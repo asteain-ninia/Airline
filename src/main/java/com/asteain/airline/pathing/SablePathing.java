@@ -59,8 +59,12 @@ public final class SablePathing {
         for (final ServerLevel level : event.getServer().getAllLevels()) BoardingManager.release(level, "the server is stopping");
     }
 
-    /** Fail fast, like the raid filter: load every mixin target now so a broken mixin shows up in the startup log. */
+    /**
+     * Boarding is counted afresh (a single-player world opened again keeps what the last one counted). Then fail fast,
+     * like the raid filter: load every mixin target now so a broken mixin shows up in the startup log.
+     */
     private static void onServerStarted(final ServerStartedEvent event) {
+        BoardingManager.serverStarted();
         try {
             for (final String target : TARGETS) Class.forName(target, true, SablePathing.class.getClassLoader());
             LOGGER.info("[Airline/pathing] Sable found; MineColonies path finding will see stopped ships.");

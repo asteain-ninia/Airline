@@ -74,13 +74,18 @@ public final class BoardingManager {
     /** A seated citizen found this far from its seat without a seat under it was taken away by something else. */
     private static final double TAKEN_AWAY = 4.0;
     private static final int MISSING_TIMEOUT = 12000;
+    /** More than this many ordinary exceptions within FAILURE_WINDOW_MS switch boarding off (as for path finding, PathingHooks). */
     private static final int MAX_FAILURES = 5;
+    private static final long FAILURE_WINDOW_MS = 60_000L;
     /** The cells around a seat where a place to stand is looked for (x and z steps), nearest first, always in this order. */
     private static final int[][] STAND_SIDES = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
 
     private static final Map<ServerLevel, BoardingManager> MANAGERS = new WeakHashMap<>();
     private static boolean broken;
+    /** Every internal failure since the server started (for tests and diagnosis). */
     private static int failures;
+    private static long failureWindowStart;
+    private static int failuresInWindow;
 
     private static final class Session {
         final UUID citizen;
@@ -132,16 +137,44 @@ public final class BoardingManager {
         return failures;
     }
 
+    /**
+     * A linkage error (Sable or MineColonies changed under us) switches boarding off at once. An ordinary exception only
+     * costs the one call it happened in; boarding is switched off only when they keep coming (more than MAX_FAILURES within
+     * FAILURE_WINDOW_MS). Counted over the whole run, a rare failure would switch it off some day, and every aircraft in the
+     * air would be given up with it.
+     */
     private static void fail(String where, Throwable t) {
         failures++;
-        if (t instanceof LinkageError || failures > MAX_FAILURES) {
-            if (!broken) {
-                broken = true;
-                LOGGER.error("[Airline/boarding] {} failed; boarding is switched off until the server restarts. Seated citizens are stood up.", where, t);
-            }
-        } else {
-            LOGGER.warn("[Airline/boarding] {} failed ({} of {} allowed).", where, failures, MAX_FAILURES, t);
+        if (broken) return;
+        if (t instanceof LinkageError) {
+            broken = true;
+            LOGGER.error("[Airline/boarding] {} hit a linkage error; boarding is switched off until the server restarts. Seated citizens are stood up.", where, t);
+            return;
         }
+        final long now = System.currentTimeMillis();
+        if (now - failureWindowStart > FAILURE_WINDOW_MS) {
+            failureWindowStart = now;
+            failuresInWindow = 0;
+        }
+        failuresInWindow++;
+        if (failuresInWindow > MAX_FAILURES) {
+            broken = true;
+            LOGGER.error("[Airline/boarding] {} failed again ({} failures within {} seconds); boarding is switched off until the server restarts. Seated citizens are stood up.",
+                    where, failuresInWindow, FAILURE_WINDOW_MS / 1000L, t);
+        } else {
+            LOGGER.warn("[Airline/boarding] {} failed ({} of {} allowed within {} seconds).", where, failuresInWindow, MAX_FAILURES, FAILURE_WINDOW_MS / 1000L, t);
+        }
+    }
+
+    /**
+     * A new server (or a world opened again in single player): boarding works again and no failure is counted. The state is
+     * kept in static fields, which outlive a single-player world.
+     */
+    public static void serverStarted() {
+        broken = false;
+        failures = 0;
+        failureWindowStart = 0L;
+        failuresInWindow = 0;
     }
 
     // ---- entry points -------------------------------------------------------------------------------------
