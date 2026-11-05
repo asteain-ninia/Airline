@@ -203,10 +203,10 @@ public final class BoardingManager {
 
             final BoardingManager manager = MANAGERS.computeIfAbsent(level, l -> new BoardingManager());
             final Session old = manager.sessions.get(citizen.getUUID());
-            if (old != null) {
-                if (old.state == State.SEATED) return old.ship.equals(shipId) && old.seat.equals(seat) ? Result.OK : Result.ALREADY_SEATED;
-                manager.end(old, citizen, "a new order replaces it");
-            }
+            if (old != null && old.state == State.SEATED) return old.ship.equals(shipId) && old.seat.equals(seat) ? Result.OK : Result.ALREADY_SEATED;
+            // (Before the citizen's own order is ended: a refused order leaves it as it was.)
+            if (manager.taken(citizen.getUUID(), shipId, seat)) return Result.SEAT_TAKEN;
+            if (old != null) manager.end(old, citizen, "a new order replaces it");
             final BlockPos below = BlockPos.containing(citizen.getX(), citizen.getY() - 0.2, citizen.getZ());
             final Vec3 origin = citizen.onGround() && SurfaceType.getSurfaceType(level, level.getBlockState(below), below) == SurfaceType.WALKABLE
                     ? citizen.position() : null;
@@ -219,6 +219,18 @@ public final class BoardingManager {
             fail("accepting a boarding order", e);
             return Result.FAILED;
         }
+    }
+
+    /**
+     * Whether another citizen sits on this seat or walks to it. One that is not loaded right now does not count (it may
+     * never come back; its session is forgotten in the end), nor does one that has stood up and walks off.
+     */
+    private boolean taken(UUID citizen, UUID ship, BlockPos seat) {
+        for (final Session other : sessions.values()) {
+            if (other.over || other.citizen.equals(citizen) || other.missing != 0 || other.state == State.LEAVING) continue;
+            if (other.ship.equals(ship) && other.seat.equals(seat)) return true;
+        }
+        return false;
     }
 
     static Result boardAt(ServerLevel level, Mob mob, Vec3 point) {

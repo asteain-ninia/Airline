@@ -1064,9 +1064,13 @@ final class FlightController {
             tell(be, "flight.note.not_boarded");
         } else if (pilot != null && state == Boarding.State.NONE && be.timer % 20 == 0) {
             // Asked again now and then: the ship counts as stopped only a moment after it was fixed.
-            Boarding.board(pilot, rt.craft.id(), rt.craft.inShip(rt.craft.type.seat));
+            final Boarding.Result result = Boarding.board(pilot, rt.craft.id(), rt.craft.inShip(rt.craft.type.seat));
+            // Another citizen on the pilot's seat (sent there by command) is waited for like any refusal; the status says why.
+            if (result == Boarding.Result.SEAT_TAKEN && !SEAT_TAKEN_NOTE.equals(be.note)) note(be, SEAT_TAKEN_NOTE);
         }
     }
+
+    private static final String SEAT_TAKEN_NOTE = "boarding: another citizen sits on the pilot's seat or walks to it; the pilot waits";
 
     /**
      * Away from home a flight cannot go on (nobody got to the seat in time, or it was called off there). Its cargo is
