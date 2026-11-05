@@ -197,8 +197,8 @@ public final class Cargo {
     record Landing(@Nullable BuildingAirfield there, FlightController.Landing landing) {}
 
     /**
-     * Whose racks and import store a place uses: an airfield its own; an anchorage, which has none (the user's ruling of
-     * 2026-10-15), those of the colony's airfield nearest to its pad. Null for an anchorage whose colony has no built airfield.
+     * Whose racks and import store a place uses: an airfield its own; an anchorage, which has none, those of the
+     * colony's airfield nearest to its pad. Null for an anchorage whose colony has no built airfield.
      */
     @Nullable
     public static BuildingAirfield storeOf(BuildingAirfield place) {
@@ -222,7 +222,7 @@ public final class Cargo {
 
     /**
      * The import store of an airfield: the nearest MineColonies stash of its colony within range of the pad or of the hut
-     * (whichever is nearer; 2026-10-15: the large airfield's own stash lies 27 blocks from its pad, 12 from its hut). What is put
+     * (whichever is nearer: the large airfield's own stash lies 27 blocks from its pad, 12 from its hut). What is put
      * into a stash is fetched by the colony's couriers and brought to the warehouse. Null when there is none or it is not loaded.
      */
     @Nullable
@@ -351,7 +351,7 @@ public final class Cargo {
     @Nullable
     static Mob freePilot(ServerLevel level, BuildingAirfield airfield, AircraftBlockEntity self) {
         // Its own pilot first; then one that flies no other aircraft; only then one whose aircraft stands idle (it may stay
-        // at an anchorage far from here, 2026-10-18: a pilot was called from the anchorage to fly the airfield's aircraft).
+        // at an anchorage far from here, and would have to come all the way to fly the airfield's aircraft).
         Mob unbound = null, idle = null;
         for (final ICitizenData citizen : airfield.getAllAssignedCitizen()) {
             if (citizen.getEntity().isEmpty()) continue;
@@ -372,7 +372,7 @@ public final class Cargo {
     }
 
     /**
-     * A round (2026-10-17): other colonies the same flight may carry goods to, besides the one chosen first: those with
+     * A round: other colonies the same flight may carry goods to, besides the one chosen first: those with
      * wanted goods ready on home's export racks and a place to land with a way from home or from the first colony, the
      * ones with the most ready first.
      */
@@ -419,7 +419,7 @@ public final class Cargo {
         final com.asteain.airline.route.ShipClass cls = FlightController.shipClass(be);
         for (final WantLedger.Key other : ledger.keys()) {
             if (other.equals(self) || !other.dimension().equals(self.dimension())) continue;
-            // Only to colonies a route is drawn to (2026-10-18: routes are drawn by players).
+            // Only to colonies a route is drawn to (routes are drawn by players).
             if (!com.asteain.airline.route.ColonyRoutes.drawn(level, self.colony(), other.colony())) continue;
             int ready = 0;
             for (final Map.Entry<Item, Integer> stock : onRacks.entrySet()) ready += Math.min(stock.getValue(), ledger.net(other, stock.getKey()));

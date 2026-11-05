@@ -47,7 +47,7 @@ public final class AircraftBlock extends BaseEntityBlock {
     }
 
     // (Building an aircraft is the airfield's business alone: it is asked for in the airfield's window, which sets this block
-    // down on the pad. The block itself begins nothing and chooses nothing; the user's ruling of 2026-10-14.)
+    // down on the pad. The block itself begins nothing and chooses nothing.)
 
     /**
      * Broken by a player: what the fuel store holds drops where the block stood. (Only then: when the blocks of a finished
@@ -59,7 +59,7 @@ public final class AircraftBlock extends BaseEntityBlock {
         return super.playerWillDestroy(level, pos, state, player);
     }
 
-    /** Used with an empty hand: the aircraft's fuel store opens (fuel only; the user's ruling of 2026-10-14). */
+    /** Used with an empty hand: the aircraft's fuel store opens (fuel only). */
     @Override
     protected net.minecraft.world.InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
         if (!(level.getBlockEntity(pos) instanceof AircraftBlockEntity aircraft)) return net.minecraft.world.InteractionResult.PASS;

@@ -120,7 +120,7 @@ final class AirfieldSuite {
             s.check(BuiltInRegistries.BLOCK_ENTITY_TYPE.containsKey(Airline.id(Airline.BUILDING_NAME)), "the mod's own block entity type is registered");
             s.check(Airline.AIRFIELD_BLOCK_ENTITY.get().isValid(Airline.AIRFIELD_HUT.get().defaultBlockState()), "the hut is a valid block for the mod's block entity type");
             s.check(ModSoundEvents.CITIZEN_SOUND_EVENTS.containsKey(Airline.JOB_NAME), "the pilot has an entry in MineColonies' citizen voice table");
-            // (2026-10-19) Every hut can be crafted and stands in MineColonies' tab of huts (recipe viewers list only what the tabs show).
+            // Every hut can be crafted and stands in MineColonies' tab of huts (recipe viewers list only what the tabs show).
             net.minecraft.world.item.CreativeModeTabs.tryRebuildTabContents(level.enabledFeatures(), false, level.registryAccess());
             for (net.minecraft.world.item.Item hut : new net.minecraft.world.item.Item[]{Airline.AIRFIELD_HUT_ITEM.get(), Airline.MEDIUM_AIRFIELD_HUT_ITEM.get(),
                     Airline.LARGE_AIRFIELD_HUT_ITEM.get(), Airline.ANCHORAGE_HUT_ITEM.get()}) {
@@ -393,7 +393,7 @@ final class AirfieldSuite {
             int stashes = 0;
             for (var info : bp.getBlockInfoAsList()) if (info.getState() != null && info.getState().getBlock() == ModBlocks.blockStash) stashes++;
             s.check(racks == 4 && stashes == 1, "it contains four export racks and one import stash (" + racks + ", " + stashes + ")");
-            // (11 high since 2026-10-18: two layers under the floor for the pit of the floor's connector, the ground kept as it is.)
+            // (11 high: two layers under the floor for the pit of the floor's connector, the ground kept as it is.)
             s.check(bp.getSizeX() == 34 && bp.getSizeY() == 11 && bp.getSizeZ() == 25, "its size is 34x11x25 (the whole plot, as at every level: landing pad, forecourt and hangar in the west, an empty lot in the east; two layers under the floor): " + bp.getSizeX() + "x" + bp.getSizeY() + "x" + bp.getSizeZ());
             // The rules of the network and the shape of the blueprint have to agree: nothing of it stands in the shaft over the pad or as high as the lines.
             BlockPos hutAt = bp.getPrimaryBlockOffset(), padAt = hutAt.offset(RouteRules.PAD_FROM_HUT);
@@ -437,7 +437,7 @@ final class AirfieldSuite {
                     && level.getBlockState(pastePos.offset(-7, 4, 0)).is(net.minecraft.world.level.block.Blocks.COBBLESTONE_STAIRS),
                     "the hangar floor, the landing pad with the mark in its middle, and the cobblestone eaves of the roof are in the world");
             s.soft("pasted racks are the building's containers", racksKnown, "containers=" + pasted.getContainers());
-            // The import store comes with the blueprint (ruling of 2026-10-11): a MineColonies stash, a building of its own.
+            // The import store comes with the blueprint: a MineColonies stash, a building of its own.
             IBuilding stash = colony[0].getServerBuildingManager().getBuilding(pastePos.offset(-5, 0, -3));
             s.soft("the stash of the blueprint is registered with the colony, and the airfield finds it as its import store",
                     stash instanceof com.minecolonies.core.colony.buildings.workerbuildings.Stash && com.asteain.airline.flight.Cargo.importStore(level, (BuildingAirfield) pasted) != null
@@ -622,7 +622,7 @@ final class AirfieldSuite {
                         if (shaft.contains(at.getX(), at.getY(), at.getZ())) inShaft++;
                         if (at.getY() == padAt.getY() && Math.abs(at.getX() - padAt.getX()) <= RouteRules.PAD_HALF_SIZE && Math.abs(at.getZ() - padAt.getZ()) <= RouteRules.PAD_HALF_SIZE) floor++;
                     }
-                    // From level 3 the floor has the 3x3 pit of its connector (2026-10-18), three south of the middle.
+                    // From level 3 the floor has the 3x3 pit of its connector, three south of the middle.
                     pads &= inShaft == 0 && floor == (n >= 3 ? 169 - 9 : 169);
                 }
                 s.check(bp.getSizeX() == lower.getSizeX() && bp.getSizeY() == lower.getSizeY() && bp.getSizeZ() == lower.getSizeZ() && hutAt.equals(lower.getPrimaryBlockOffset())
@@ -679,7 +679,7 @@ final class AirfieldSuite {
             bp.setRotationMirror(RotationMirror.MIR_R90, level);
             AbstractBlockHut<?> hutBlock = Airline.AIRFIELD_HUT.get();
             ServerPlayer owner = (ServerPlayer) Fixture.owner(level);
-            // Ground under the floor (the two layers the blueprint keeps as they are): a turned blueprint once made them air (2026-11-03).
+            // Ground under the floor (the two layers the blueprint keeps as they are): a turned blueprint once made them air.
             for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) for (int dy = -3; dy <= -2; dy++)
                 level.setBlockAndUpdate(mirrorPos.offset(dx, dy, dz), net.minecraft.world.level.block.Blocks.DIRT.defaultBlockState());
             boolean ready = hutBlock.setup(owner, level, mirrorPos, bp, RotationMirror.MIR_R90, true, Airline.PACK_NAME, path2);

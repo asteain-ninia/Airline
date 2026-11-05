@@ -18,8 +18,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The airfield's requests tab (2026-10-18, the user's ruling: "どの村が何を求めてるのかわかるタスクタブ", every colony of
- * the world): for each colony of the dimension, its own first, what it wants (by the ledger: typed in, or read from the
+ * The airfield's requests tab (which colony wants what, for every colony of the world): for each colony of the
+ * dimension, its own first, what it wants (by the ledger: typed in, or read from the
  * requests nobody in it can meet) and how much of that is on its way. At most {@link #ITEMS} items a colony.
  */
 public class WantsModule extends AbstractBuildingModule implements ITickingModule {

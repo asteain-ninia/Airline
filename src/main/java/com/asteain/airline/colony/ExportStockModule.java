@@ -154,7 +154,7 @@ public class ExportStockModule extends MinimumStockModule implements IBuildingEv
         com.asteain.airline.route.ShipClass ship = com.asteain.airline.flight.Flights.ownClass(level, home);
         for (WantLedger.Key key : ledger.keys()) {
             if (key.equals(self) || !key.dimension().equals(self.dimension())) continue;
-            // Only colonies a route is drawn to (2026-10-18).
+            // Only colonies a route is drawn to.
             if (!com.asteain.airline.route.ColonyRoutes.drawn(level, self.colony(), key.colony())) continue;
             if (reachAllForChecks) {
                 out.add(key);

@@ -19,7 +19,7 @@ final class Script {
 
     static final int WATCHDOG_TICKS = Integer.getInteger("airlinetest.watchdogTicks", 6000);
 
-    /** -Psprint=on (2026-10-15): the server ticks as fast as it can. What the server does beside its ticks (loading land, MineColonies'
+    /** -Psprint=on: the server ticks as fast as it can. What the server does beside its ticks (loading land, MineColonies'
      * path finding) then takes more ticks than at the normal 20 a second, so under sprint a wait gives up only when its ticks are up and
      * as much real time has gone by as those ticks take at the normal speed. Fixed waits (settle) still count ticks only.
      * The reopen scenes, which stop the server, run at the normal speed all the same: stopped about a second after the world opened,

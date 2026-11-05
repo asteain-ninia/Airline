@@ -4,7 +4,7 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 
 /**
  * Server-side config of the ship walking and boarding (saves/&lt;world&gt;/serverconfig/airline-ships.toml): citizens see stopped
- * Sable ships in their path finding and are sent to seats on them. Both came over from ColonyPatchServer (2026-11-05), unchanged.
+ * Sable ships in their path finding and are sent to seats on them. Both were moved here from ColonyPatch Server unchanged.
  */
 public final class ShipConfig {
     public static final ModConfigSpec SPEC;

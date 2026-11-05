@@ -6,8 +6,8 @@ import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * The aircraft's fuel store (the user's ruling of 2026-10-14: the fuel is kept in the inventory of the aircraft's own
- * block): nine slots that take only what airfields take as fuel. The engines burn it one item at a time ({@link Fuel});
+ * The aircraft's fuel store (the fuel is kept in the inventory of the aircraft's own block): nine slots that take only
+ * what airfields take as fuel. The engines burn it one item at a time ({@link Fuel});
  * the pilot fills it from the airfield's racks; a player opens it by using the block with an empty hand.
  */
 public final class FuelStore extends SimpleContainer {

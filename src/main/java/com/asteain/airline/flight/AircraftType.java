@@ -48,15 +48,15 @@ public final class AircraftType {
 
     public final String name;
     /**
-     * The size class of the design (the user's ruling of 2026-10-14): where it may berth, which lines it may fly, which
+     * The size class of the design: where it may berth, which lines it may fly, which
      * airfields build it. From the file's {@code "class"} ("small", "medium", "large"); small when it says nothing.
      */
     public com.asteain.airline.route.ShipClass shipClass = com.asteain.airline.route.ShipClass.SMALL;
     /** Block states in the text form of commands ("create:shaft[axis=x]"). The aircraft's own block is not in this map. */
     public final Map<BlockPos, String> parts = new LinkedHashMap<>();
     /**
-     * The materials of the parts that are made of others (Domum Ornamentum's blocks; 2026-10-18, the pillars of the user's
-     * 大凪号): a picture's slot to the block it is made of, as Domum Ornamentum keeps it ("textureData"). In a design file
+     * The materials of the parts that are made of others (Domum Ornamentum's blocks, such as the pillars of the oonagi):
+     * a picture's slot to the block it is made of, as Domum Ornamentum keeps it ("textureData"). In a design file
      * after the state: {@code "domum_ornamentum:squarepillar[column=pillar_base]|minecraft:block/oak_planks=minecraft:spruce_log"}
      * (several slots apart with ";"), the way the airfields' blueprint tools write them.
      */
@@ -143,19 +143,19 @@ public final class AircraftType {
     /** The burners, the lever beside each (the height is held with these levers, all set alike), and the setting of each burner's own dial. */
     public BlockPos[] burners = {}, burnerLevers = {};
     public int[] burnerValues = {};
-    /** The hold: containers that carry the cargo (barrels, or MineColonies racks: 2026-10-18, the user's 雲中号 and 大凪号). */
+    /** The hold: containers that carry the cargo (barrels, or MineColonies racks, as in the stratus and the oonagi). */
     public final List<BlockPos> cargo = new ArrayList<>();
     /** Places on the deck where somebody can stand to work the hold (the block the feet are in). */
     public final List<BlockPos> access = new ArrayList<>();
     /**
-     * Seats for passengers (2026-10-17, the user's ruling "判断は一旦全部推奨で": 旅客 1): players sit down on them while the
+     * Seats for passengers: players sit down on them while the
      * aircraft stands on a pad and ride along; flights do not wait for them. Kept away from where the pilot walks (a pilot
      * that is sat down on one is taken off it again). Optional; none for most designs.
      */
     public final List<BlockPos> passengers = new ArrayList<>();
     /**
-     * The connectors on the sides of the hull and the lever beside each (2026-10-18, the user's ruling: at an anchorage
-     * the aircraft is joined to the pier's connector, which pulls it so that its deck lies right against the pier). The
+     * The connectors on the sides of the hull and the lever beside each (at an anchorage the aircraft is joined to the
+     * pier's connector, which pulls it so that its deck lies right against the pier). The
      * key is the side: "port" to the left looking ahead (toward -z of the ship), "starboard" to the right. Optional.
      */
     public final Map<String, Dock> docks = new LinkedHashMap<>();
@@ -220,15 +220,15 @@ public final class AircraftType {
     public double descentRate = 0.4;
     /**
      * Blocks per second the height target is lowered higher up: while landing until it is {@link #slowDescentWithin} blocks
-     * above where the aircraft comes to rest, and over a point down to a lower line (2026-10-18, the user's ruling
-     * "速くする": the way down took 40 seconds of a short flight of koeda's; the last blocks stay as slow as they were, so
-     * that it is put down as softly and as exactly).
+     * above where the aircraft comes to rest, and over a point down to a lower line (at the slow rate all the way, the
+     * way down took 40 seconds of a short flight of koeda's; the last blocks stay slow, so that it is put down as softly
+     * and as exactly).
      */
     public double fastDescentRate = 0.8, slowDescentWithin = 3.0;
     /**
      * 1: the throttle levers are moved a few steps at a time only into and out of the manoeuvres under way (ahead,
-     * astern, the gentle turns); a turn on the spot and a slow push set them at once (2026-10-18: in the user's 雲中号 and
-     * 大凪号 the throttle levers do the turns and the slow pushes as well, which a lever of their own set at once before;
+     * astern, the gentle turns); a turn on the spot and a slow push set them at once (in the stratus and the oonagi the
+     * throttle levers do the turns and the slow pushes as well, which in other designs a lever of their own sets at once;
      * moved step by step, every short push lasted a decision too long and the aircraft was never placed). 0: always.
      */
     public int throttleCruiseOnly = 0;
@@ -251,7 +251,7 @@ public final class AircraftType {
      * The thinnest air in which the burners at full lever, their dials turned up as far as they go, just carry the aircraft:
      * {@link #benchAir} x the hot air it hovered with / the most hot air it can get (the smaller of its balloon's room and
      * what its burners give at most). Lift goes with the pressure, so higher up than where the pressure is this (and a
-     * margin: {@link #AIR_MARGIN}) it cannot climb (2026-11-03, the user's question "船の最大高度以上のとこに飛行場あったら").
+     * margin: {@link #AIR_MARGIN}) it cannot climb (an airfield may lie higher than an aircraft's ceiling).
      * Measured by the test bench; NaN: not measured (a design under trial), no ceiling is known.
      */
     public double thinnestAir = Double.NaN;
@@ -314,7 +314,7 @@ public final class AircraftType {
         final List<BlockPos> levers = new ArrayList<>(List.of(burnerLevers));
         levers.addAll(List.of(driveLevers));
         // The burners' levers hold the height step by step: throttle levers. A drive lever may be a plain lever when it is
-        // only ever on or off (0 or 15) and is no throttle (2026-10-18: the user's "レバーでいいところをスロットルにしてる").
+        // only ever on or off (0 or 15) and is no throttle (a throttle lever is not needed there).
         for (final BlockPos at : burnerLevers) if (!String.valueOf(parts.get(at)).startsWith("simulated:throttle_lever")) return "no throttle lever at " + at.toShortString();
         for (int i = 0; i < driveLevers.length; i++) {
             final String part = String.valueOf(parts.get(driveLevers[i]));
@@ -390,7 +390,7 @@ public final class AircraftType {
     }
 
     /**
-     * A design from a file ("format": 2; the hulls around the machinery made in code went with the prototype, 2026-10-19):
+     * A design from a file ("format": 2; the hulls around the machinery made in code went with the prototype):
      * {@code "blocks": [[x, y, z, "state"], ...]} with every block of the aircraft except its own block, and where its
      * devices are and how it is driven:
      * {@code "seat": [x, y, z]}, {@code "cargo": [[x, y, z], ...]} (barrels), {@code "access": [[x, y, z], ...]},
@@ -409,8 +409,8 @@ public final class AircraftType {
             if (!file.has("format") || file.get("format").getAsInt() != 2) throw new IOException("not a design file of format 2");
             final AircraftType t = new AircraftType(name);
             if (file.has("class")) t.shipClass = com.asteain.airline.route.ShipClass.of(file.get("class").getAsString());
-            // A design of its own climbs to the line with its target raised two blocks a second (2026-10-18, the user's
-            // ruling "速くする"; it was one: 15 seconds of a short flight); a design's own number goes first.
+            // A design of its own climbs to the line with its target raised two blocks a second (at one, the climb took
+            // 15 seconds of a short flight); a design's own number goes first.
             t.climbRate = 2.0;
             t.readBlocks(file);
             t.seat = pos(file.get("seat"));
@@ -493,15 +493,14 @@ public final class AircraftType {
     /** The designs that come as files in the jar (airline_aircraft/), in the order they are offered. */
     private static final String[] BUNDLED = {"koeda", "stratus", "oonagi"};
     /**
-     * The design an airfield gets when nothing else is asked for (the user's ruling of 2026-10-14: the fast one; larger
-     * and better ones are to follow it). It is offered first.
-     * Koeda since 2026-10-15 (the user's ruling: "こかぜと入れ替える"; kokaze itself is gone from 0.12.0: no backward
-     * compatibility before 1.0.0, the user's ruling of 2026-10-16).
+     * The design an airfield gets when nothing else is asked for (the fast one; larger and better ones are to follow
+     * it). It is offered first.
+     * Koeda, which replaced kokaze (kokaze itself is gone from 0.12.0: there is no backward compatibility before 1.0.0).
      */
     public static final String STANDARD = "koeda";
 
     /**
-     * The parts a propeller bearing turns (2026-10-15, the medium aircraft): the hub in front of the bearing and the sails
+     * The parts a propeller bearing turns (the medium aircraft has them): the hub in front of the bearing and the sails
      * fastened to it in the same plane. Once the rotation reaches the bearing they are no longer blocks of the ship but a
      * turning contraption, and their places are empty; keeping the aircraft as it was built leaves those places alone.
      */

@@ -341,7 +341,7 @@ public final class BoardingManager {
             return;
         }
         session.seatDrop = citizen.getBbHeight() / 2.0 + 0.25;      // the same drop MineColonies uses for its own seats
-        // Inside the ship (2026-10-18, the user's ruling "Create の席に座らせるのを試す"): where the ship's own blocks are, so that
+        // Inside the ship (the nearest thing to sitting citizens on Create's seats): where the ship's own blocks are, so that
         // the seat entity moves with the ship as a ship's seat does, and the seated figure follows it smoothly. (Create's seat
         // itself cannot be used: a MineColonies citizen gets onto MineColonies' own seats, minecarts and horses only.)
         session.inShip = ShipConfig.BOARDING_SEAT_IN_SHIP.get();

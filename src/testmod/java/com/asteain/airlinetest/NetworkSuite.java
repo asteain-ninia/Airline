@@ -93,7 +93,7 @@ final class NetworkSuite {
         s.until("A: looked at with the stone", () -> {}, () -> net.edge(a, b).state() != State.UNVERIFIED, 200);
         s.step("A: raised over the stone", () -> {
             Edge edge = net.edge(a, b);
-            // (2026-10-18: lines are level and pass over what is in their way.) The stone is 8 above the buoys' blocks, the
+            // (Lines are level and pass over what is in their way.) The stone is 8 above the buoys' blocks, the
             // line 9.5: the bottom of the tube (7 below the line) has to come above the stone's top: 7 higher.
             s.soft("A / the line is raised over the stone, 7 blocks, and is clear", edge.state() == State.CLEAR && edge.lift() == 7 && !edge.needs(onLine.getX(), onLine.getY(), onLine.getZ())
                     && edge.height() == a.getY() + 0.5 + RouteRules.waypointHeight() + 7, describe(edge) + ", at " + edge.height());
@@ -275,7 +275,7 @@ final class NetworkSuite {
             // This server has no Sable: the flying part is off, its commands say so, nothing else is disturbed.
             s.soft("B / without Sable the flying part is off", !com.asteain.airline.flight.Flights.available() && com.asteain.airline.flight.Flights.aircraft(level).isEmpty(),
                     "available=" + com.asteain.airline.flight.Flights.available());
-            // The boarding came over from ColonyPatchServer (2026-11-05); its check without Sable came with it.
+            // The boarding command is there without Sable as well, and says that Sable is missing.
             server.getCommands().performPrefixedCommand(stack, root + " board 00000000-0000-0000-0000-000000000000 0 0 0");
             s.soft("B / without Sable the boarding command says that Sable is missing", out.size() == 1 && out.get(0).contains("Sable"), String.valueOf(out));
             out.clear();
@@ -322,7 +322,7 @@ final class NetworkSuite {
             s.soft("C / the long lines stay not verified, the server keeps running", unverified >= 2, unverified + " lines not verified, " + net.pending() + " waiting");
         });
 
-        // ---- C2: land that is not loaded is read from the save (2026-10-18, the user: lines stayed "being looked at") ----
+        // ---- C2: land that is not loaded is read from the save (otherwise lines over it stay "being looked at") ----
         int z5 = 2600;
         BlockPos savedA = new BlockPos(0, Y, z5), savedB = new BlockPos(90, Y, z5), savedStone = new BlockPos(45, Y + 9, z5);
         s.step("C2: two buoys and a stone half way between them, the land loaded", () -> {
@@ -355,9 +355,9 @@ final class NetworkSuite {
                     line.state() == State.CLEAR && line.lift() == 8 && !line.hasUnseenParts() && stillNotLoaded, describe(line) + ", land loaded now: " + !stillNotLoaded);
         });
 
-        // ---- D: landing pads (rulings of 2026-10-11): higher lines, the shaft over the pad, what a buoy says, links ----
+        // ---- D: landing pads: higher lines, the shaft over the pad, what a buoy says, links ----
         int z2 = -1200, lift = RouteRules.airfieldWaypointHeight();
-        // (The grade 2 buoy is passed 10 above since 2026-10-15, 2 more than a grade 1 one: set 2 lower, the lines stay level.)
+        // (The grade 2 buoy is passed 10 above, 2 more than a grade 1 one: set 2 lower, the lines stay level.)
         final int overBuoy = RouteRules.waypointHeight() + RouteRules.waypointRaise(RouteNetwork.Kind.BUOY, ShipClass.MEDIUM);
         BlockPos padA = new BlockPos(0, Y, z2), padB = new BlockPos(140, Y, z2), between = new BlockPos(70, Y + lift - overBuoy, z2);
         BlockPos lonely = new BlockPos(0, Y, z2 - 600);      // a buoy far from everything
@@ -431,7 +431,7 @@ final class NetworkSuite {
         });
 
         // ---- F: lines pass over landing pads (an aircraft may stand there) ----
-        // (2026-10-18: lines are level and are raised over the pads on their way, by 32 at most.) Two buoys a block above the
+        // (Lines are level and are raised over the pads on their way, by 32 at most.) Two buoys a block above the
         // pad's floor, west and east of it: their line would pass 9.5 above the floor; it has to pass 17 above it, so it is
         // raised by 7. Two buoys 40 below the floor would need a line raised by 48: they are not joined.
         // The high buoys are passed as high as the pad's own lines begin (pad 18 - buoy 9; 16 - 8 before the small aircraft was 10 high).
@@ -535,7 +535,7 @@ final class NetworkSuite {
         s.until("G: the link that is gone is taken back", () -> {}, () -> !net.linked(g2, g3), 200);
         s.step("G: the end", () -> s.soft("G / the airfields whose line is gone do not count as linked any more; the others still do", !net.linked(g2, g3) && net.linked(g1, g2), "linked " + net.linked(g1, g2) + " / " + net.linked(g2, g3)));
 
-        // ---- H: airfields reach each other by large maps (ruling of 2026-10-13) ---------------------------------
+        // ---- H: airfields reach each other by large maps ---------------------------------
         // Large maps of 8 chunks (128 blocks) here, and a reach of 1 chunk for what lies near, so that the two rules can be told apart.
         int z4 = -3650;
         BlockPos h1 = new BlockPos(10, Y, z4), h2 = new BlockPos(110, Y, z4), h3 = new BlockPos(140, Y, z4), h4 = new BlockPos(300, Y, z4), h5 = new BlockPos(522, Y, z4), h6 = new BlockPos(650, Y, z4);

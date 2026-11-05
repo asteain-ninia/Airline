@@ -15,8 +15,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * An airfield (small, medium or large) or an anchorage: what kind is its {@link Facility} (the user's ruling of
- * 2026-10-14). They are one building class; the kind decides the size and place of the pads, which classes of aircraft
+ * An airfield (small, medium or large) or an anchorage: what kind is its {@link Facility}. They are one building
+ * class; the kind decides the size and place of the pads, which classes of aircraft
  * may berth and are built there, and whether it is an airfield at all (an anchorage has no pilot, no aircraft of its
  * own and builds none, and is only on the air network while its colony has an airfield). Its racks are the export store: goods that other colonies want are collected here from the warehouse by couriers.
  * The import store is the stash that comes with its blueprint.
@@ -133,8 +133,8 @@ public class BuildingAirfield extends AbstractBuilding {
     }
 
     /**
-     * The parts its aircraft lack are asked for like anything else a building asks for (2026-10-18, the user's
-     * "飛行場で機体の修復に使う資材、普通のアイテム要求で要求するようにして欲しい"): couriers bring them to the racks, and the
+     * The parts its aircraft lack, the materials for repairing it, are asked for with ordinary item requests, like
+     * anything else a building asks for: couriers bring them to the racks, and the
      * aircraft is put right from there at its next look (every ten seconds). One request per kind of part for what is
      * lacking and not on the racks yet; a request for a part that is no longer lacking is withdrawn. These requests are
      * the building's own {@code Stack} requests that the building may fill itself; those of the export table
@@ -164,7 +164,7 @@ public class BuildingAirfield extends AbstractBuilding {
             final int onRacks = com.minecolonies.api.util.InventoryUtils.getItemCountInItemHandler(getItemHandlerCap(), stack -> wanted.fits(key, stack));
             final int more = part.getValue() - asked.getOrDefault(key, 0) - onRacks;
             if (more <= 0) continue;
-            // A part made of others asks for exactly that (its materials as well, 2026-10-19); any other, for the item alone.
+            // A part made of others asks for exactly that (its materials as well); any other, for the item alone.
             final boolean madeOf = key.indexOf('|') >= 0;
             createRequest(new com.minecolonies.api.colony.requestsystem.requestable.Stack(item.copyWithCount(1), madeOf, true,
                     net.minecraft.world.item.ItemStack.EMPTY, more, 1, true), true);
@@ -251,7 +251,7 @@ public class BuildingAirfield extends AbstractBuilding {
     }
 
     /**
-     * Pilots an airfield hires (2026-10-17): one for its own pad and one for each anchorage of its colony, whose aircraft
+     * Pilots an airfield hires: one for its own pad and one for each anchorage of its colony, whose aircraft
      * are the airfield's too; a small airfield one (small aircraft do not berth at anchorages).
      */
     public static int pilotsFor(com.minecolonies.api.colony.buildings.IBuilding building) {

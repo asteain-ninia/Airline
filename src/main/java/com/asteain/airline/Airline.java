@@ -71,8 +71,8 @@ public final class Airline {
     /** The mod's id. This is the only place in Java where the id is written as text. */
     public static final String MOD_ID = "airline";
     /**
-     * What a flight does, and the visitors who come with it, are written at this level: debug (logs/debug.log only;
-     * 2026-10-19, the user's "静かにしたい"), and in the game's log on the test servers (the system property {@code airline.logFlights}).
+     * What a flight does, and the visitors who come with it, are written at this level: debug (logs/debug.log only, so
+     * that the game's log stays quiet), and in the game's log on the test servers (the system property {@code airline.logFlights}).
      */
     public static final org.slf4j.event.Level STEPS = Boolean.getBoolean("airline.logFlights") ? org.slf4j.event.Level.INFO : org.slf4j.event.Level.DEBUG;
 
@@ -117,7 +117,7 @@ public final class Airline {
     public static final DeferredBlock<BlockHutAirfield> AIRFIELD_HUT = BLOCKS.register(HUT_NAME, () -> new BlockHutAirfield());
     public static final DeferredItem<ItemBlockHut> AIRFIELD_HUT_ITEM =
             ITEMS.register(HUT_NAME, () -> new ItemBlockHut(AIRFIELD_HUT.get(), new Item.Properties()));
-    /** The huts of the medium and the large airfield and of the anchorage (2026-10-14). */
+    /** The huts of the medium and the large airfield and of the anchorage. */
     public static final DeferredBlock<BlockHutAirfield> MEDIUM_AIRFIELD_HUT = BLOCKS.register(hutName(com.asteain.airline.route.Facility.MEDIUM_AIRFIELD),
             id -> new BlockHutAirfield(com.asteain.airline.route.Facility.MEDIUM_AIRFIELD));
     public static final DeferredBlock<BlockHutAirfield> LARGE_AIRFIELD_HUT = BLOCKS.register(hutName(com.asteain.airline.route.Facility.LARGE_AIRFIELD),
@@ -186,7 +186,7 @@ public final class Airline {
     /** The aircraft tab (building an aircraft is asked for here, and only here). Made after the timetable, for the same reason. */
     public static final BuildingEntry.ModuleProducer<com.asteain.airline.colony.AircraftModule, com.asteain.airline.colony.AircraftModuleView> AIRCRAFT_TAB =
             new BuildingEntry.ModuleProducer<>(MOD_ID + "_aircraft", com.asteain.airline.colony.AircraftModule::new, () -> com.asteain.airline.colony.AircraftModuleView::new);
-    /** The routes tab (2026-10-18: routes to other colonies are drawn here) and the requests tab (what every colony wants). After the ones above. */
+    /** The routes tab (routes to other colonies are drawn here) and the requests tab (what every colony wants). After the ones above. */
     public static final BuildingEntry.ModuleProducer<com.asteain.airline.colony.RoutesModule, com.asteain.airline.colony.RoutesModuleView> ROUTES_TAB =
             new BuildingEntry.ModuleProducer<>(MOD_ID + "_routes", com.asteain.airline.colony.RoutesModule::new, () -> com.asteain.airline.colony.RoutesModuleView::new);
     public static final BuildingEntry.ModuleProducer<com.asteain.airline.colony.WantsModule, com.asteain.airline.colony.WantsModuleView> WANTS_TAB =
@@ -231,7 +231,7 @@ public final class Airline {
             .createBuildingEntry());
     /**
      * The anchorage: no pilot, no aircraft page (it builds none) and no export list: it has no racks or store of its own,
-     * aircraft load and unload there from and into those of the colony's airfield (the user's ruling of 2026-10-15).
+     * aircraft load and unload there from and into those of the colony's airfield.
      */
     public static final DeferredHolder<BuildingEntry, BuildingEntry> ANCHORAGE = BUILDINGS.register(com.asteain.airline.route.Facility.ANCHORAGE.schematic, () -> new BuildingEntry.Builder()
             .setBuildingBlock(ANCHORAGE_HUT.get())
@@ -261,7 +261,7 @@ public final class Airline {
         container.registerConfig(ModConfig.Type.COMMON, Cargo.SPEC, MOD_ID + "-cargo.toml");
         // Per world (saves/<world>/serverconfig/): the design tools, off unless a world that is not played switches them on.
         container.registerConfig(ModConfig.Type.SERVER, com.asteain.airline.flight.DesignTools.SPEC, MOD_ID + "-server.toml");
-        // Per world as well: citizens walking over stopped ships and sitting down on them (came over from ColonyPatchServer, 2026-11-05).
+        // Per world as well: citizens walking over stopped ships and sitting down on them (moved here from ColonyPatch Server).
         container.registerConfig(ModConfig.Type.SERVER, ShipConfig.SPEC, MOD_ID + "-ships.toml");
         // The boarding command exists with or without Sable; without it, it answers that Sable is missing.
         NeoForge.EVENT_BUS.addListener(com.asteain.airline.boarding.BoardingCommand::register);
@@ -292,7 +292,7 @@ public final class Airline {
         NeoForge.EVENT_BUS.addListener(com.asteain.airline.route.RouteMap::onLogin);
         NeoForge.EVENT_BUS.addListener(com.asteain.airline.route.RouteMap::onChangedDimension);
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStartedEvent event) -> com.asteain.airline.route.RouteMap.forget());
-        // The routes between colonies that players draw (2026-10-18): a route that became open or closed is told to both colonies.
+        // The routes between colonies that players draw: a route that became open or closed is told to both colonies.
         NeoForge.EVENT_BUS.addListener(com.asteain.airline.route.ColonyRoutes::onServerTick);
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStartedEvent event) -> com.asteain.airline.route.ColonyRoutes.forget());
     }

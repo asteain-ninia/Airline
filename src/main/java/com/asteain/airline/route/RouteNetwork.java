@@ -76,8 +76,8 @@ public final class RouteNetwork extends SavedData {
         }
 
         /**
-         * The largest class this point is made for: a pad, its facility's; a buoy, by its grade (the user's ruling of
-         * 2026-10-15: grade 1 small, grade 2 medium, grade 3 large).
+         * The largest class this point is made for: a pad, its facility's; a buoy, by its grade (grade 1 small,
+         * grade 2 medium, grade 3 large).
          */
         public ShipClass largest() {
             if (kind == Kind.AIRFIELD) return facility != null ? facility.largest() : ShipClass.SMALL;
@@ -124,7 +124,7 @@ public final class RouteNetwork extends SavedData {
         @Nullable private ShipClass barredFrom;
         @Nullable private BlockPos barredFromAt;
         /**
-         * Lines are level (2026-10-18): at the height of the higher of their two ends ({@link #base}), raised by
+         * Lines are level: at the height of the higher of their two ends ({@link #base}), raised by
          * {@link #lift} blocks so that they pass over the landing pads on their way ({@link #padLift}, worked out from the
          * points) and over the blocks below them (found by the scan). Saved.
          */
@@ -1080,8 +1080,8 @@ public final class RouteNetwork extends SavedData {
             }
         }
         if (now.equals(linked)) return;
-        // (Colonies are told about the routes their players drew, by ColonyRoutes, once for two colonies: 2026-10-18. The
-        // notices for every pair of airfields that came near each other, in the colonies' names only, were confusing.)
+        // (Colonies are told about the routes their players drew, by ColonyRoutes, once for two colonies. Notices for
+        // every pair of airfields that came near each other, in the colonies' names only, would be confusing.)
         linked.clear();
         linked.addAll(now);
         setDirty();
@@ -1106,7 +1106,7 @@ public final class RouteNetwork extends SavedData {
             if (loaded != null) {
                 chunk = loaded::getBlockState;
             } else {
-                // Not loaded: read from the save (2026-10-18), without loading it into the world.
+                // Not loaded: read from the save, without loading it into the world.
                 final Saved saved = fromSave(level, key);
                 if (saved == WAITING) {
                     // Being read: the chunks after it that are not loaded either are asked for as well (a long line over land
@@ -1242,8 +1242,8 @@ public final class RouteNetwork extends SavedData {
     }
 
     /**
-     * A chunk as it was saved (2026-10-18, the user: lines stayed "being looked at"; lines over land nobody was near
-     * could not be seen at all): its blocks, read from the region file without loading the chunk into the world (no
+     * A chunk as it was saved (without it, lines over land nobody is near would stay "being looked at" for ever): its
+     * blocks, read from the region file without loading the chunk into the world (no
      * ticking, nothing made). {@code none}: there is nothing to read (never made, or saved by another version).
      */
     private static final class Saved implements View {
@@ -1384,7 +1384,7 @@ public final class RouteNetwork extends SavedData {
     /**
      * The shortest way from one point to another over lines that are clear or not verified yet. The list starts with
      * {@code from} and ends with {@code to}; it is empty when there is no way. A way never leads through a landing pad:
-     * the space over a pad belongs to the aircraft that go up and down there (proposal of the assistant).
+     * the space over a pad belongs to the aircraft that go up and down there.
      */
     public List<BlockPos> route(BlockPos from, BlockPos to, ShipClass ship) {
         return route(from, to, ship, List.of());
@@ -1401,7 +1401,7 @@ public final class RouteNetwork extends SavedData {
 
     /**
      * The way there would be if no line were blocked: over every line made for this class (whatever was found on it).
-     * For telling why there is no way (2026-10-17: a colony's routes are drawn by players, and when one cannot be flown
+     * For telling why there is no way (a colony's routes are drawn by players, and when one cannot be flown
      * the reason is shown): the first line on it that this class may not fly is what stands in the way.
      */
     public List<BlockPos> routeIfClear(BlockPos from, BlockPos to, ShipClass ship) {

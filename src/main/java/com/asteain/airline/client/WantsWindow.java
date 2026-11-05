@@ -11,7 +11,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 
-/** The requests tab of the airfield's window (2026-10-18): every colony and what it wants, how much is on its way. Client only. */
+/** The requests tab of the airfield's window: every colony and what it wants, how much is on its way. Client only. */
 public class WantsWindow extends AbstractModuleWindow<WantsModuleView> {
     private static final String KEY = "com." + Airline.MOD_ID + ".gui.wants.";
     private final ScrollingList list;

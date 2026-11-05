@@ -30,7 +30,7 @@ import org.slf4j.Logger;
 import java.util.Map;
 
 /**
- * Moving the goods between an airfield and an aircraft that stands fixed on its pad. By the ruling of 2026-10-11 the
+ * Moving the goods between an airfield and an aircraft that stands fixed on its pad. The
  * pilot does this on foot: to the racks, take, to the aircraft, put down, and back. (Between warehouse and airfield
  * the couriers carry, as before.) With the setting switched off nobody carries: the goods move by themselves.
  *

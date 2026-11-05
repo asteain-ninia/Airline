@@ -123,7 +123,7 @@ final class Craft {
         final BlockPos at = inShip(part);
         final net.minecraft.world.level.block.state.BlockState state = level.getBlockState(at);
         if (state.getBlock() instanceof net.minecraft.world.level.block.LeverBlock plain) {
-            // A plain lever (2026-10-18): on or off, anything above 0 is on. Pulled as a hand pulls it.
+            // A plain lever: on or off, anything above 0 is on. Pulled as a hand pulls it.
             if (state.getValue(net.minecraft.world.level.block.LeverBlock.POWERED) == value > 0) return;
             plain.pull(state, level, at, null);
             writes++;
@@ -339,8 +339,8 @@ final class Craft {
 
     /**
      * Each burner's dial turned up by as much as the air is thinner than where the design was measured (down where it is
-     * thicker), so that a notch of the lever carries as much at every height and the height is held as it was measured
-     * (2026-11-03, the user's ruling: "高さに応じて上げる"). Never above what the burner gives or its balloon holds (hot air
+     * thicker), so that a notch of the lever carries as much at every height and the height is held as it was measured.
+     * Never above what the burner gives or its balloon holds (hot air
      * beyond the room is lost), nor below the design's own value where that is more already.
      */
     void dialToAir() {

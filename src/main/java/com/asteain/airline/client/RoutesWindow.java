@@ -14,7 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
- * The routes tab of the airfield's window (2026-10-18): every other colony, nearest first, with whether a route is drawn
+ * The routes tab of the airfield's window: every other colony, nearest first, with whether a route is drawn
  * to it and, for each class this colony can send, whether it can be flown or why not; a button draws or takes it off.
  * Client only.
  */

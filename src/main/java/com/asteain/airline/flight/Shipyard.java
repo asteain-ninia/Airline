@@ -23,14 +23,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Building an aircraft where it will stand. It is the airfield's business alone (the user's ruling of 2026-10-14): asked
+ * Building an aircraft where it will stand. It is the airfield's business alone: asked
  * for in the airfield's window, the aircraft's own block is set down on the middle of the airfield's own landing pad and
  * makes that pad a building site: a work order goes to the colony's builders (every design is a blueprint of the
  * mod's pack, so the builders ask for its materials and put it up the way they do any decoration), and when every block
  * of the design stands there, put up by a builder or by hand, the whole becomes a ship, parked on its pad.
  *
- * <p>The aircraft is built in the heading of its pad, the way it will stand there (the user's ruling of 2026-10-14: it
- * must not swing round when it is finished). The designs, and what the autopilot knows of them, are all written nose to
+ * <p>The aircraft is built in the heading of its pad, the way it will stand there (it must not swing round when it is
+ * finished). The designs, and what the autopilot knows of them, are all written nose to
  * +x; so the builders' blueprint and the look at what stands are turned to the pad's heading, and when the aircraft is
  * finished it is laid down nose to +x again for a moment within the same tick, made a ship, and turned back.</p>
  */
@@ -154,8 +154,8 @@ final class Shipyard {
     // ---- keeping an aircraft as it was built --------------------------------------------------------------------
 
     /**
-     * An aircraft that stands on its home pad is put back the way its design has it (the user's ruling of 2026-10-07: the
-     * air network takes aircraft as the airfield built them; what was changed is put right when it lands). Inside the
+     * An aircraft that stands on its home pad is put back the way its design has it (the air network takes aircraft as
+     * the airfield built them; what was changed is put right when it lands). Inside the
      * outline of the design: a block the design does not have there is taken out (what it gives goes to the airfield's
      * import store), a device that was turned is turned back, and a block that is missing is put in again with one from
      * the airfield's racks. What the racks do not have is remembered in {@link AircraftBlockEntity#lacks}: an aircraft
