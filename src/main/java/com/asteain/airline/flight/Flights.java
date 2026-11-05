@@ -260,6 +260,11 @@ public final class Flights {
             return new int[] {2, (int) Fuel.minutes(aircraft), aircraft.lacks.size(), aircraft.phase == AircraftBlockEntity.Phase.DISTRESS ? 1 : 0};
         }
         if (level.isLoaded(pad) && level.getBlockEntity(pad.above()) instanceof AircraftBlockEntity site && site.yard != null) {
+            // A site of a design this version does not have is not built on (see tick); its name is shown as it is saved.
+            if (!AircraftType.ALL.containsKey(site.type)) {
+                design[0] = site.type;
+                return new int[] {1, 0, 0, 0};
+            }
             design[0] = AircraftType.of(site.type).title();
             return new int[] {1, Math.max(0, Shipyard.missing(level, site.getBlockPos(), AircraftType.of(site.type), Shipyard.turnAt(level, site.yard))), 0, 0};
         }
