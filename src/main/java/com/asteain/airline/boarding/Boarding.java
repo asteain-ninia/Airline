@@ -41,12 +41,12 @@ public final class Boarding {
         OK("受け付けました。"),
         NO_SABLE("Sable が入っていないので、乗り込みは使えません。"),
         DISABLED("乗り込みは設定で無効になっています([boarding] enabled)。"),
-        NOT_A_CITIZEN("MineColonies の村人ではありません。"),
+        NOT_A_CITIZEN("MineColonies の市民ではありません。"),
         NO_SHIP("その場所に船のブロックがありません。"),
         SHIP_MOVING("船が動いています。止まってからやり直してください。"),
-        ALREADY_SEATED("その村人は、すでに別の席に座っています。先に降ろしてください。"),
-        SEAT_TAKEN("その席には、ほかの村人が座っているか、向かっています。"),
-        NOT_ABOARD("その村人は乗り込みの途中でも、座ってもいません。"),
+        ALREADY_SEATED("その市民は、すでに別の席に座っています。先に降ろしてください。"),
+        SEAT_TAKEN("その席には、ほかの市民が座っているか、向かっています。"),
+        NOT_ABOARD("その市民は乗り込みの途中でも、座ってもいません。"),
         WRONG_THREAD("サーバーのスレッドから呼んでください。"),
         FAILED("内部の失敗で受け付けられませんでした。サーバーのログを見てください。");
 
