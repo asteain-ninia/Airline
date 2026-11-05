@@ -20,7 +20,8 @@ import java.util.List;
 /**
  * A tavern's visitors and the air network.
  *
- * <p>Where one appears: in a colony joined to others by the air network, at an airfield,
+ * <p>Where one appears: in a colony joined to others by air (a route a player drew that is open now; see
+ * {@link VisitorArrival#byAir}), at an airfield,
  * as if it had flown in, and it walks to the tavern from there.</p>
  *
  * <p>When it comes: in such a colony the tavern does not let one appear by itself when its time comes; the
