@@ -1,0 +1,5 @@
+-proc:none
+-d
+/tmp/claude-0/javacheck
+src/main/java/com/asteain/airline/flight/Flights.java
+src/main/java/com/asteain/airline/flight/AircraftBlockEntity.java
