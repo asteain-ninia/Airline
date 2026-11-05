@@ -165,17 +165,17 @@ public final class Visual {
     private static void colonies(MinecraftServer server, ServerLevel level, ServerPlayer player) {
         try {
             final BlockPos own = new BlockPos(30, -60, 100), other = new BlockPos(150, -60, 100), third = new BlockPos(30, -60, 260);
-            final com.minecolonies.api.colony.IColony a = com.minecolonies.api.colony.IColonyManager.getInstance().createColony(level, own, player, "空路の村", "Medieval Oak");
+            final com.minecolonies.api.colony.IColony a = com.minecolonies.api.colony.IColonyManager.getInstance().createColony(level, own, player, "空路のコロニー", "Medieval Oak");
             Fixture.townHall(a, own);
             airfield = own.offset(8, 0, 0);
             final net.minecraft.world.level.block.state.BlockState hut = Airline.AIRFIELD_HUT.get().defaultBlockState();
             level.setBlockAndUpdate(airfield, hut);
             Airline.AIRFIELD_HUT.get().setPlacedBy(level, airfield, hut, player, new net.minecraft.world.item.ItemStack(Airline.AIRFIELD_HUT.get()));
             a.getServerBuildingManager().getBuilding(airfield).setBuildingLevel(1);
-            final com.minecolonies.api.colony.IColony b = Fixture.create(level, other, "となり村");
+            final com.minecolonies.api.colony.IColony b = Fixture.create(level, other, "となりのコロニー");
             Fixture.townHall(b, other);
             Fixture.placeHut(level, b, Airline.AIRFIELD_HUT.get(), other.offset(8, 0, 0)).setBuildingLevel(1);
-            final com.minecolonies.api.colony.IColony c = Fixture.create(level, third, "遠い村");
+            final com.minecolonies.api.colony.IColony c = Fixture.create(level, third, "遠いコロニー");
             Fixture.townHall(c, third);
             final com.asteain.airline.ledger.WantLedger ledger = com.asteain.airline.ledger.WantLedger.get(server);
             ledger.set(com.asteain.airline.ledger.WantLedger.Key.of(b), net.minecraft.world.item.Items.IRON_INGOT, 64);

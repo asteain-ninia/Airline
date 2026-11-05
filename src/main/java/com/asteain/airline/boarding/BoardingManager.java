@@ -74,13 +74,18 @@ public final class BoardingManager {
     /** A seated citizen found this far from its seat without a seat under it was taken away by something else. */
     private static final double TAKEN_AWAY = 4.0;
     private static final int MISSING_TIMEOUT = 12000;
+    /** More than this many ordinary exceptions within FAILURE_WINDOW_MS switch boarding off (as for path finding, PathingHooks). */
     private static final int MAX_FAILURES = 5;
+    private static final long FAILURE_WINDOW_MS = 60_000L;
     /** The cells around a seat where a place to stand is looked for (x and z steps), nearest first, always in this order. */
     private static final int[][] STAND_SIDES = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
 
     private static final Map<ServerLevel, BoardingManager> MANAGERS = new WeakHashMap<>();
     private static boolean broken;
+    /** Every internal failure since the server started (for tests and diagnosis). */
     private static int failures;
+    private static long failureWindowStart;
+    private static int failuresInWindow;
 
     private static final class Session {
         final UUID citizen;
@@ -104,6 +109,8 @@ public final class BoardingManager {
         /** Where the sitting point was in the world the last time the ship was seen. */
         Vec3 lastSit;
         @Nullable BlockPos ground;
+        /** Asked to stand up while the ship moved (see standUpWhenStopped): it does so as soon as the ship has stopped. */
+        boolean standWhenStopped;
         /** Game time of the last tick this session was looked after; the hold on the citizen's decisions lapses without it. */
         long lookedAfter;
         boolean over;
@@ -130,16 +137,44 @@ public final class BoardingManager {
         return failures;
     }
 
+    /**
+     * A linkage error (Sable or MineColonies changed under us) switches boarding off at once. An ordinary exception only
+     * costs the one call it happened in; boarding is switched off only when they keep coming (more than MAX_FAILURES within
+     * FAILURE_WINDOW_MS). Counted over the whole run, a rare failure would switch it off some day, and every aircraft in the
+     * air would be given up with it.
+     */
     private static void fail(String where, Throwable t) {
         failures++;
-        if (t instanceof LinkageError || failures > MAX_FAILURES) {
-            if (!broken) {
-                broken = true;
-                LOGGER.error("[Airline/boarding] {} failed; boarding is switched off until the server restarts. Seated citizens are stood up.", where, t);
-            }
-        } else {
-            LOGGER.warn("[Airline/boarding] {} failed ({} of {} allowed).", where, failures, MAX_FAILURES, t);
+        if (broken) return;
+        if (t instanceof LinkageError) {
+            broken = true;
+            LOGGER.error("[Airline/boarding] {} hit a linkage error; boarding is switched off until the server restarts. Seated citizens are stood up.", where, t);
+            return;
         }
+        final long now = System.currentTimeMillis();
+        if (now - failureWindowStart > FAILURE_WINDOW_MS) {
+            failureWindowStart = now;
+            failuresInWindow = 0;
+        }
+        failuresInWindow++;
+        if (failuresInWindow > MAX_FAILURES) {
+            broken = true;
+            LOGGER.error("[Airline/boarding] {} failed again ({} failures within {} seconds); boarding is switched off until the server restarts. Seated citizens are stood up.",
+                    where, failuresInWindow, FAILURE_WINDOW_MS / 1000L, t);
+        } else {
+            LOGGER.warn("[Airline/boarding] {} failed ({} of {} allowed within {} seconds).", where, failuresInWindow, MAX_FAILURES, FAILURE_WINDOW_MS / 1000L, t);
+        }
+    }
+
+    /**
+     * A new server (or a world opened again in single player): boarding works again and no failure is counted. The state is
+     * kept in static fields, which outlive a single-player world.
+     */
+    public static void serverStarted() {
+        broken = false;
+        failures = 0;
+        failureWindowStart = 0L;
+        failuresInWindow = 0;
     }
 
     // ---- entry points -------------------------------------------------------------------------------------
@@ -168,10 +203,10 @@ public final class BoardingManager {
 
             final BoardingManager manager = MANAGERS.computeIfAbsent(level, l -> new BoardingManager());
             final Session old = manager.sessions.get(citizen.getUUID());
-            if (old != null) {
-                if (old.state == State.SEATED) return old.ship.equals(shipId) && old.seat.equals(seat) ? Result.OK : Result.ALREADY_SEATED;
-                manager.end(old, citizen, "a new order replaces it");
-            }
+            if (old != null && old.state == State.SEATED) return old.ship.equals(shipId) && old.seat.equals(seat) ? Result.OK : Result.ALREADY_SEATED;
+            // (Before the citizen's own order is ended: a refused order leaves it as it was.)
+            if (manager.taken(citizen.getUUID(), shipId, seat)) return Result.SEAT_TAKEN;
+            if (old != null) manager.end(old, citizen, "a new order replaces it");
             final BlockPos below = BlockPos.containing(citizen.getX(), citizen.getY() - 0.2, citizen.getZ());
             final Vec3 origin = citizen.onGround() && SurfaceType.getSurfaceType(level, level.getBlockState(below), below) == SurfaceType.WALKABLE
                     ? citizen.position() : null;
@@ -184,6 +219,18 @@ public final class BoardingManager {
             fail("accepting a boarding order", e);
             return Result.FAILED;
         }
+    }
+
+    /**
+     * Whether another citizen sits on this seat or walks to it. One that is not loaded right now does not count (it may
+     * never come back; its session is forgotten in the end), nor does one that has stood up and walks off.
+     */
+    private boolean taken(UUID citizen, UUID ship, BlockPos seat) {
+        for (final Session other : sessions.values()) {
+            if (other.over || other.citizen.equals(citizen) || other.missing != 0 || other.state == State.LEAVING) continue;
+            if (other.ship.equals(ship) && other.seat.equals(seat)) return true;
+        }
+        return false;
     }
 
     static Result boardAt(ServerLevel level, Mob mob, Vec3 point) {
@@ -246,6 +293,16 @@ public final class BoardingManager {
             fail("accepting an order to leave a ship", e);
             return Result.FAILED;
         }
+    }
+
+    static Result standUpWhenStopped(ServerLevel level, Mob mob) {
+        final Result now = leave(level, mob, null);
+        if (now != Result.SHIP_MOVING) return now;
+        // Refused only for a seated citizen whose ship is there and moving: the session is still there.
+        final BoardingManager manager = MANAGERS.get(level);
+        final Session session = manager == null ? null : manager.sessions.get(mob.getUUID());
+        if (session != null) session.standWhenStopped = true;
+        return now;
     }
 
     static State state(ServerLevel level, Entity citizen) {
@@ -378,6 +435,11 @@ public final class BoardingManager {
         }
         final Vec3 sit = world(ship, session.sit);
         session.lastSit = sit;
+        if (session.standWhenStopped && PathingHooks.isStopped(level, session.ship)) {
+            standUp(citizen, world(ship, standPlace(level, ship, session)));
+            end(session, citizen, "it was asked to stand up while the ship moved, and the ship has stopped");
+            return;
+        }
         seat.setMaxLifeTime(SEAT_LIFETIME);
         // A seat inside the ship goes with it by itself.
         if (!session.inShip) {

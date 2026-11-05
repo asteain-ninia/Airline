@@ -1,16 +1,16 @@
 """飛行士のスキンを、ゲームに入れる形で書き出す。
 
-MineColonies は、村人の絵を「見た目の種類の名前 + 男女 + 番号 + 肌の色」の名前で、自分の名前空間の中に探す
+MineColonies は、市民の絵を「見た目の種類の名前 + 男女 + 番号 + 肌の色」の名前で、自分の名前空間の中に探す
 (ISimpleModelType#getTexture。名前空間 minecolonies は決め打ち)。飛行士の見た目の種類は airline:pilot なので、絵は
 
     assets/minecolonies/textures/entity/citizen/default/pilot{male,female}1_{a,b,d,w}.png
 
-に置く(村の様式ごとのフォルダに絵が無いときは、default が使われる)。村人の一覧に出る顔の絵は、様式ごとに探されて、
+に置く(コロニーの様式ごとのフォルダに絵が無いときは、default が使われる)。市民の一覧に出る顔の絵は、様式ごとに探されて、
 default へは戻らないので、全部の様式のフォルダに同じものを置く:
 
     assets/minecolonies/textures/entity_icon/citizen/<様式>/pilot{male,female}1_{a,b,d,w}.png
 
-土台にする絵は、MineColonies の村人(citizen)の番号 1。顔と肌の色は、それをそのまま残す。服の絵は tools/pilot_skin_painter.py。
+土台にする絵は、MineColonies の市民(citizen)の番号 1。顔と肌の色は、それをそのまま残す。服の絵は tools/pilot_skin_painter.py。
 
 使い方: python tools/make_pilot_skins.py
 Pillow が要る。

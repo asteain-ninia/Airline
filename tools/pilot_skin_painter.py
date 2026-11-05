@@ -1,4 +1,4 @@
-"""飛行士のスキンの絵。MineColonies の村人のスキン(128×64)の上に、飛行士の服を描く。
+"""飛行士のスキンの絵。MineColonies の市民のスキン(128×64)の上に、飛行士の服を描く。
 
 絵を描いたのは Codex(gpt-6-astra)。依頼文と答えは、ColonyPatchServer の design/pilot-skin-2026-10-11/codex/ にある
 (brief.md、answer-1.md)。このファイルは、その答えのコードを、そのまま置いたもの(この先頭の説明だけ足した)。

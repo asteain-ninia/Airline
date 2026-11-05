@@ -1,6 +1,6 @@
 package com.asteain.airline.colony;
 
-import com.asteain.airline.route.Facility;
+import com.asteain.airline.route.ColonyRoutes;
 import com.asteain.airline.route.RouteNetwork;
 import com.minecolonies.api.colony.buildings.IBuilding;
 import net.minecraft.core.BlockPos;
@@ -12,9 +12,10 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Where a tavern's visitor appears (TavernBuildingModuleMixin): in a colony with an airfield joined to another colony
- * by a clear line of the air network, at the edge of that airfield's pad (the side of its hut, where pilots step off).
- * Elsewhere where MineColonies puts it. Nothing here may stop a visitor from coming: on any failure, the original places.
+ * Where a tavern's visitor appears (TavernBuildingModuleMixin): in a colony joined to another colony by air (a route a
+ * player drew, open now; see {@link #byAir}), at the edge of one of its airfields' pads (the side of its hut, where pilots
+ * step off). Elsewhere where MineColonies puts it. Nothing here may stop a visitor from coming: on any failure, the
+ * original places.
  */
 public final class VisitorArrival {
     private VisitorArrival() {
@@ -39,13 +40,14 @@ public final class VisitorArrival {
         if (with != null) return List.of(with);
         try {
             if (tavern == null || !(tavern.getColony().getWorld() instanceof ServerLevel level)) return original;
+            if (!connected(level, tavern.getColony())) return original;
             final RouteNetwork net = RouteNetwork.get(level);
             final List<BlockPos> arrivals = new ArrayList<>();
             for (final IBuilding building : tavern.getColony().getServerBuildingManager().getBuildings().values()) {
                 if (!(building instanceof BuildingAirfield airfield) || !airfield.facility().airfield() || airfield.getBuildingLevel() < 1) continue;
                 final BlockPos pad = airfield.pad();
                 final RouteNetwork.Node node = pad == null ? null : net.node(pad);
-                if (node == null || !joined(net, pad, tavern.getColony().getID(), level)) continue;
+                if (node == null) continue;
                 final double heading = Math.toRadians(node.heading());
                 final int out = airfield.facility().padHalfSize() - 1;
                 arrivals.add(pad.offset((int) Math.round(-Math.cos(heading) * out), 1, (int) Math.round(-Math.sin(heading) * out)));
@@ -61,19 +63,16 @@ public final class VisitorArrival {
     }
 
     /**
-     * Whether the tavern's colony is joined to others by air (then the tavern stops spawning visitors by itself): an
-     * airfield or an anchorage of it, built, whose pad has a clear line toward another colony. Then its visitors come with
-     * aircraft. False on any failure (they come the usual way).
+     * Whether the tavern's colony is joined to others by air (then the tavern stops spawning visitors by itself): a route
+     * a player drew between it and another colony (see {@link ColonyRoutes}) that some class can fly now, one way or the
+     * other. Flights go along drawn routes only, so only then can an aircraft from another colony land here and bring its
+     * visitors. (A clear line of the network alone is not enough: a buoy beside the pad, or the line the network makes by
+     * itself to a colony nearby, makes one, and no aircraft would ever come.) False on any failure (they come the usual way).
      */
     public static boolean byAir(@org.jetbrains.annotations.Nullable IBuilding tavern) {
         try {
             if (tavern == null || !(tavern.getColony().getWorld() instanceof ServerLevel level)) return false;
-            final RouteNetwork net = RouteNetwork.get(level);
-            for (final IBuilding building : tavern.getColony().getServerBuildingManager().getBuildings().values()) {
-                if (!(building instanceof BuildingAirfield place) || place.getBuildingLevel() < 1) continue;
-                final BlockPos pad = place.pad();
-                if (pad != null && net.node(pad) != null && joined(net, pad, tavern.getColony().getID(), level)) return true;
-            }
+            return connected(level, tavern.getColony());
         } catch (RuntimeException e) {
             LoggerFactory.getLogger("Airline").warn("[Airline/visitors] could not look whether a colony is joined to others by air", e);
         }
@@ -108,17 +107,19 @@ public final class VisitorArrival {
         return came;
     }
 
-    /** Whether a clear line leads from this pad to a place of another colony (a buoy on the way counts as one step). */
-    private static boolean joined(RouteNetwork net, BlockPos pad, int colony, ServerLevel level) {
-        for (final RouteNetwork.Edge edge : net.edges()) {
-            if (edge.state() != RouteNetwork.State.CLEAR || !(edge.a.equals(pad) || edge.b.equals(pad))) continue;
-            final BlockPos other = edge.a.equals(pad) ? edge.b : edge.a;
-            final RouteNetwork.Node node = net.node(other);
-            if (node == null) continue;
-            if (node.kind() == RouteNetwork.Kind.BUOY) return true;
-            final com.minecolonies.api.colony.IColony there = com.minecolonies.api.colony.IColonyManager.getInstance().getColonyByPosFromWorld(level, node.home());
-            if (there != null && there.getID() != colony) return true;
+    /** Whether a route is drawn between this colony and another one of its dimension that some class can fly now, either way. */
+    private static boolean connected(ServerLevel level, com.minecolonies.api.colony.IColony colony) {
+        for (final com.minecolonies.api.colony.IColony other : com.minecolonies.api.colony.IColonyManager.getInstance().getColonies(level)) {
+            // (Whether it is drawn first: that costs nothing; whether it is open looks for ways through the network.)
+            if (other.getID() == colony.getID() || !ColonyRoutes.drawn(level, colony.getID(), other.getID())) continue;
+            if (open(level, colony.getID(), other.getID()) || open(level, other.getID(), colony.getID())) return true;
         }
+        return false;
+    }
+
+    /** Whether some class that colony {@code from} sends can fly to colony {@code to} now (as the routes tab says it). */
+    private static boolean open(ServerLevel level, int from, int to) {
+        for (final ColonyRoutes.ClassStatus line : ColonyRoutes.status(level, from, to)) if (line.open()) return true;
         return false;
     }
 }

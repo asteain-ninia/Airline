@@ -8,7 +8,7 @@ runFlight の場面の名前(trip、far、cargo など。reopen で始まる場�
 
 途中で 1 本が落ちても、次へ進む(reopen の続きの場面だけは、前が落ちたら飛ばす)。
 
-項目に ships と書くと、村人が船の上を歩く・席に座る試験(SHIPS の並び。2026-11-05 に ColonyPatchServer から移した)。
+項目に ships と書くと、市民が船の上を歩く・席に座る試験(SHIPS の並び。2026-11-05 に ColonyPatchServer から移した)。
 項目に all と書くと、全部の場面(ALL の並び。ships を含む。普通の速さで 3 時間あまり)。
 --part 2/3 を付けると、並びを 3 つに分けた 2 つめだけを回す(掛かる時間の見込みが釣り合うように分ける。reopen の続きの場面と、runAirfield の続きの 2 つは分けない)。
 分けて別の時に回すときや、2 つの写しで同時に回すとき(tools/run_split.py)に。
