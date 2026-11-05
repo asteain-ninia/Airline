@@ -20,13 +20,14 @@ import java.util.List;
 /**
  * A tavern's visitors and the air network.
  *
- * <p>Where one appears (2026-10-17, 旅客 3 first version): in a colony joined to others by the air network, at an airfield,
+ * <p>Where one appears: in a colony joined to others by the air network, at an airfield,
  * as if it had flown in, and it walks to the tavern from there.</p>
  *
- * <p>When it comes (2026-10-19, the user's rulings "空路のある村では止める" and "酒場の湧きに比べて有利にも不利にもならないように…
- * 脇タイミングだけ発着に離散化"): in such a colony the tavern does not let one appear by itself when its time comes; the
+ * <p>When it comes: in such a colony the tavern does not let one appear by itself when its time comes; the
  * visitor is owed instead (as many as the tavern has room for), and the owed ones arrive with the next aircraft that lands in
- * the colony from another one, where its pilot gets off. The tavern's own rules (its room, the time between two) are kept.</p>
+ * the colony from another one, where its pilot gets off. The tavern's own rules (its room, the time between two) are kept,
+ * so that a colony with air routes gets visitors neither more nor less often than one without; only the moment they
+ * arrive is moved to the landings.</p>
  */
 @Mixin(value = TavernBuildingModule.class, remap = false)
 public abstract class TavernBuildingModuleMixin implements VisitorArrival.Tavern {

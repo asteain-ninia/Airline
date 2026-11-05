@@ -87,7 +87,7 @@ final class RouteOverlays {
     }
 
     /**
-     * The band along the line in pieces (2026-10-18, the user: the name came up far from a line on the full map).
+     * The band along the line in pieces (drawn whole, its name would come up far from the line on the full map).
      * JourneyMap shows a shape's name wherever the mouse is inside the box around the shape, and the box around a long
      * slanting band is wide: a slanting line is drawn in pieces short enough that the box of each stays within a few
      * blocks of the line. A line along the x or z axis is one piece.

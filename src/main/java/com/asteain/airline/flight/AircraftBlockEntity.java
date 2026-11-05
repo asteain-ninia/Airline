@@ -24,7 +24,7 @@ public final class AircraftBlockEntity extends BlockEntity {
     /** What the aircraft is doing. Saved by name. */
     public enum Phase {
         PARKED, BOARDING, CLIMB, CRUISE, RETREAT, HOLD, ALIGN, DESCEND, DISEMBARK, WAIT,
-        /** Over a point of the network, going up or down to the height of the next line (lines are level, 2026-10-18). */
+        /** Over a point of the network, going up or down to the height of the next line (lines are level). */
         ALTITUDE,
         /**
          * In the air with nothing left to burn: fixed where it is, its pilot on board, its ticket kept, until somebody
@@ -49,7 +49,7 @@ public final class AircraftBlockEntity extends BlockEntity {
      * back when the aircraft lands. Everything the aircraft has to burn is this and what the store holds ({@link Fuel#total}).
      */
     public long fuel;
-    /** The fuel store (the user's ruling of 2026-10-14: fuel is kept in the inventory of the aircraft's own block). */
+    /** The fuel store (fuel is kept in the inventory of the aircraft's own block). */
     public final FuelStore store = new FuelStore(this);
     /**
      * While the aircraft is being built: the landing pad it is built on (this block stands on its middle, in the world,
@@ -89,7 +89,7 @@ public final class AircraftBlockEntity extends BlockEntity {
     public int freightColony, homeColony;
     public final java.util.Map<String, Integer> manifest = new java.util.LinkedHashMap<>(), returnManifest = new java.util.LinkedHashMap<>();
     /**
-     * A cargo flight that calls at more than one colony (2026-10-17, the user's ruling "判断は一旦全部推奨で": up to three,
+     * A cargo flight that calls at more than one colony (up to three,
      * the shortest way round, a whole berth at each): the colonies in the order they are called at, each with the goods for
      * it. The one at {@link #stopAt} is the one being loaded for or flown to; while it is, its goods are {@link #manifest}
      * and its colony is {@link #freightColony} (the rest of the cargo code knows only those). Empty for a flight to one

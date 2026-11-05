@@ -15,7 +15,7 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * The airfield's routes tab (2026-10-18, the user's ruling: "ワールド中の任意の村を選択して、そこに航路を引くタブ"): every
+ * The airfield's routes tab (any colony of the world can be chosen and a route drawn to it): every
  * other colony of the dimension, nearest first, whether a route is drawn to it, and for each class this colony can send
  * whether it can be flown or why not. A route is drawn or taken off with the row's button ({@link com.asteain.airline.network.RouteOrderPayload}).
  */

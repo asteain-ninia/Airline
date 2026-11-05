@@ -11,11 +11,11 @@ import org.jetbrains.annotations.NotNull;
 import java.util.List;
 
 /**
- * The airfield's aircraft tab. Building an aircraft is the airfield's business alone (the user's ruling of 2026-10-14):
+ * The airfield's aircraft tab. Building an aircraft is the airfield's business alone:
  * here the airfield's own aircraft is shown as it stands (none, being built, there is one), with every design that can
  * be built and a button for each, which asks the builders for it ({@link com.asteain.airline.network.AircraftOrderPayload}).
- * The airfield always keeps its aircraft as its design has it (players do not change aircraft: the user's ruling of
- * 2026-10-16; designs are changed with {@link com.asteain.airline.flight.DesignTools}).
+ * The airfield always keeps its aircraft as its design has it (players do not change aircraft; designs are changed
+ * with {@link com.asteain.airline.flight.DesignTools}).
  */
 public class AircraftModule extends AbstractBuildingModule implements ITickingModule {
     @Override
@@ -35,7 +35,7 @@ public class AircraftModule extends AbstractBuildingModule implements ITickingMo
         }
         buf.writeBoolean(Flights.available());
         buf.writeVarInt(building instanceof BuildingAirfield airfield && building.getColony().getWorld() instanceof ServerLevel level ? Flights.anchoredFleet(level, airfield) : 0);
-        // Whether the airfield's own aircraft can be moved to an anchorage, and one brought back from an anchorage (2026-10-18).
+        // Whether the airfield's own aircraft can be moved to an anchorage, and one brought back from an anchorage.
         final boolean[] moves = building instanceof BuildingAirfield airfield && building.getColony().getWorld() instanceof ServerLevel level ? Flights.fleetMoves(level, airfield) : new boolean[2];
         buf.writeBoolean(moves[0]);
         buf.writeBoolean(moves[1]);

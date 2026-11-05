@@ -60,7 +60,7 @@ final class FlightSuite {
 
     /**
      * A wall across the line of the scenes (z -11 to -9) at {@code x}, from 3 below WALL up so high that a line cannot be
-     * raised over it (2026-10-18: lines pass over what is lower, by 32 at most), listed from the top down: set in that
+     * raised over it (lines pass over what is lower, by 32 at most), listed from the top down: set in that
      * order, the column above a block stands already when the block comes into the line's tube.
      */
     private static BlockPos[] tallWall(int x) {
@@ -169,8 +169,8 @@ final class FlightSuite {
             }
         }
         if (found[0] == null) {
-            // A design whose deck has no plank with nothing on it (koeda, 2026-10-15): another deck block with nothing on it.
-            // (Since 2026-10-18 koeda has none of those either: its last one is the bottom connector, with its lever on it.
+            // A design whose deck has no plank with nothing on it (koeda): another deck block with nothing on it.
+            // (Koeda has none of those either: its last one is the bottom connector, with its lever on it.
             // Then any deck block, and the free place over another one.)
             for (final java.util.Map.Entry<BlockPos, String> part : parts.entrySet()) {
                 final BlockPos at = part.getKey();
@@ -212,7 +212,7 @@ final class FlightSuite {
         return Flights.spawn(level, pad, design());
     }
 
-    /** For finding out why a reloaded aircraft does not get on (2026-10-15, koeda's belts): how fast each part of its drive turns. */
+    /** For finding out why a reloaded aircraft does not get on (as with koeda's belts): how fast each part of its drive turns. */
     private static String turning(ServerLevel level, AircraftBlockEntity aircraft) {
         final StringBuilder out = new StringBuilder();
         for (final java.util.Map.Entry<BlockPos, String> part : com.asteain.airline.flight.AircraftType.of(aircraft.type).parts.entrySet()) {
@@ -237,7 +237,7 @@ final class FlightSuite {
     }
 
     /** Waits until a newly made aircraft has been loaded and has ticked (it has its runtime). Its ship's land loads beside the ticks: at the
-     * normal speed within a tick or two, under -Psprint=on it can take hundreds of ticks (2026-10-15). */
+     * normal speed within a tick or two, under -Psprint=on it can take hundreds of ticks. */
     private static void loaded(Script s, String name, java.util.function.Supplier<AircraftBlockEntity> aircraft) {
         s.until(name + ": the new aircraft is loaded", () -> {}, () -> {
             final AircraftBlockEntity a = aircraft.get();
@@ -321,7 +321,7 @@ final class FlightSuite {
         return s;
     }
 
-    // ---- the new facilities, built from their blueprints (the user approved the nine designs on 2026-10-15) --------
+    // ---- the new facilities, built from their blueprints (the nine designs) ----------------------------------------
 
     /** A facility built from a blueprint, and what the scene learns of it. */
     private static final class Site {
@@ -357,10 +357,10 @@ final class FlightSuite {
      * level of its blueprint, its racks and import stash (the airfields), its pads where the code expects them and on the
      * network, a floor under each pad or a pier beside the berth. Then the medium aircraft (-Paircraft, a medium design)
      * flies a round trip from the medium airfield to the wooden anchorage and from the large airfield to the stone one; the
-     * pilot steps onto the pier. (The user saw the small airfield built and working in the game.)
+     * pilot steps onto the pier. (The small airfield is not built here; it was checked built and working in the game.)
      */
     /**
-     * What the colony's builders are asked for, for the blocks of each design (2026-10-17: a belt has no item of its own;
+     * What the colony's builders are asked for, for the blocks of each design (a belt has no item of its own;
      * is a mechanical belt asked for, and is any block put up for nothing?). Structurize's own reckoning, the one that a
      * builder's work order goes by (MineColonies' placement handlers are in it).
      */
@@ -428,7 +428,7 @@ final class FlightSuite {
                 s.note("OBS items " + name + ": " + asked);
                 s.soft("items / " + name + ": every belt is asked for as a mechanical belt", belts.isEmpty() && failed.isEmpty(), "belts not asked as belts: " + belts + "; not read: " + failed);
                 s.soft("items / " + name + ": no block is put up for nothing (each asks for an item)", free.isEmpty(), "asked for nothing: " + free);
-                // A part made of others is put in, and asked for, only with its own materials (2026-10-19: 大凪号's pillars of spruce logs).
+                // A part made of others is put in, and asked for, only with its own materials (as the oonagi's pillars of spruce logs).
                 for (final BlockPos part : type.materials.keySet()) {
                     final net.minecraft.world.level.block.state.BlockState state;
                     try {
@@ -514,13 +514,13 @@ final class FlightSuite {
         }
         final Field fm = new Field(medium.hut), fl = new Field(large.hut);
         flyToPier(s, level, medium, wood, fm, "medium", design());
-        // From the large airfield the large aircraft (2026-10-15, Codex's design; the medium one where there is none).
+        // From the large airfield the large aircraft (the medium one where there is none).
         flyToPier(s, level, large, stone, fl, "large", Flights.designs().contains("oonagi") ? "oonagi" : design());
         fleet(s, level, medium, wood, mirrored, large, fm);
     }
 
     /**
-     * An airfield's aircraft beyond its pad (2026-10-17, the user's ruling "判断は一旦全部推奨で"): a medium or large aircraft
+     * An airfield's aircraft beyond its pad: a medium or large aircraft
      * built by the builders moves to the nearest free anchorage of its colony, which becomes its home, and the airfield's pad
      * is free for the next one. An airfield hires a pilot for its pad and one for each anchorage of its colony.
      */
@@ -538,7 +538,7 @@ final class FlightSuite {
         });
         s.until("facilities: fleet: the medium aircraft moves to an anchorage", () -> {}, () -> fm.aircraft.home != null && !fm.aircraft.home.equals(was[0])
                 && fm.aircraft.phase == Phase.PARKED && fm.aircraft.home.equals(fm.aircraft.at), 12000);
-        // Its pilot walks off onto the pier (2026-10-18: from the seat of the user's 雲中号 that takes a while longer).
+        // Its pilot walks off onto the pier (from the seat of the stratus that takes a while longer).
         s.until("facilities: fleet: its pilot off", () -> {}, () -> Boarding.state(fm.pilot) == Boarding.State.NONE, 600);
         s.step("facilities: fleet: result", () -> {
             final BlockPos woodPad = wood.building().pad(), mirroredPad = mirrored.building().pad();
@@ -556,7 +556,7 @@ final class FlightSuite {
             second2[0] = made;
             secondPilot[0] = Fixture.spawn(medium.colony, level, medium.hut.offset(3, 0, 2));
         });
-        // ---- the buttons of the aircraft tab (2026-10-18, the user's ruling "作る"): to an anchorage, and back to the airfield
+        // ---- the buttons of the aircraft tab: to an anchorage, and back to the airfield
         s.until("facilities: fleet: a second pilot", () -> {}, () -> Fixture.entity(secondPilot[0]) != null, 200);
         s.step("facilities: fleet: hire it; the button: the second aircraft to an anchorage", () -> {
             s.check(medium.building().getFirstModuleOccurance(WorkerBuildingModule.class).assignCitizen(secondPilot[0]), "the second pilot is hired");
@@ -669,7 +669,7 @@ final class FlightSuite {
                     + routes.route(f.pad, anchorage.building().pad(), Flights.classOf(designName)));
             final Flights.Answer sent = Flights.send(level, f.pad, anchorage.building().pad(), true, f.pilot);
             s.soft("facilities / " + name + ": a round trip to the " + anchorage.name + " is ordered", sent.ok(), sent.text().getString());
-            // The large aircraft is made to go across its home pad again once (2026-10-17: never seen over a large pad yet).
+            // The large aircraft is made to go across its home pad again once (otherwise never seen over a large pad).
             if (name.equals("large")) {
                 redoneBefore[0] = Flights.acrossRedoneForChecks();
                 Flights.redoAcrossOnceForChecks();
@@ -698,7 +698,7 @@ final class FlightSuite {
         });
     }
 
-    // ---- size classes: which aircraft may berth where (the user's ruling of 2026-10-14) ---------------------------
+    // ---- size classes: which aircraft may berth where ------------------------------------------------------------
 
     /**
      * A bare landing pad of that kind of place (no building), on the network: a stone floor of the place's size; for an
@@ -731,7 +731,7 @@ final class FlightSuite {
     }
 
     /**
-     * A pier's connector (2026-10-18): Simulated's connector facing the berth, and a lever (on) on the pier's floor block
+     * A pier's connector: Simulated's connector facing the berth, and a lever (on) on the pier's floor block
      * {@code inside} it, so that it is always out (as in the anchorage's blueprint).
      */
     private static void pierConnector(ServerLevel level, BlockPos at, net.minecraft.core.Direction facing, BlockPos inside) {
@@ -828,7 +828,7 @@ final class FlightSuite {
             s.soft("classes / the largest class two pads have in common: small-large none, small-anchorage none, small-medium small, medium-anchorage medium, large-anchorage large",
                     common.apply(sm, lg) == null && common.apply(sm, an) == null && common.apply(sm, md) == ShipClass.SMALL && common.apply(md, an) == ShipClass.MEDIUM && common.apply(lg, an) == ShipClass.LARGE,
                     common.apply(sm, lg) + " " + common.apply(sm, an) + " " + common.apply(sm, md) + " " + common.apply(md, an) + " " + common.apply(lg, an));
-            // What each kind of place is (the user's matrix): connectors and building.
+            // What each kind of place is (the table in Facility): connectors and building.
             boolean right = true;
             final StringBuilder seen = new StringBuilder();
             for (final Facility place : places) {
@@ -867,13 +867,13 @@ final class FlightSuite {
                     mediumAtSmall.key() + " / " + smallAtLarge.key() + " / " + smallAtAnchorage.key() + " / " + mediumAtAnchorage.key() + ", " + Flights.aircraft(level).size() + " aircraft");
         });
 
-        // ---- 1b. lines are verified for the class they are for (the user's ruling of 2026-10-15); buoys by grade
+        // ---- 1b. lines are verified for the class they are for; buoys by grade
         final BlockPos smallBuoy = hub.offset(0, 0, -100);
         final BlockPos onlyLarge = hub.offset(30, 20, 15);
         final BlockPos[] shafts = new BlockPos[2];
         s.step("classes: the heights of the lines; a grade 1 buoy; something in the large aircraft's tube only", () -> {
             // Over a pad: 18 (small airfield), 23 (medium), 29 (large airfield, anchorage); over a buoy: 9, 11, 13 by grade.
-            // (16, 22, 28 and 8, 10, 12 until the small aircraft became 10 high, 2026-10-15.)
+            // (16, 22, 28 and 8, 10, 12 when the small aircraft was 9 high.)
             final double[] heights = new double[places.length];
             for (int i = 0; i < places.length; i++) heights[i] = net.waypoint(bare[i]).y - bare[i].getY() - 0.5;
             final double overHub = net.waypoint(hub).y - hub.getY() - 0.5;
@@ -887,7 +887,7 @@ final class FlightSuite {
                     toMedium != null && toMedium.serves() == ShipClass.SMALL && net.waypoint(smallBuoy).y - smallBuoy.getY() - 0.5 == 9,
                     toMedium == null ? "no line" : toMedium.serves() + ", " + (net.waypoint(smallBuoy).y - smallBuoy.getY() - 0.5));
             // On the line from the buoy to the large airfield's pad, half way, 15 to the side: in the large aircraft's tube (17), not in the medium one's (12).
-            // (2026-10-18: lines are level and pass over what is in their way: the line is raised for every class.)
+            // (Lines are level and pass over what is in their way: the line is raised for every class.)
             level.setBlockAndUpdate(onlyLarge, Blocks.STONE.defaultBlockState());
             final Edge line = net.edge(hub, bare[2]);
             s.note("OBS classes: the line buoy - large airfield passes " + line.tube().from + " to " + line.tube().to + "; the stone is at " + onlyLarge.toShortString());
@@ -1072,7 +1072,7 @@ final class FlightSuite {
             final boolean onTheDeck = onPier[1] > pad.getY() + 1.9 && onPier[1] < pad.getY() + 2.6 && onPier[0] >= pad.getX() - 10 && onPier[0] < pad.getX() - 7;
             s.soft("classes / at the anchorage the aircraft was held in the air beside the pier, fixed, its own block within 1.5 blocks of where it belongs",
                     fixedThere[0] && onPier[3] < 1.5, "fixed " + fixedThere[0] + ", " + onPier[3] + " from where its own block belongs");
-            // (2026-10-18: the pier's connector pulls it in, so that its deck lies right against the pier.)
+            // (The pier's connector pulls it in, so that its deck lies right against the pier.)
             s.soft("classes / at the anchorage the aircraft's connector was joined to the pier's, its own block within 0.1 of where it belongs",
                     joinedThere[0] && onPier[3] < 0.1, "joined " + joinedThere[0] + ", " + onPier[3] + " from where its own block belongs");
             s.soft("classes / the pilot got off onto the pier (not into the air) and is alive", onTheDeck && m.pilot.isAlive(),
@@ -1139,8 +1139,8 @@ final class FlightSuite {
             pad(level, padB, 0);
             final BlockPos middle = a.pad.above();
             final List<String> designs = Flights.designs();
-            // The design asked for: the last one this airfield can build (the prototype until 2026-10-19; with it gone the
-            // small airfield builds only the first one).
+            // The design asked for: the last one this airfield can build (with the prototype gone, the small airfield
+            // builds only the first one).
             final List<Flights.Design> cards = Flights.designCards(a.airfield);
             final String first = designs.get(0), second = cards.isEmpty() ? first : cards.get(cards.size() - 1).name();
             final java.util.function.Supplier<List<com.minecolonies.core.colony.workorders.WorkOrderDecoration>> orders =
@@ -1167,7 +1167,7 @@ final class FlightSuite {
             said = Flights.requestAircraft(level, a.airfield, second, null);
             s.soft("yard / asked again for the design that is being built, nothing changes", "same".equals(said) && orders.get().size() == 1 && second.equals(site.type), "said " + said + ", orders " + orders.get().size());
             if (first.equals(second)) {
-                // (Since 2026-10-19 the small airfield builds one design only: there is no other to switch to here.)
+                // (The small airfield builds one design only: there is no other to switch to here.)
                 s.note("OBS yard: the small airfield builds only " + first + "; switching the design of a site is not checked");
             } else {
                 said = Flights.requestAircraft(level, a.airfield, first, null);
@@ -1329,7 +1329,7 @@ final class FlightSuite {
                     done[0] == 0 && Integer.valueOf(1).equals(a.aircraft.lacks.get(deckKey)) && !refused.ok() && refused.text().getString().contains(deckBlock.getName().getString())
                             && !refused.text().getString().contains("minecraft:"),
                     "lacks " + a.aircraft.lacks + "; a flight: " + refused.text().getString());
-            // Asked for like anything a building asks for (2026-10-18): one request for the part, not two when asked again.
+            // Asked for like anything a building asks for: one request for the part, not two when asked again.
             final int exportBefore = partRequests(a.airfield, false).size();
             a.airfield.askForParts();
             a.airfield.askForParts();
@@ -1344,7 +1344,7 @@ final class FlightSuite {
                     "part requests " + partRequests(a.airfield, true).stream().map(r -> r.getCount() + " x " + r.getStack().getItem()).toList());
             s.soft("yard / with the part on the racks it is put in at the next look, and nothing is lacking any more", done[0] == 1 && a.aircraft.lacks.isEmpty() && level.getBlockState(Flights.partOf(a.aircraft, plank)).is(deckBlock),
                     "put right " + done[0] + ", lacks " + a.aircraft.lacks);
-            // Being changed by hand with the design tools (2026-10-16; it was self-repair switched off at the airfield before):
+            // Being changed by hand with the design tools (not by switching off the airfield's self-repair):
             // what is changed stays, it does not fly, and taken in as a design file the change is in it.
             Flights.modifying(a.aircraft, true);
             level.removeBlock(Flights.partOf(a.aircraft, plank), false);
@@ -1533,7 +1533,7 @@ final class FlightSuite {
 
     // ---- round trip, blocked lines ----------------------------------------------------------------------------
 
-    // ---- a pad higher up than the aircraft can climb (2026-11-03) ------------------------------------------------
+    // ---- a pad higher up than the aircraft can climb -------------------------------------------------------------
 
     /**
      * Pad C lies so high that its line runs above the ceiling of the small class: the network does not offer it, and the
@@ -1682,7 +1682,7 @@ final class FlightSuite {
                 // Only while it is on the blocked line, on the near side of the wall.
                 if (placed[0] && r[0] < 55 && Math.abs(r[2] + 9.5) < 6) a.wallGap = Math.min(a.wallGap, 55 - (r[0] + 4.5));
             });
-            // (2026-10-19) The way off behind the tail at pad B is fenced off across the pad (a fence cannot be jumped; one high, it
+            // The way off behind the tail at pad B is fenced off across the pad (a fence cannot be jumped; one high, it
             // stays out of the shaft the lines come down in): the pilot is to get off ahead of the nose instead, at once, not after 15 seconds.
             final double h = Math.toRadians(net.node(padB).heading());
             final int ax = (int) Math.round(Math.cos(h)), az = (int) Math.round(Math.sin(h));
@@ -2025,8 +2025,8 @@ final class FlightSuite {
 
     /**
      * A direct flight between two airfields on different large maps, with no buoy anywhere: the line is 1800 blocks long,
-     * runs through country that is not loaded and is flown while it is "not verified" (ruling of 2026-10-13: airfields
-     * reach each other by large maps). Meant for a fast design (direct@koeda); the first design
+     * runs through country that is not loaded and is flown while it is "not verified" (airfields reach each other by
+     * large maps). Meant for a fast design (direct@koeda); the first design
      * needs twenty.
      */
     private static void direct(Script s, ServerLevel level) {
@@ -2371,7 +2371,7 @@ final class FlightSuite {
         });
     }
 
-    // ---- the pilot carries (ruling of 2026-10-11): a flight called off in the middle of a walk, a full import store ----------
+    // ---- the pilot carries: a flight called off in the middle of a walk, a full import store ----------
 
     private static int hands(Field a) {
         return a.pilot instanceof com.minecolonies.api.entity.citizen.AbstractEntityCitizen citizen ? iron(citizen.getInventoryCitizen()) : 0;
@@ -2383,7 +2383,7 @@ final class FlightSuite {
     }
 
     /**
-     * Routes drawn by players (2026-10-18, the user's ruling: routes between colonies are drawn in the airfield's window,
+     * Routes drawn by players (routes between colonies are drawn in the airfield's window,
      * the automatic ones are not used): a colony with goods wanted elsewhere sends nothing until a route is drawn there;
      * the routes tab tells, for each class, whether a route can be flown or why not (one place): too far with no buoys,
      * no place there that takes the class, something in the way.
@@ -2416,7 +2416,7 @@ final class FlightSuite {
             s.soft("routes / to C (300 blocks, no buoy): too far to fly straight, and no buoys join them", !toC.get(0).open() && statusKey(toC.get(0)).equals("too_far"), statusKey(toC.get(0)));
             s.soft("routes / to D (no airfield): nothing there takes the aircraft", !toD.get(0).open() && statusKey(toD.get(0)).equals("no_berth"), statusKey(toD.get(0)));
             // Stone in the way of the line A - B, half way, at its height and a block above and below: the line is raised over it
-            // (2026-10-18), and the flight later goes over it.
+            // and the flight later goes over it.
             final net.minecraft.world.phys.Vec3 high = RouteNetwork.get(level).waypoint(a.pad);
             stone[0] = BlockPos.containing((a.pad.getX() + b.pad.getX()) / 2.0, high.y, (a.pad.getZ() + b.pad.getZ()) / 2.0);
             for (int y = -1; y <= 1; y++) level.setBlockAndUpdate(stone[0].above(y), Blocks.STONE.defaultBlockState());
@@ -2473,7 +2473,7 @@ final class FlightSuite {
     }
 
     /**
-     * A round (2026-10-17, the user's ruling "判断は一旦全部推奨で": up to three colonies, the shortest way round, a whole
+     * A round (up to three colonies, the shortest way round, a whole
      * berth at each, one kind of goods to one colony): A's export racks hold iron, gold and copper; B wants the iron, C
      * the gold, D the copper. B, C and D stand at three corners of a square with A at the fourth. One flight loads for all
      * three, calls at them in the order of the shortest way round, unloads at each only what is for it, and flies home.
@@ -2514,7 +2514,7 @@ final class FlightSuite {
             s.note("OBS tour: lines " + lines + "; ledger net B iron " + ledger.net(WantLedger.Key.of(b.colony), Items.IRON_INGOT) + ", C gold " + ledger.net(WantLedger.Key.of(c.colony), Items.GOLD_INGOT)
                     + ", D copper " + ledger.net(WantLedger.Key.of(d.colony), Items.COPPER_INGOT) + "; racks iron " + iron(a.airfield.getItemHandlerCap()) + "; aircraft " + a.aircraft.phase + " | " + a.aircraft.note);
         });
-        // Visitors come with the aircraft (2026-10-19): B gets a tavern; its time for a visitor comes before the aircraft is there.
+        // Visitors come with the aircraft: B gets a tavern; its time for a visitor comes before the aircraft is there.
         final AbstractBuilding[] tavernB = new AbstractBuilding[1];
         final int[] visitorsBefore = new int[1];
         s.step("tour: a tavern in B; its time for a visitor comes", () -> {
@@ -2560,7 +2560,7 @@ final class FlightSuite {
                     a.cargoTakeoffs + " take-offs, shortest stay " + a.shortestBerth);
             s.soft("tour / the pilot is alive and off the aircraft at home", a.pilot.isAlive() && Boarding.state(a.pilot) == Boarding.State.NONE, "pilot at " + a.pilot.position());
             for (String line : ledger.history()) s.note("OBS tour history: " + line);
-            // A tavern's visitor in a colony joined to others by air arrives at its airfield (2026-10-17, 旅客 3 first version).
+            // A tavern's visitor in a colony joined to others by air arrives at its airfield.
             final AbstractBuilding tavern = Fixture.placeHut(level, a.colony, ModBlocks.blockHutTavern, a.hut.offset(-12, 0, 8));
             tavern.setBuildingLevel(1);
             final com.minecolonies.api.colony.IVisitorData visitor = tavern.getFirstModuleOccurance(com.minecolonies.core.colony.buildings.modules.TavernBuildingModule.class).spawnVisitor();
@@ -2652,7 +2652,7 @@ final class FlightSuite {
         });
 
         // ---- (3) the same goods are sent again (B still wants 64); the flight is called off at B, where the store is full now:
-        //          it flies home at once by itself, and at home the pilot clears out the hold (review of 2026-10-11, 1 and 4)
+        //          it flies home at once by itself, and at home the pilot clears out the hold
         s.until("carry: third flight has landed at B and waits there for room in the store", () -> {}, () -> a.aircraft.phase == Phase.UNLOAD && b.pad.equals(a.aircraft.at)
                 && level.getGameTime() - a.aircraft.landed > 100, 9000);
         s.step("carry: /airline flight cancel at the destination", () -> {
@@ -3316,7 +3316,7 @@ final class FlightSuite {
         });
     }
 
-    // ---- the controller itself fails in the air (review 1-1) -----------------------------------------------------
+    // ---- the controller itself fails in the air (case 1-1) -------------------------------------------------------
 
     private static void crash(Script s, ServerLevel level) {
         Field a = new Field(HUT_A);
@@ -3355,7 +3355,7 @@ final class FlightSuite {
         });
     }
 
-    // ---- when something goes missing in the middle of a flight (the review's four defects) -------------------------
+    // ---- when something goes missing in the middle of a flight (cases 1-2 to 1-4) ----------------------------------
 
     private static void faults(Script s, ServerLevel level) {
         RouteNetwork net = RouteNetwork.get(level);

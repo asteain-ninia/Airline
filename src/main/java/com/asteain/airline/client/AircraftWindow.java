@@ -70,7 +70,7 @@ public class AircraftWindow extends AbstractModuleWindow<AircraftModuleView> {
         else if (v.own == 1) text = Component.translatable(KEY + "building", design, v.ownNumber);
         else if (v.own == 2) text = Component.translatable(KEY + "exists", design);
         else text = Component.translatable(KEY + "none");
-        // The aircraft whose home is one of the colony's anchorages (2026-10-17).
+        // The aircraft whose home is one of the colony's anchorages.
         if (v.available && v.fleet > 0) text.append(" ").append(Component.translatable(KEY + "fleet", v.fleet));
         status.setText(text);
         stopButton.setVisible(v.available && v.own == 1);

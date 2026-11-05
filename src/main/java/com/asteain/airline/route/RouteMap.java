@@ -17,8 +17,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The lines of the air network as players' maps show them (JourneyMap, when a player has it; the user's ruling of
- * 2026-10-14: "JourneyMapで表示できればなおよし", done 2026-10-17). Each player is sent the lines of the dimension they
+ * The lines of the air network as players' maps show them (JourneyMap, when a player has it). Each player is sent the
+ * lines of the dimension they
  * are in when they join or change dimension, and again whenever those lines change (looked at every five seconds).
  */
 public final class RouteMap {
@@ -33,7 +33,7 @@ public final class RouteMap {
     private RouteMap() {
     }
 
-    /** The lines of a dimension now that a map shows: those of the routes players drew (2026-10-18). */
+    /** The lines of a dimension that a map shows: those of the routes players drew. */
     public static List<Line> lines(ServerLevel level) {
         final List<Line> lines = new ArrayList<>();
         for (final RouteNetwork.Edge edge : ColonyRoutes.drawnLines(level)) {

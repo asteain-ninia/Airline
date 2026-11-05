@@ -3,11 +3,11 @@ package com.asteain.airline.route;
 import net.minecraft.core.BlockPos;
 
 /**
- * What kind of place a landing pad belongs to (the user's ruling of 2026-10-14): the small airfield (the one there was
+ * What kind of place a landing pad belongs to: the small airfield (the one there was
  * before), the medium and the large airfield, and the anchorage (泊地: a large airfield without what makes an airfield,
  * a place where aircraft only berth; it needs an airfield of any size in its colony, as a warehouse needs a courier).
  *
- * <p>Which classes of aircraft may berth where, as the user laid it down:</p>
+ * <p>Which classes of aircraft may berth where:</p>
  * <pre>
  *                     small airfield   medium airfield   large airfield   anchorage
  *   small aircraft          yes              yes               no             no
@@ -15,14 +15,14 @@ import net.minecraft.core.BlockPos;
  *   large aircraft          no               no                yes            yes
  * </pre>
  * <p>Connectors (Create Aeronautics): a small airfield has a connector in the floor of its pads from level 3 on, a
- * medium airfield always; a large airfield and an anchorage have side connectors and none in the floor.</p>
+ * medium airfield always; an anchorage has side connectors, and neither it nor a large airfield has one in the floor.</p>
  *
  * <p>The geometry of an airfield's pads, seen from its hut block in a building that was not turned (the designs are made
  * to it): the first pad lies so far to the north and one block to the east, its floor one block lower than the hut; the
  * second (from {@link RouteRules#GUEST_PAD_LEVEL}) lies east of the first, with room for both shafts. Each pad is a
  * square of {@link #padHalfSize} each way from its middle.</p>
  *
- * <p>The anchorage (the user's rulings of 2026-10-15) is a pier, one berth, level 1 only: its hut block (a bollard) stands
+ * <p>The anchorage is a pier, one berth, level 1 only: its hut block (a bollard) stands
  * at the root of the pier, the pier runs north from it into the air, and the aircraft is held in the air beside the pier
  * (east of it), its deck level with the pier's. Its "pad" is the block under where a large aircraft's own block is held
  * ({@link #ANCHORAGE_BERTH}); there is no floor under it. The pier's deck runs along the berth a large aircraft's half
@@ -62,7 +62,7 @@ public enum Facility {
         return this == SMALL_AIRFIELD ? ShipClass.SMALL : this == MEDIUM_AIRFIELD ? ShipClass.MEDIUM : ShipClass.LARGE;
     }
 
-    /** Whether aircraft of this class are built here: what an airfield can berth; an anchorage builds none (the user's ruling of 2026-10-19). */
+    /** Whether aircraft of this class are built here: what an airfield can berth; an anchorage builds none. */
     public boolean builds(ShipClass ship) {
         return this != ANCHORAGE && berths(ship);
     }
@@ -86,7 +86,7 @@ public enum Facility {
         return this == SMALL_AIRFIELD ? level >= 3 : this == MEDIUM_AIRFIELD;
     }
 
-    /** The anchorage's pier. (The large airfield had two at the sides of its pad, which no aircraft reached: taken out on 2026-10-18, the user's ruling.) */
+    /** The anchorage's pier. (The large airfield has none: side connectors at its pad were out of every aircraft's reach.) */
     public boolean sideConnector() {
         return this == ANCHORAGE;
     }

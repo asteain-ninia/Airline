@@ -17,7 +17,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
- * From the routes tab to the server (2026-10-18): draw a route from the airfield's colony to another colony, or take it
+ * From the routes tab to the server: draw a route from the airfield's colony to another colony, or take it
  * off. Only a player who may manage the colony's huts is heard.
  */
 public record RouteOrderPayload(BlockPos hut, int colony, boolean draw) implements CustomPacketPayload {

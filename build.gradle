@@ -7,13 +7,13 @@ plugins {
 
 version = mod_version
 
-// "No backward compatibility before 1.0.0" (the user's ruling of 2026-10-16) has to be taken out when the version gets there:
+// The rule "no backward compatibility before 1.0.0" has to be taken out when the version gets there:
 // the build stops until gradle.properties no longer has no_backcompat_before (see the comment there).
 if (project.hasProperty('no_backcompat_before')) {
     def parts = { String v -> v.tokenize('.-').take(3).collect { it.isInteger() ? it.toInteger() : 0 } }
     def (now, until) = [parts(mod_version), parts(no_backcompat_before)]
     def order = [now, until].transpose().collect { pair -> pair[0] <=> pair[1] }.find { it != 0 } ?: 0
-    if (order >= 0) throw new GradleException("mod_version ${mod_version} has reached ${no_backcompat_before}: remove the rule \"no backward compatibility before 1.0.0\" first (gradle.properties no_backcompat_before, ../CLAUDE.md, the assistant's memory no-backcompat-before-1.0)")
+    if (order >= 0) throw new GradleException("mod_version ${mod_version} has reached ${no_backcompat_before}: remove the rule \"no backward compatibility before 1.0.0\" first (no_backcompat_before in gradle.properties)")
 }
 group = mod_group_id
 
@@ -29,8 +29,8 @@ repositories {
     mavenCentral()
 }
 
-// Development-only integration checks (airlinetest, and shiptest: the ship walking and boarding checks that came over from
-// ColonyPatchServer on 2026-11-05); never included in the distributable jar.
+// Development-only integration checks (airlinetest, and shiptest: the ship walking and boarding checks, moved here from
+// ColonyPatch Server); never included in the distributable jar.
 sourceSets {
     testmod {
         compileClasspath += sourceSets.main.output
@@ -122,7 +122,7 @@ neoForge {
     }
 
     runs {
-        // The test servers write what a flight does into their log, as before (a player's game only into debug.log; 2026-10-19).
+        // The test servers write what a flight does into their log (a player's game only into debug.log).
         configureEach {
             systemProperty 'airline.logFlights', 'true'
         }
@@ -205,7 +205,7 @@ neoForge {
             systemProperty 'airlinetest.timeoutSeconds', providers.gradleProperty('timeoutSeconds').getOrElse('1700')
             jvmArgument '-Xmx3G'
         }
-        // A real client with JourneyMap (2026-10-17): a flat world, buoys, the lines of the network drawn on JourneyMap's
+        // A real client with JourneyMap: a flat world, buoys, the lines of the network drawn on JourneyMap's
         // maps, screenshots, quits. The pictures are judged by eye.
         visual {
             client()
@@ -230,7 +230,7 @@ neoForge {
             systemProperty 'airlinetest.timeoutSeconds', providers.gradleProperty('timeoutSeconds').getOrElse('600')
             jvmArgument '-Xmx3G'
         }
-        // The ship walking and boarding checks (src/shiptest; ColonyPatchServer's checks until 2026-11-05). One run per entry
+        // The ship walking and boarding checks (src/shiptest; formerly ColonyPatch Server's). One run per entry
         // of shipChecks: run<Name>, in run-ship-<name>. Gravity runs get Sable's normal gravity back (enableGravityPack).
         shipChecks.each { check ->
             create(check.name) {
@@ -319,7 +319,7 @@ tasks.named('runAirfield').configure {
     doFirst {
         delete file('run-airfield/airline-result.txt')
         // A fresh world: the reload checks that follow go on with the one this run leaves (a chain broken half way left
-        // its world behind, and the next airfield run counted the old stock too: 2026-10-17).
+        // its world behind, and the next airfield run counted the old stock too).
         delete file('run-airfield/world')
         prepareRun('run-airfield', mineColoniesJars, 25630, 'Airline airfield')
     }
@@ -455,7 +455,7 @@ var generateModMetadata = tasks.register("generateModMetadata", ProcessResources
 sourceSets.main.resources.srcDir generateModMetadata
 neoForge.ideSyncTask generateModMetadata
 
-// The GPL-3.0 text goes with the jar (2026-11-05, for the public release on GitHub).
+// The GPL-3.0 text goes with the jar.
 tasks.named('jar', Jar) {
     from('LICENSE') { rename { 'LICENSE_airline.txt' } }
 }

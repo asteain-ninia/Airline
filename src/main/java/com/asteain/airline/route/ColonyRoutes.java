@@ -30,12 +30,11 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The routes between colonies that players drew (2026-10-18, the user's ruling: "ワールド中の任意の村を選択して、そこに航路を
- * 引くタブ", the automatic routes no longer used): a route is a pair of colonies, both ways. Flights, the collection for
+ * The routes between colonies that players drew (in the airfield's routes tab, where any colony of the world can be
+ * chosen; routes are no longer made automatically): a route is a pair of colonies, both ways. Flights, the collection for
  * export and the notices go only to colonies a route is drawn to. The lines of the network are still made and looked at
- * behind it (the user's choice "線は裏で持つ"); a route is open for a class when there is a way of clear lines between a
- * place of each colony that takes that class. When there is none, the reason is told, with one place (the user's ruling:
- * "表示する座標は一個限定").
+ * behind it, out of the player's sight; a route is open for a class when there is a way of clear lines between a
+ * place of each colony that takes that class. When there is none, the reason is told, with one place only.
  */
 public final class ColonyRoutes extends SavedData {
     private static final String FILE = "airline_colony_routes";
@@ -43,7 +42,7 @@ public final class ColonyRoutes extends SavedData {
     private static final String STATUS = "com." + Airline.MOD_ID + ".gui.routes.";
     /** Pairs of colonies, "dimension|smaller id|larger id". */
     private final Set<String> pairs = new HashSet<>();
-    /** For the development checks: every pair counts as drawn (the scenes of before 2026-10-18 keep their meaning). */
+    /** For the development checks: every pair counts as drawn (so the scenes written before routes were drawn by players keep their meaning). */
     private static boolean allForChecks;
     /** Whether each drawn route was open (for some class) when last looked at: a change is told to both colonies. */
     private static final Map<String, Boolean> WAS_OPEN = new HashMap<>();
@@ -157,7 +156,7 @@ public final class ColonyRoutes extends SavedData {
     /** Why a line may not be flown by this class: something in the way (one place), a pad it crosses, or not looked at yet. */
     private static Component why(ServerLevel level, RouteNetwork net, RouteNetwork.Edge edge, ShipClass ship, MutableComponent name) {
         // (What keeps this class off the line comes first: a line that is still being looked at may be closed to it already.)
-        // Higher up than the class can climb (2026-11-03): where the line runs, and how high the class goes.
+        // Higher up than the class can climb: where the line runs, and how high the class goes.
         if (edge.tooHigh(ship)) {
             final BlockPos middle = BlockPos.containing((edge.a.getX() + edge.b.getX()) / 2.0, edge.height(), (edge.a.getZ() + edge.b.getZ()) / 2.0);
             final double ceiling = net.ceiling(ship);
@@ -190,7 +189,7 @@ public final class ColonyRoutes extends SavedData {
     }
 
     /**
-     * The lines a map shows (2026-10-18: only the routes players drew): for every drawn route and every class its colonies
+     * The lines a map shows (only the routes players drew): for every drawn route and every class its colonies
      * can send, the lines of its way (the open one, or the one there would be if nothing were in the way). For the checks
      * (every pair counts as drawn) every line.
      */

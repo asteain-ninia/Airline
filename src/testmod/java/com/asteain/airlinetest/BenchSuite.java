@@ -123,7 +123,7 @@ final class BenchSuite {
                 fail("no design of the name '" + name + "' (there are: " + String.join(", ", Flights.designs()) + ")");
                 return;
             }
-            // The pad of the design's class (2026-10-15): a medium or large aircraft is refused on a small airfield's pad, and
+            // The pad of the design's class: a medium or large aircraft is refused on a small airfield's pad, and
             // overhangs its floor. The small one keeps the pad it always had.
             final com.asteain.airline.route.ShipClass shipClass = AircraftType.of(name).shipClass;
             final com.asteain.airline.route.Facility facility = switch (shipClass) {
@@ -504,7 +504,7 @@ final class BenchSuite {
                 }
                 case DOCK_SETUP -> {   // a connector of the world right under the ship's own, four blocks below it; both switched on
                     dockPart = null;
-                    // The one that faces down (2026-10-18: the user's designs have one on each side as well).
+                    // The one that faces down (some designs have one on each side as well).
                     for (java.util.Map.Entry<BlockPos, String> part : type.parts.entrySet())
                         if (part.getValue().startsWith("simulated:docking_connector") && part.getValue().contains("facing=down")) dockPart = part.getKey();
                     if (dockPart == null) {

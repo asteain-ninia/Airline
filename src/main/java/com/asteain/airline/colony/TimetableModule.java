@@ -12,7 +12,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * The airfield's timetable tab (ruling of 2026-10-11): when the aircraft that stands on the pad leaves, and when the
+ * The airfield's timetable tab: when the aircraft that stands on the pad leaves, and when the
  * next one comes in. The module keeps nothing itself; it sends what {@link Timetable} knows to whoever has the
  * airfield's window open. Times go over as game ticks, so the window can count them down by itself.
  */

@@ -3,7 +3,7 @@ package com.asteain.airline.flight;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 /**
- * The design tools (the user's ruling of 2026-10-16): players do not change aircraft (an airfield keeps its aircraft as
+ * The design tools: players do not change aircraft (an airfield keeps its aircraft as
  * its design has it); a design is changed by bringing out the design's aircraft once, changing it by hand and taking
  * the result in as a design file, which is then finished (devices, levers, the bench's numbers) outside the game. Only
  * in a world whose server config switches them on ({@code saves/<world>/serverconfig/airline-server.toml}), so that a

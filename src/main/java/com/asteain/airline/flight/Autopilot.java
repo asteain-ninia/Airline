@@ -338,8 +338,9 @@ final class Autopilot {
         }
         final double legHeading = Math.toDegrees(Math.atan2(bz - az, bx - ax)), toPoint = Math.toDegrees(Math.atan2(dz, dx));
         // Far from the end: follow the line, leaning toward it by the distance from it. Near the end: head for the point itself.
-        // Past the end (it went too far, more than backing up covers): head for the point itself as well. (2026-10-15: a heavy
-        // design on a short leg went past it and, still following the leg's heading, flew on for 23,000 blocks.)
+        // Past the end (it went too far, more than backing up covers): head for the point itself as well. (Otherwise a
+        // heavy design on a short leg that went past it would, still following the leg's heading, fly on for ever: one
+        // was seen going 23,000 blocks.)
         final boolean past = (p.x - bx) * (bx - ax) + (p.z - bz) * (bz - az) > 0;
         final double lean = Math.max(-t.maxLean, Math.min(t.maxLean, t.leanPerBlock * offLine(p)));
         final double course = dist > Math.max(6.0, t.creepWithin) && !past ? legHeading + lean : toPoint;
@@ -432,7 +433,7 @@ final class Autopilot {
     private boolean turnStep(double toward) {
         final double ahead = wrap(toward - (c.yaw() + c.yawRate() * t.turnCoastSeconds));
         // The last degrees with the slow turn, when the design has one: a push of one tick turns it by its turning speed / 20.
-        // Over a pad the whole turn: a fast turn carries the ship sideways (koeda, 2026-10-16: 0.3 to 0.4 of a block).
+        // Over a pad the whole turn: a fast turn carries the ship sideways (koeda: 0.3 to 0.4 of a block).
         final boolean fine = t.slowTurnRate > 0 && (Math.abs(ahead) < t.fineTurnBelow || placing);
         int length = (int) Math.round(Math.abs(ahead) * (fine ? 0.8 * 20.0 / t.slowTurnRate : t.turnTicksPerDegree));
         if (Math.abs(ahead) < t.turnDeadband || length < 1) return true;

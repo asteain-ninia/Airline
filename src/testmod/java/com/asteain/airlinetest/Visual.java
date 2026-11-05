@@ -36,7 +36,7 @@ import java.util.UUID;
 /**
  * Starts a real client with JourneyMap (run "visual"), makes a flat world, sets down five buoys of the
  * three grades and a block of stone in one line's way, and takes screenshots of the fullscreen map and the minimap with
- * the lines of the air network drawn on them (2026-10-17). The pictures are judged by eye; the result says how many
+ * the lines of the air network drawn on them. The pictures are judged by eye; the result says how many
  * lines the client was sent and of which classes. Never shipped.
  */
 @EventBusSubscriber(modid = "airlinetest", value = Dist.CLIENT)
@@ -115,7 +115,7 @@ public final class Visual {
             NOTES.add(counts);
             linesOk = lines.size() >= 5 && byOpen[0] >= 1 && byOpen[1] >= 1 && byOpen[2] >= 1 && byOpen[3] >= 1;
         }
-        // The airfield's window (2026-10-18): the routes tab and the requests tab.
+        // The airfield's window: the routes tab and the requests tab.
         if (ticks == 530) {
             // Into the colony: MineColonies sends its buildings to the players near it.
             final UUID player = mc.player.getUUID();
@@ -145,7 +145,7 @@ public final class Visual {
         level.setBlockAndUpdate(d, Airline.BUOYS.get(2).get().defaultBlockState());
         level.setBlockAndUpdate(e, Airline.BUOYS.get(2).get().defaultBlockState());
         // In the way of the line from a to d, half way, from below its height (9 above a grade 1 buoy, 13 above a grade 3 one) up
-        // so high that the line cannot be raised over it (2026-10-18: lines pass over what is lower, by 32 at most): that line
+        // so high that the line cannot be raised over it (lines pass over what is lower, by 32 at most): that line
         // is blocked. Set from the top down: the column stands when a block comes into the line.
         for (int y = Y + 50; y >= Y + 7; y--) for (int x = 48; x <= 52; x++) for (int z = 8; z <= 12; z++) level.setBlockAndUpdate(new BlockPos(x, y, z), Blocks.STONE.defaultBlockState());
         final ServerPlayer player = server.getPlayerList().getPlayer(playerId);

@@ -61,7 +61,7 @@ public final class VisitorArrival {
     }
 
     /**
-     * Whether the tavern's colony is joined to others by air (2026-10-19, the user's ruling "空路のある村では止める"): an
+     * Whether the tavern's colony is joined to others by air (then the tavern stops spawning visitors by itself): an
      * airfield or an anchorage of it, built, whose pad has a clear line toward another colony. Then its visitors come with
      * aircraft. False on any failure (they come the usual way).
      */

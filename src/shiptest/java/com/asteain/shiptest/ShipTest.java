@@ -10,7 +10,7 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** Dedicated-server checks of Airline's ship walking and boarding (moved from ColonyPatchServer, 2026-11-05). Suite chosen by -Dshiptest.suite=smoke|pathing|... Result: ship-result.txt. */
+/** Dedicated-server checks of Airline's ship walking and boarding (moved here from ColonyPatch Server). Suite chosen by -Dshiptest.suite=smoke|pathing|... Result: ship-result.txt. */
 @Mod("shiptest")
 public final class ShipTest {
     private static final String RESULT = "ship-result.txt";

@@ -12,8 +12,8 @@ import java.util.UUID;
 import java.util.WeakHashMap;
 
 /**
- * Traffic in the air (proposal of the assistant; the user's ruling: no "one aircraft per line", keep them apart by
- * their size, and do not let a dense network jam).
+ * Traffic in the air: no "one aircraft per line"; aircraft are kept apart by their size, and a dense network must not
+ * jam.
  *
  * <p>Every flight has a plan: where the aircraft means to be at which time, from the pad it leaves to the pad it lands
  * on. An aircraft on the ground only leaves when its plan keeps a distance from every plan that is already under way,

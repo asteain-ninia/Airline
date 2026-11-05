@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * Fuel. The engines of an aircraft burn furnace fuel, tick for tick, as long as they have any (the burner needs
  * none); an engine cannot be switched off. So the fuel is not kept in the engines: it lies in the aircraft's fuel store
- * (the inventory of its own block, {@link FuelStore}; the user's ruling of 2026-10-14), is taken out of it one item at a
+ * (the inventory of its own block, {@link FuelStore}), is taken out of it one item at a
  * time as the engines need it, and what is taken out and not burnt yet is kept as a number on the block. "The tank" is
  * the two together ({@link #total}), and
  *
@@ -21,7 +21,7 @@ import java.util.List;
  * (the same walk as with cargo); a player can also put fuel in by hand (use the aircraft's own block with it);</li>
  * <li>a flight is only begun with enough in the tank for the whole of it and half as much again;</li>
  * <li>an aircraft whose tank and engines are empty in the air is in distress: it stays where it is, fixed, with its
- * pilot on board, until somebody brings fuel (the user's ruling of 2026-10-06: rescue is the player bringing fuel).</li>
+ * pilot on board, until somebody brings fuel (rescue is left to the player bringing fuel).</li>
  * </ul>
  *
  * Nothing is made or lost: every item put in is counted with the burn time the engines would get from it.

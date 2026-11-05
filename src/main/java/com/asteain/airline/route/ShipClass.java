@@ -3,15 +3,15 @@ package com.asteain.airline.route;
 import java.util.Locale;
 
 /**
- * The size class of an aircraft (the user's ruling of 2026-10-14: 小型機・中型機・大型機, "small", "medium", "large").
+ * The size class of an aircraft: small, medium or large.
  * Each class has an outline every design of it fits in, seen from the aircraft's own block: so far ahead and astern,
  * so far to either side, and so high. Everything the air network and the airfields keep free for an aircraft follows
  * from these numbers.
  */
 public enum ShipClass {
     /**
-     * 9 long, 9 wide, 10 high: koeda, the first design, the white sail. (9 high until 2026-10-15: the user's ruling
-     * "小型の枠を 10 段に広げる" for koeda, whose envelope reaches the tenth layer.)
+     * 9 long, 9 wide, 10 high: koeda, the first design, the white sail. (10 high rather than 9 because koeda's
+     * envelope reaches the tenth layer.)
      */
     SMALL(4, 4, 10),
     /** 15 long, 11 wide, 13 high (STRATUS, 13 x 9 x 12, fits). */

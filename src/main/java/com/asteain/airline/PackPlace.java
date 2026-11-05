@@ -9,8 +9,8 @@ import org.slf4j.Logger;
 import java.util.List;
 
 /**
- * The mod's structure pack under MineColonies' heading in Structurize's window of packs (2026-10-18, the user's
- * "パック選択画面にMinecoloniesとLocalと同格としてAirlineが入ってしまっています"). Structurize heads the packs in that
+ * The mod's structure pack under MineColonies' heading in Structurize's window of packs, not as a heading of its own
+ * beside MineColonies and Local. Structurize heads the packs in that
  * window by their owner, and gives a pack in a mod's jar the name of the folder it lies in ({@code blueprints/airline/}):
  * a heading of its own, beside MineColonies and Local. The pack is found once more under MineColonies' name (the same
  * pack: the same files, the same name; only the heading changes). Looked at now and then on both sides, since a client

@@ -3,7 +3,7 @@ package com.asteain.airline.colony;
 import com.minecolonies.api.entity.ai.statemachine.states.IAIState;
 
 /**
- * What the pilot is about, as its work shows it (2026-10-18, the user: the state stayed "work started"): MineColonies
+ * What the pilot is about, as its work shows it (without these states its name tag would say "work started" all the time): MineColonies
  * shows the state of a citizen's work in the citizen's name tag (with its development features on); ColonyPatch puts it
  * into words ("colonypatch.state." and the name). The pilot's walking is the same in every one of them.
  */

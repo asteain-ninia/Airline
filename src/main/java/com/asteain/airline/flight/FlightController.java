@@ -72,8 +72,8 @@ final class FlightController {
     private FlightController() {}
 
     /**
-     * What a flight does goes to the debug log only (logs/debug.log; 2026-10-19, the user's "静かにしたい": every flight
-     * wrote a dozen lines into the game's log); the game's log gets only what went wrong ({@link com.asteain.airline.Airline#STEPS}).
+     * What a flight does goes to the debug log only (logs/debug.log; in the game's log every flight would write a dozen
+     * lines); the game's log gets only what went wrong ({@link com.asteain.airline.Airline#STEPS}).
      */
     static final Logger LOGGER = LogUtils.getLogger();
     private static final org.slf4j.event.Level STEPS = com.asteain.airline.Airline.STEPS;
@@ -96,7 +96,7 @@ final class FlightController {
     private static final int CLEAR_OUT_EVERY = 1200;
     /**
      * How often an aircraft whose line is barred by another ship waits there before it goes round: back to the point
-     * behind, and on over other lines (ruling of 2026-10-11: go round rather than turn back). Of two aircraft that bar each
+     * behind, and on over other lines (going round is preferred to turning back). Of two aircraft that bar each
      * other the one with the lower id goes round first; the other waits twice as long. When there is no way round, it
      * waits twice as long again, and then a flight on its way out is given up and goes back to where it started.
      */
@@ -110,7 +110,7 @@ final class FlightController {
     private static final int AIR_LOOK = 40;
     /**
      * Climbing to a line, an aircraft that has not come {@link #CLIMB_GAIN} blocks higher in this many ticks while the line
-     * is still more than a block above it cannot climb to it (2026-11-03: a line above where its burners can carry it).
+     * is still more than a block above it cannot climb to it (the line is above where its burners can carry it).
      * Filling the balloon at full lever takes 20 to 30 seconds; so does the last of a climb near the ceiling.
      */
     private static final int CLIMB_STUCK_TICKS = 900;
@@ -155,14 +155,14 @@ final class FlightController {
          */
         int dockTicks, undockTicks;
         /**
-         * Joining the floor's connector on a pad (2026-10-18): 0 not looked at yet in this descent, 1 the bottom connector
+         * Joining the floor's connector on a pad: 0 not looked at yet in this descent, 1 the bottom connector
          * is out, -1 none there or joined, -2 not joined and taken in again; and the ticks it has been out at rest.
          */
         int floorDock, floorDockTicks;
         /** Where the aircraft last took off from (not saved: after a restart in the air it counts as from elsewhere). */
         @Nullable BlockPos tookOffAt;
         /**
-         * Getting off (2026-10-19): which end of the deck the pilot is sent off at (true: ahead of the nose), the nearest it
+         * Getting off: which end of the deck the pilot is sent off at (true: ahead of the nose), the nearest it
          * has come to that spot, and the ticks since it last came nearer by a little.
          */
         boolean leaveAhead;
@@ -214,8 +214,8 @@ final class FlightController {
             return;
         }
         // An aircraft block set down by hand in a ship (no airfield made that ship, so it has no home) is just a block: the
-        // mod flies only the aircraft it made (the user's ruling of 2026-10-16; such a ship was flown as the first design
-        // before, and its controller failed again and again on levers that were not there).
+        // mod flies only the aircraft it made (flown as the first design, such a ship made the controller fail again and
+        // again on levers that were not there).
         if (be.home == null) return;
         Runtime rt = runtime(be);
         if (rt == null || rt.craft.ship != ship) {
@@ -481,7 +481,7 @@ final class FlightController {
 
     /**
      * The connector of the aircraft on the side of the pier, at an anchorage whose pier has a connector that is out (it
-     * is always out where the anchorage was built with its signal, 2026-10-18); null when there is nothing to join.
+     * is always out where the anchorage was built with its signal); null when there is nothing to join.
      */
     @Nullable
     static AircraftType.Dock pierDock(ServerLevel level, RouteNetwork net, BlockPos pad, AircraftType type) {
@@ -496,8 +496,8 @@ final class FlightController {
         final BlockPos pier = pad.offset(side[0] * reach, 1, side[1] * reach);
         if (Craft.connector(level, pier, "isExtended")) return dock;
         // Signalled but not out: a connector notices its signal when something beside it changes, and in a building put up
-        // from the blueprint its lever came after it (2026-10-18: the anchorage's lever powers the floor block beside the
-        // connector). It is told to look again, and comes out within half a second; the aircraft waits for it.
+        // from the blueprint its lever came after it (the anchorage's lever powers the floor block beside the connector).
+        // It is told to look again, and comes out within half a second; the aircraft waits for it.
         if (level.hasNeighborSignal(pier) && level.getBlockEntity(pier) != null) {
             level.neighborChanged(pier, level.getBlockState(pier).getBlock(), pier.relative(Direction.UP));
             return dock;
@@ -684,7 +684,7 @@ final class FlightController {
         rt.age++;
         // Every engine is set going again as a source of rotation once the ship has been loaded (and once more a moment
         // later, when its land is surely there). An engine that was saved while it burnt is read back burning, but not as
-        // a source in the turning network: it burnt and nothing turned (2026-10-15, koeda after a restart in the air).
+        // a source in the turning network: it burnt and nothing turned (seen with koeda after a restart in the air).
         if (rt.fresh || rt.age == 40) c.restartEngines();
         if (rt.fresh) {
             rt.fresh = false;
@@ -706,8 +706,8 @@ final class FlightController {
         if (rt.age % 20 == 5) publish(level, be, rt, net);
         final Mob pilot = pilot(level, be);
         if (pilot != null && rt.age % 20 == 7 && pilot.isPassenger() && Boarding.state(pilot) == Boarding.State.NONE && isSeat(pilot.getVehicle())) {
-            // Create's seats sit down any creature that steps onto them: a pilot that walked over a seat (one for passengers,
-            // 2026-10-17) is taken off it again; the boarding puts it on its own seat when it is wanted there.
+            // Create's seats sit down any creature that steps onto them: a pilot that walked over a seat (one for
+            // passengers) is taken off it again; the boarding puts it on its own seat when it is wanted there.
             pilot.stopRiding();
             LOGGER.atLevel(STEPS).log("[Airline/flight] the pilot of the aircraft at {} sat down on a seat it was not sent to; it is taken off it.", c.pos());
         }
@@ -756,8 +756,8 @@ final class FlightController {
                     rt.paused = false;
                 }
                 fly(level, be, rt, net);
-                // The pilot works the levers (2026-10-18, the user's wish): an arm moved when the autopilot set one, not
-                // more than twice a second.
+                // The pilot is seen working the levers: an arm moved when the autopilot set one, not more than twice a
+                // second.
                 if (c.writes != rt.writesSeen) {
                     rt.writesSeen = c.writes;
                     if (rt.age - rt.swungAt >= 10) {
@@ -1080,7 +1080,7 @@ final class FlightController {
 
     /**
      * A new aircraft of a class that anchorages take moves to a free anchorage of its colony, which becomes its home
-     * (2026-10-17, the user's ruling "判断は一旦全部推奨で": an airfield may have more aircraft than pads; the ones over go
+     * (an airfield may have more aircraft than pads; the ones over go
      * to the colony's anchorages, one at each, and fly from there; the airfield's pad is free for the next one then).
      * The nearest anchorage it has a way to is taken. One that finds none free keeps the airfield's pad as its home.
      * An anchorage that is an aircraft's home is kept for it, as the home pad of an airfield is.
@@ -1126,7 +1126,7 @@ final class FlightController {
     }
 
     /**
-     * Asked for in the airfield's aircraft tab (2026-10-18, the user's ruling "作る"): the airfield's own aircraft moves
+     * Asked for in the airfield's aircraft tab: the airfield's own aircraft moves
      * to a free anchorage of the colony, which becomes its home, as a newly built one does (the nearest that takes its
      * class and that it has a way to); the airfield's pad is free then. Only an aircraft that stands on its home pad with
      * nothing to do.
@@ -1225,8 +1225,8 @@ final class FlightController {
     private static void disembark(ServerLevel level, AircraftBlockEntity be, Runtime rt, RouteNetwork net, @Nullable Mob pilot) {
         be.timer++;
         // Behind the tail first, then ahead of the nose: from a ship that does not lie on the world's block grid the walk off
-        // one end of the deck can fail (seen in the tests) while the other end works. Until 2026-10-19 the end was changed
-        // every 300 ticks whatever happened: a pilot whose walk did not go stood on the deck for 15 seconds.
+        // one end of the deck can fail (seen in the tests) while the other end works. The end is not simply changed every
+        // 300 ticks whatever happens: then a pilot whose walk did not go would stand on the deck for 15 seconds.
         if (be.timer == 1) {
             rt.leaveAhead = false;
             rt.leaveNearest = Double.MAX_VALUE;
@@ -1276,7 +1276,7 @@ final class FlightController {
                 if (be.timer < 2 * LEAVING_LIMIT) return;
             }
             // At home the pilot goes back to its airfield; at an anchorage that is the aircraft's home it waits on the pier
-            // (2026-10-18: walking back to the airfield, it was too far away to board in time for the next flight).
+            // (walking back to the airfield, it would be too far away to board in time for the next flight).
             post(pilot, be.at.equals(be.home) && !airborne(net, be.home) ? null : leaveSpot(level, net, be, be.at, false));
         }
         // The ticket is kept until here: a landed aircraft at a pad nobody else keeps loaded would stop in the middle of
@@ -1517,11 +1517,11 @@ final class FlightController {
                     final double off = forced ? 0.5 : across(c, rt.heading, middle);
                     if (rt.placeStep == 1 && ap.placed && Math.abs(off) > ap.placeWithin && rt.alignRounds < 2 && !airborne(net, be.destination)) {
                         acrossRedone++;
-                        // Turning from across onto the pad's heading carries a ship sideways (koeda, 2026-10-16: 0.3 to 0.4 of a
+                        // Turning from across onto the pad's heading carries a ship sideways (koeda: 0.3 to 0.4 of a
                         // block at full turning speed, up to 0.2 with the slow turn), and going along the heading cannot take it
                         // back; the centre of mass stays where it is across while the ship goes down. Across again, aimed to the
                         // other side by what was left over, then the same turn onto the heading. Not beside a pier: aimed toward
-                        // it, the large aircraft touched the pier on the way down and was pushed two blocks off (2026-10-16).
+                        // it, the large aircraft touched the pier on the way down and was pushed two blocks off.
                         rt.alignRounds++;
                         rt.acrossAim -= off;
                         LOGGER.atLevel(STEPS).log("[Airline/flight] {} across the middle of the pad after turning onto its heading: placed across again (round {})", String.format("%.2f", Math.abs(off)), rt.alignRounds);
@@ -1542,8 +1542,8 @@ final class FlightController {
                         // Down onto the pad with the aircraft's own block kept over the middle of the pad: left to itself
                         // for the half minute of the descent a ship drifts (a third of a block was measured).
                         ap.placeAt(rt.heading, middle.x, middle.z, true);
-                        // Kept over its place as closely as ever on the way down (2026-10-18: kept only to the coarse half
-                        // block, the heavy 雲中号 drifted a block off the pier during its long descent and did not dock).
+                        // Kept over its place as closely as ever on the way down (kept only to the coarse half block, the
+                        // heavy stratus drifted a block off the pier during its long descent and did not dock).
                         ap.placeWithin = c.type.placeWithin;
                         be.phase = Phase.DESCEND;
                         rt.still = 0;
@@ -1555,11 +1555,11 @@ final class FlightController {
                 // At an anchorage there is no floor to come down onto: the aircraft is brought to rest at the pier's height
                 // and held there (and fixed, as on a pad), the controller kept on.
                 final boolean held = airborne(net, be.destination);
-                // Fast while high, the last blocks as slowly as before (2026-10-18).
+                // Fast while high, the last blocks slowly.
                 final double rate = ap.altTarget - rest > c.type.slowDescentWithin ? c.type.fastDescentRate : c.type.descentRate;
                 ap.altTarget = Math.max(held ? rest : rest - 0.4, ap.altTarget - rate / 20.0);
                 // Over a floor's connector: the bottom connector is let out on the way down, and the two pull each other
-                // into place (2026-10-18, the user's ruling "位置合わせに使う").
+                // into place (the connectors are what lines the aircraft up on the pad).
                 // Out over the floor's connector, but it does not come down to rest (its head sits on the edge of the pit):
                 // taken in again after a while, and down onto the floor.
                 if (!held && rt.floorDock == 1 && ap.altTarget <= rest - 0.39 && c.pos().y >= rest + 0.12 && ++rt.floorDockTicks > DOCK_TICKS) {
@@ -1603,7 +1603,7 @@ final class FlightController {
             beginAlign(be, rt, net);
             return;
         }
-        // Lines are level (2026-10-18): the whole leg at the height of its line.
+        // Lines are level: the whole leg at the height of its line.
         final double y = legHeight(net, be.route, be.leg);
         rt.from = overPoint(net, be.route.get(be.leg), y);
         rt.to = overPoint(net, be.route.get(be.leg + 1), y);
@@ -1807,8 +1807,8 @@ final class FlightController {
         rt.acrossHeading = Math.abs(Autopilot.wrap(rt.heading + 90 - rt.craft.yaw())) <= 90 ? rt.heading + 90 : rt.heading - 90;
         rt.acrossAim = 0;
         rt.alignRounds = 0;
-        // As closely as ever, beside a pier and over a floor's connector as well (2026-10-18: placed only to half a block, the
-        // pier's connector head came down on the edge of the notch in the deck of the user's 雲中号 and pushed it a block
+        // As closely as ever, beside a pier and over a floor's connector as well (placed only to half a block, the
+        // pier's connector head came down on the edge of the notch in the deck of the stratus and pushed it a block
         // away from the pier; the connectors' pull does not reach that far).
         rt.pilot.placeWithin = rt.craft.type.placeWithin;
         rt.floorDock = 0;
@@ -1854,7 +1854,7 @@ final class FlightController {
                 (at.x - centre.x) * Math.cos(h) + (at.z - centre.z) * Math.sin(h), (at.x - centre.x) * -Math.sin(h) + (at.z - centre.z) * Math.cos(h), rt.lastHeadingError);
         LOGGER.atLevel(STEPS).log("[Airline/flight] aircraft {}", be.note);
         if (be.at.equals(be.home)) be.homeward = false;
-        // From another colony: the visitors the taverns here owe come with it (2026-10-19, see VisitorArrival).
+        // From another colony: the visitors the taverns here owe come with it (see VisitorArrival).
         try {
             final com.minecolonies.api.colony.IColony here = colonyAt(c.level, net, be.at), from = rt.tookOffAt == null ? null : colonyAt(c.level, net, rt.tookOffAt);
             if (here != null && (from == null || from.getID() != here.getID()))
@@ -1925,7 +1925,7 @@ final class FlightController {
         return key.substring(key.lastIndexOf('.') + 1);
     }
 
-    /** How many colonies a round calls at, at most (2026-10-17, the recommended answer: three). */
+    /** How many colonies a round calls at, at most. */
     static final int ROUND = 3;
 
     /** The colonies of a round in the order of the shortest way round, from home and back; when no order has ways all round, the last-ranked colony is left out. */
@@ -1936,7 +1936,7 @@ final class FlightController {
             for (final List<Cargo.Order> order : orders(all.subList(0, n))) {
                 double length = leg(net, home, order.get(0).pad(), cls) + leg(net, order.get(order.size() - 1).pad(), home, cls);
                 for (int i = 0; i + 1 < order.size(); i++) {
-                    // From one colony of the round to the next only where a route is drawn between the two (2026-10-18).
+                    // From one colony of the round to the next only where a route is drawn between the two.
                     final boolean drawn = com.asteain.airline.route.ColonyRoutes.drawn(level, order.get(i).to().getColony().getID(), order.get(i + 1).to().getColony().getID());
                     length += drawn ? leg(net, order.get(i).pad(), order.get(i + 1).pad(), cls) : Double.POSITIVE_INFINITY;
                 }
@@ -2106,7 +2106,7 @@ final class FlightController {
         be.forgetStops();
         Cargo.Order first = order;
         if (!order.fetch()) {
-            // A round (2026-10-17): up to three colonies, called at the shortest way round from home and back.
+            // A round: up to three colonies, called at the shortest way round from home and back.
             final List<Cargo.Order> all = new ArrayList<>(List.of(order));
             all.addAll(Cargo.moreStops(level, be, net, rt.craft.id(), order, ROUND - 1));
             if (all.size() > 1) {

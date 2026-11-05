@@ -6,9 +6,8 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 /**
- * Every rule and number of the buoy network in one place. Most of them are the assistant's proposals that the user has
- * not ruled on yet (how buoys connect, how far they reach, where the line passes, what counts as "arrived"); when a
- * ruling comes, this is the class to change.
+ * Every rule and number of the buoy network in one place. Several of them are provisional (how buoys connect, how far
+ * they reach, where the line passes, what counts as "arrived"); when one changes, this is the class to change.
  *
  * <p>The numbers are in the common config file. The rules that are not numbers are the static functions below; nothing
  * else in the mod decides whether two points connect or where a line runs.</p>
@@ -31,10 +30,10 @@ public final class RouteRules {
     private static final ModConfigSpec.IntValue REACH_2 = BUILDER.comment("Reach of a grade 2 buoy.").defineInRange("buoyReach2", 96, 8, 1024);
     private static final ModConfigSpec.IntValue REACH_3 = BUILDER.comment("Reach of a grade 3 buoy.").defineInRange("buoyReach3", 192, 8, 1024);
     /**
-     * An airfield reaches further the higher its level (the user's wish of 2026-10-12: colonies that lie very near each
-     * other get a direct flight without buoys), and it reaches on the scale of colonies: its reach is counted in chunks and
-     * comes from MineColonies' own settings for how near colonies may be founded and how large they may grow (the user,
-     * the same day: a reach that ignores the size of a colony is of no use even at the highest level). With the settings
+     * An airfield reaches further the higher its level (so that colonies that lie very near each other get a direct
+     * flight without buoys), and it reaches on the scale of colonies: its reach is counted in chunks and comes from
+     * MineColonies' own settings for how near colonies may be founded and how large they may grow (a reach that ignores
+     * the size of a colony would be of no use even at the highest level). With the settings
      * as they come (town halls at least 8 chunks apart, a colony at most 20 chunks from its town hall) the levels reach
      * 8, 10, 12, 16 and 20 chunks: level 1 as far as the nearest possible neighbour's town hall, level 5 as far as a
      * colony can stretch. The rule is the one for buoys: two points connect when they are closer than the sum of their
@@ -56,14 +55,13 @@ public final class RouteRules {
         }
     }
     /**
-     * Airfields reach each other by large maps (the user's ruling of 2026-10-13): the world is cut into squares of this
-     * many chunks a side, starting at the world's origin (128 chunks: sixteen region files, four by four; 2048 blocks; the
-     * user's ruling of 2026-10-14). An
+     * Airfields reach each other by large maps: the world is cut into squares of this many chunks a side, starting at
+     * the world's origin (128 chunks: sixteen region files, four by four; 2048 blocks). An
      * airfield of level 1 reaches every airfield on its own map, level 2 the 3 x 3 maps around its own, and so on to
      * 9 x 9 maps at level 5. Further than that a flight needs points in between. Two airfields connect when the higher
-     * of the two reaches the other (the user's ruling of 2026-10-14). The map an airfield is on is the map its hut block
+     * of the two reaches the other. The map an airfield is on is the map its hut block
      * stands on, and between airfields nothing but the maps counts: two airfields of level 1 that lie close to each other
-     * on two sides of an edge between maps do not connect until one of them is built up (the same ruling).
+     * on two sides of an edge between maps do not connect until one of them is built up. That is intended.
      */
     private static final ModConfigSpec.IntValue LARGE_MAP = BUILDER
             .comment("Airfields connect to each other directly by 'large maps': squares of this many chunks a side, counted from the world's origin.",
@@ -83,8 +81,8 @@ public final class RouteRules {
                     "At least so high that a line passes a block over a small aircraft standing on another pad (18 with the margin as it comes).")
             .defineInRange("airfieldWaypointHeight", 18, 2, 64);
     /**
-     * Lines are level and pass over what lies on their way (2026-10-18, the user: "航路、ある程度の障害物はうまいこと避ける
-     * んじゃダメですかね？", and "そもそも離発着が衝突するの自体が設計の失敗では？"): a line runs at the height of the higher of
+     * Lines are level and pass over what lies on their way, so that a few obstacles do not block a line and an aircraft
+     * taking off or landing is never in the way of a line: a line runs at the height of the higher of
      * its two ends and is raised, by this much at most, until it passes over the landing pads and the blocks below it.
      */
     private static final ModConfigSpec.IntValue LINE_RAISE = BUILDER
@@ -245,9 +243,9 @@ public final class RouteRules {
      * aircraft.
      */
     private static final double AIRCRAFT_HALF_DIAGONAL = Math.hypot(4.5, 3.5);
-    private static final double AIRCRAFT_HALF_HEIGHT = 5.0;     // 10 high since 2026-10-15 (koeda); 4.5 before
+    private static final double AIRCRAFT_HALF_HEIGHT = 5.0;     // 10 high (koeda)
     /**
-     * The outline as it is since 2026-10-14: 9 long, 9 wide. The tube keeps the radius that was made for 9 x 7 (8 with
+     * The outline as it is now: 9 long, 9 wide. The tube keeps the radius that was made for 9 x 7 (8 with
      * the margin as it comes): a wider one would take in lanterns and eaves of the airfields as they are built (the
      * shaft over a pad is a tube as well). An aircraft that fills the wider outline has 4.5 to either side along a line
      * (3.5 of margin), and 6.4 to its corners when it turns on the spot (1.6 of margin: it does that at the points of
@@ -266,7 +264,7 @@ public final class RouteRules {
     }
 
     /**
-     * The tube for aircraft of a class (the user's ruling of 2026-10-15: lines are verified for the class they are for).
+     * The tube for aircraft of a class (lines are verified for the class they are for).
      * Small aircraft keep the tube there always was (above); the larger classes their outline's half diagonal and the margin.
      */
     public static double tubeRadius(ShipClass ship) {
@@ -337,8 +335,8 @@ public final class RouteRules {
     }
 
     /**
-     * An aircraft may stand on any landing pad, so no line may come low over one (proposal of the assistant; it matters
-     * from the second aircraft on). Within this distance of a pad's middle, seen from above (the half diagonals of two
+     * An aircraft may stand on any landing pad, so no line may come low over one (it matters from the second aircraft
+     * on). Within this distance of a pad's middle, seen from above (the half diagonals of two
      * aircraft and a block), ...
      */
     public static double padReach() {
@@ -386,8 +384,8 @@ public final class RouteRules {
 
     /**
      * Whether two points of the network connect. Two landing pads connect when the airfield of the higher level reaches
-     * the other one's large map, counted from where the airfields stand (their hut blocks), and by nothing else (the
-     * user's ruling of 2026-10-14). With the large maps switched off, and for buoys, the reaches have to overlap.
+     * the other one's large map, counted from where the airfields stand (their hut blocks), and by nothing else. With
+     * the large maps switched off, and for buoys, the reaches have to overlap.
      */
     public static boolean connects(RouteNetwork.Node a, RouteNetwork.Node b) {
         if (a.pos().equals(b.pos())) return false;
@@ -411,7 +409,7 @@ public final class RouteRules {
     }
 
     /**
-     * From this level on an airfield has a second landing pad, for aircraft of other airfields (proposal of the assistant):
+     * From this level on an airfield has a second landing pad, for aircraft of other airfields:
      * 17 blocks east of the first, the same size and the same heading. The two shafts stand side by side with a block
      * between them (tools/make_blueprint.py builds level 2 to this).
      */
